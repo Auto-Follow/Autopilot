@@ -15,7 +15,8 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | Gazebo Python bağları | python3-gz-transport13 13.6.0, python3-gz-msgs10 10.4.0, python3-gz-sim8 8.15.0 | `apt-mark hold` |
 | ARM toolchain (Pixhawk firmware) | arm-none-eabi-gcc 13.2.1 (Ubuntu paketi) | `Tools/setup/ubuntu.sh` |
 | Python (laptop) | 3.12.3 + `requirements-lock.txt` (PX4 derleme paketleri: empy 3.3.4, pymavlink 2.4.50…) | `pip install --user --break-system-packages -r tez/env/requirements-lock.txt` |
-| Pi / görüntü işleme Python | **`Vision` reposunda**: NumPy 2.4.6 · OpenCV 5.0.0.93 · pymavlink 2.4.50 · pyserial 3.5 · PyYAML 6.0.3 (Python 3.11 uyumlu) | `Vision/requirements/*.txt`, repo içi `.venv` |
+| Raspberry Pi 5 işletim sistemi | **Raspberry Pi OS (64-bit) masaüstlü**, Debian 13 Trixie — imaj `2026-09-15-raspios-trixie-arm64.img.xz` (sha256 `61d95799550aac32788bb3cacc3d471dcc860f8053ce989dec4aecc388b799dd`), Python 3.13.5 | İmaj dosyası Imager'da "Use custom" ile yazılır (listeden seçilmez) |
+| Pi / görüntü işleme Python | **`Vision` reposunda**: NumPy 2.4.6 · OpenCV 5.0.0.93 · pymavlink 2.4.50 · pyserial 3.5 · PyYAML 6.0.3 (laptop 3.12 + Pi 3.13) · picamera2 (Pi'de apt) | `Vision/requirements/*.txt`, repo içi `.venv` |
 | Agent OS | **v2.1.1** (`6a6495111e`) — v3 kullanılmıyor; profil `auto-follow` | `tez/env/install-agent-os.sh` (resmi `base-install.sh` main=v3 indirir, kullanmayın) |
 
 ## 2. Aynı olması önerilir
