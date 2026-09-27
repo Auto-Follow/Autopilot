@@ -2,6 +2,7 @@ name: PX4 v1.17.0 surum kilidi
 
 on:
   push:
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 
