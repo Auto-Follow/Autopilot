@@ -46,10 +46,15 @@ Sürüm **v2.1.1**'de sabittir; v3'e geçilmeyecek.
 | `/implement-tasks` | Görevleri uygular |
 | `/orchestrate-tasks` | Görevleri alt ajanlara dağıtarak uygular |
 
+### Ekip kuralı: yol haritası
+`agent-os/product/roadmap.md`'yi **sadece proje lideri** günceller (PR merge edildikten sonra).
+Doğrulama ajanı roadmap'i düzenlemez; tamamlanan maddeleri doğrulama raporunda "önerilen" olarak listeler.
+
 ### Standartlar: `px4-tez` profili
 Ajanlara verilen standartlar web şablonları değil, projeye özel **`px4-tez`** profilinden gelir:
 `tez/agent-os/profiles/px4-tez/` (PX4 C++ stili, modül yazımı, uORB/parametre, hata yönetimi, SITL testleri, Gazebo Harmonic, Pi Python kodu).
 `default` profilinden miras alır; `frontend/` ve `backend/` standartları hariç tutulur.
+Ayrıca iki ajan ezilir (orijinal Agent OS dosyaları değişmez): `implementer` rolü PX4/robotik geliştirici olarak tanımlanır, `implementation-verifier` roadmap'i düzenlemez.
 
 **Standart değiştirmek:** `agent-os/standards/` altındakileri değil, `tez/agent-os/profiles/px4-tez/standards/` altındakileri düzenleyin, sonra yeniden derleyin:
 ```bash
