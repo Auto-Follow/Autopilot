@@ -32,3 +32,22 @@ tez/pin/verify_pin.sh --worktree
 | Gerçek araç airframe | `SYS_AUTOSTART = 4019` (Holybro X500 V2) |
 
 Simülatör **Gazebo Harmonic**'tir (`gz_*` hedefleri). `gazebo-classic_*` hedefleri Ubuntu 24.04'te desteklenmez, kullanmayın.
+
+## Agent OS v2.1.1 (Claude Code ile spec odaklı geliştirme)
+Repoda kurulu: `agent-os/` (standartlar, ürün ve spec dokümanları) ve `.claude/` (komutlar + alt ajanlar).
+Sürüm **v2.1.1**'de sabittir; v3'e geçilmeyecek.
+
+| Claude Code komutu | Ne yapar |
+|---|---|
+| `/plan-product` | Ürün misyonu, yol haritası, teknoloji yığını → `agent-os/product/` |
+| `/shape-spec` | Bir özelliği soru-cevapla şekillendirir |
+| `/write-spec` | Şekillenen özellikten spec yazar → `agent-os/specs/` |
+| `/create-tasks` | Spec'ten görev listesi çıkarır |
+| `/implement-tasks` | Görevleri uygular |
+| `/orchestrate-tasks` | Görevleri alt ajanlara dağıtarak uygular |
+
+Yeniden derlemek gerekirse (ör. standartlar değişti) önce sabit sürümü kurun, sonra güncelleyin:
+```bash
+tez/env/install-agent-os.sh            # ~/agent-os'a v2.1.1 (resmi base-install.sh KULLANMAYIN: main=v3)
+~/agent-os/scripts/project-update.sh
+```

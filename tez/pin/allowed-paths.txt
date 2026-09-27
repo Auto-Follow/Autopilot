@@ -9,3 +9,6 @@ ROMFS/px4fmu_common/init.d-posix/airframes/*_gz_x500_tez*
 ROMFS/px4fmu_common/init.d-posix/airframes/CMakeLists.txt
 ROMFS/px4fmu_common/init.d-posix/px4-rc.gzsim
 src/modules/simulation/gz_bridge/gz_env.sh.in
+# Agent OS v2.1.1 (spec odakli gelistirme) ve Claude Code proje dosyalari
+agent-os/*
+.claude/*
