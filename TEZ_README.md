@@ -46,8 +46,14 @@ Sürüm **v2.1.1**'de sabittir; v3'e geçilmeyecek.
 | `/implement-tasks` | Görevleri uygular |
 | `/orchestrate-tasks` | Görevleri alt ajanlara dağıtarak uygular |
 
-Yeniden derlemek gerekirse (ör. standartlar değişti) önce sabit sürümü kurun, sonra güncelleyin:
+### Standartlar: `px4-tez` profili
+Ajanlara verilen standartlar web şablonları değil, projeye özel **`px4-tez`** profilinden gelir:
+`tez/agent-os/profiles/px4-tez/` (PX4 C++ stili, modül yazımı, uORB/parametre, hata yönetimi, SITL testleri, Gazebo Harmonic, Pi Python kodu).
+`default` profilinden miras alır; `frontend/` ve `backend/` standartları hariç tutulur.
+
+**Standart değiştirmek:** `agent-os/standards/` altındakileri değil, `tez/agent-os/profiles/px4-tez/standards/` altındakileri düzenleyin, sonra yeniden derleyin:
 ```bash
-tez/env/install-agent-os.sh            # ~/agent-os'a v2.1.1 (resmi base-install.sh KULLANMAYIN: main=v3)
-~/agent-os/scripts/project-update.sh
+tez/env/install-agent-os.sh   # ~/agent-os'a v2.1.1 + profil bağlantısı (resmi base-install.sh KULLANMAYIN: main=v3)
+echo y | ~/agent-os/scripts/project-install.sh --re-install --profile px4-tez
 ```
+> `--re-install` `agent-os/` klasörünü siler. `agent-os/product/` veya `agent-os/specs/` oluştuktan sonra önce onları yedekleyin.

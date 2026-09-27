@@ -1,0 +1,8 @@
+# Agent OS v2.1.1 profili: Algan-Otopilot PX4 tezi
+# default profilinden miras alir; web odakli standartlar haric tutulur,
+# global/testing standartlari bu profildeki dosyalarla ezilir.
+inherits_from: default
+
+exclude_inherited_files:
+  - standards/frontend/*
+  - standards/backend/*

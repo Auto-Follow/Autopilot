@@ -213,18 +213,14 @@ Recommended implementation sequence:
 
 IMPORTANT: Ensure that the tasks list you create IS ALIGNED and DOES NOT CONFLICT with any of user's preferred tech stack, coding conventions, or common patterns as detailed in the following files:
 
-@agent-os/standards/backend/api.md
-@agent-os/standards/backend/migrations.md
-@agent-os/standards/backend/models.md
-@agent-os/standards/backend/queries.md
-@agent-os/standards/frontend/accessibility.md
-@agent-os/standards/frontend/components.md
-@agent-os/standards/frontend/css.md
-@agent-os/standards/frontend/responsive.md
 @agent-os/standards/global/coding-style.md
 @agent-os/standards/global/commenting.md
 @agent-os/standards/global/conventions.md
 @agent-os/standards/global/error-handling.md
 @agent-os/standards/global/tech-stack.md
 @agent-os/standards/global/validation.md
+@agent-os/standards/px4/modules.md
+@agent-os/standards/px4/uorb-params.md
+@agent-os/standards/python/companion.md
+@agent-os/standards/simulation/gazebo.md
 @agent-os/standards/testing/test-writing.md
