@@ -8,7 +8,7 @@ AOS_COMMIT="6a6495111e9f7f9cdab3c172814a7476e83a8ec9"
 AOS_DIR="$HOME/agent-os"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PROFILE_SRC="$REPO_ROOT/tez/agent-os/profiles/px4-tez"
+PROFILE_SRC="$REPO_ROOT/tez/agent-os/profiles/auto-follow"
 
 if [ -d "$AOS_DIR" ]; then
   have=$(git -C "$AOS_DIR" rev-parse HEAD 2>/dev/null || echo "git-degil")
@@ -30,5 +30,5 @@ fi
 
 # Tez profili repoda tutulur; ~/agent-os'a sembolik baglanti olarak eklenir
 # (Agent OS'un orijinal dosyalari degismez).
-ln -sfn "$PROFILE_SRC" "$AOS_DIR/profiles/px4-tez"
-echo "Profil baglandi: $AOS_DIR/profiles/px4-tez -> $PROFILE_SRC"
+ln -sfn "$PROFILE_SRC" "$AOS_DIR/profiles/auto-follow"
+echo "Profil baglandi: $AOS_DIR/profiles/auto-follow -> $PROFILE_SRC"

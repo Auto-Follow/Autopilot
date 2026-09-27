@@ -1,4 +1,4 @@
-# Agent OS v2.1.1 profili: Auto-Follow PX4 tezi
+# Agent OS v2.1.1 profili: auto-follow (Auto-Follow org, Autopilot + Vision repolari)
 # default profilinden miras alir; web odakli standartlar haric tutulur,
 # global/testing standartlari bu profildeki dosyalarla ezilir.
 inherits_from: default

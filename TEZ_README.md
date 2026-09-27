@@ -84,15 +84,15 @@ Sürüm **v2.1.1**'de sabittir; v3'e geçilmeyecek.
 `agent-os/product/roadmap.md`'yi **sadece proje lideri** günceller (PR merge edildikten sonra).
 Doğrulama ajanı roadmap'i düzenlemez; tamamlanan maddeleri doğrulama raporunda "önerilen" olarak listeler.
 
-### Standartlar: `px4-tez` profili
-Ajanlara verilen standartlar web şablonları değil, projeye özel **`px4-tez`** profilinden gelir:
-`tez/agent-os/profiles/px4-tez/` (PX4 C++ stili, modül yazımı, uORB/parametre, hata yönetimi, SITL testleri, Gazebo Harmonic, Pi Python kodu).
+### Standartlar: `auto-follow` profili
+Ajanlara verilen standartlar web şablonları değil, projeye özel **`auto-follow`** profilinden gelir:
+`tez/agent-os/profiles/auto-follow/` (PX4 C++ stili, modül yazımı, uORB/parametre, hata yönetimi, SITL testleri, Gazebo Harmonic, Pi Python kodu).
 `default` profilinden miras alır; `frontend/` ve `backend/` standartları hariç tutulur.
 Ayrıca iki ajan ezilir (orijinal Agent OS dosyaları değişmez): `implementer` rolü PX4/robotik geliştirici olarak tanımlanır, `implementation-verifier` roadmap'i düzenlemez.
 
-**Standart değiştirmek:** `agent-os/standards/` altındakileri değil, `tez/agent-os/profiles/px4-tez/standards/` altındakileri düzenleyin, sonra yeniden derleyin:
+**Standart değiştirmek:** `agent-os/standards/` altındakileri değil, `tez/agent-os/profiles/auto-follow/standards/` altındakileri düzenleyin, sonra yeniden derleyin:
 ```bash
 tez/env/install-agent-os.sh   # ~/agent-os'a v2.1.1 + profil bağlantısı (resmi base-install.sh KULLANMAYIN: main=v3)
-echo y | ~/agent-os/scripts/project-install.sh --re-install --profile px4-tez
+echo y | ~/agent-os/scripts/project-install.sh --re-install --profile auto-follow
 ```
 > `--re-install` `agent-os/` klasörünü siler. `agent-os/product/` veya `agent-os/specs/` oluştuktan sonra önce onları yedekleyin.
