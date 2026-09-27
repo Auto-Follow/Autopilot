@@ -1,6 +1,6 @@
 ## Yardımcı bilgisayar (Raspberry Pi 5) Python kodu
 
-Bu kod `algan-vision` reposunda yaşar.
+Bu kod `Vision` reposunda yaşar.
 
 
 - Aynı kod hem simülasyonda (laptop) hem Pi'de çalışır; fark sadece **konfigürasyonda**:

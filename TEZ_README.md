@@ -1,4 +1,4 @@
-# Algan-Otopilot · PX4 v1.17.0 (Tez)
+# Auto-Follow · PX4 v1.17.0 (Tez)
 
 Holybro X500 V2 + Pixhawk 6C + Raspberry Pi 5 ile auto-follow lisans tezi için PX4 çalışma kopyası.
 
@@ -18,8 +18,8 @@ tez/pin/verify_pin.sh --worktree
 
 ## Klonlama (ekip üyeleri)
 ```bash
-git clone --recurse-submodules https://github.com/Algan-Otopilot/px4-autopilot-tez.git
-cd px4-autopilot-tez
+git clone --recurse-submodules https://github.com/Auto-Follow/Autopilot.git
+cd Autopilot
 bash Tools/setup/ubuntu.sh        # Ubuntu 24.04: derleyiciler + Gazebo Harmonic
 tez/pin/verify_pin.sh --worktree
 ```
