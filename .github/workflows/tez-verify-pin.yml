@@ -3,6 +3,7 @@ name: PX4 v1.17.0 surum kilidi
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   verify-pin:
