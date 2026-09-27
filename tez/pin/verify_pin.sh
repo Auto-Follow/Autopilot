@@ -7,7 +7,12 @@ set -uo pipefail
 EXPECTED_TAG="v1.17.0"
 EXPECTED_BASE="d6f12ad1c4f70ad3230afd7d86e971421e02fef4"
 
-cd "$(git rev-parse --show-toplevel)" || exit 2
+# Script nereden cagrilirsa cagrilsin kendi reposunda calisir (tez/pin/ -> repo koku)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$REPO_ROOT" || exit 2
+if [ "$(git rev-parse --show-toplevel 2>/dev/null)" != "$REPO_ROOT" ]; then
+  echo "HATA: $REPO_ROOT bir git reposu degil; kontrol yapilamadi." >&2; exit 2
+fi
 LOCK="tez/pin/v1.17.0.lock"
 ALLOW="tez/pin/allowed-paths.txt"
 fail=0
