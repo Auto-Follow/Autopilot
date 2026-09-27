@@ -16,7 +16,7 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | ARM toolchain (Pixhawk firmware) | arm-none-eabi-gcc 13.2.1 (Ubuntu paketi) | `Tools/setup/ubuntu.sh` |
 | Python (laptop) | 3.12.3 + `requirements-lock.txt` (PX4 derleme paketleri: empy 3.3.4, pymavlink 2.4.50…) | `pip install --user --break-system-packages -r tez/env/requirements-lock.txt` |
 | Pi / görüntü işleme Python | **`Vision` reposunda**: NumPy 2.4.6 · OpenCV 5.0.0.93 · pymavlink 2.4.50 · pyserial 3.5 · PyYAML 6.0.3 (Python 3.11 uyumlu) | `Vision/requirements/*.txt`, repo içi `.venv` |
-| Agent OS | **v2.1.1** (`6a6495111e`) — v3 kullanılmıyor; profil `px4-tez` | `tez/env/install-agent-os.sh` (resmi `base-install.sh` main=v3 indirir, kullanmayın) |
+| Agent OS | **v2.1.1** (`6a6495111e`) — v3 kullanılmıyor; profil `auto-follow` | `tez/env/install-agent-os.sh` (resmi `base-install.sh` main=v3 indirir, kullanmayın) |
 
 ## 2. Aynı olması önerilir
 

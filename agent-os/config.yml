@@ -1,12 +1,12 @@
 version: 2.1.1
-last_compiled: 2026-09-27 14:08:03
+last_compiled: 2026-09-27 18:01:49
 
 # ================================================
 # Compiled with the following settings:
 #
 # To change these settings, run ~/agent-os/scripts/project-update.sh to re-compile your project with the new settings.
 # ================================================
-profile: px4-tez
+profile: auto-follow
 claude_code_commands: true
 use_claude_code_subagents: true
 agent_os_commands: false
