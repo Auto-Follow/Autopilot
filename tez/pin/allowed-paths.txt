@@ -1,0 +1,11 @@
+# v1.17.0 tabanina gore degismesine izin verilen yollar (bash glob, * alt klasorleri de kapsar).
+# Bunun disindaki bir PX4 dosyasi degisirse verify_pin.sh HATA verir.
+# Yeni yol eklemek ekipce konusulmali ve PR'da acikca gorunmelidir.
+tez/*
+.github/*
+.gitmodules
+TEZ_README.md
+ROMFS/px4fmu_common/init.d-posix/airframes/*_gz_x500_tez*
+ROMFS/px4fmu_common/init.d-posix/airframes/CMakeLists.txt
+ROMFS/px4fmu_common/init.d-posix/px4-rc.gzsim
+src/modules/simulation/gz_bridge/gz_env.sh.in
