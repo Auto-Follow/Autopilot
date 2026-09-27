@@ -121,3 +121,4 @@ px4_add_romfs_files(
 
 	# [22000, 22999] Reserve for custom models
 )
+bu_bir_hata(
