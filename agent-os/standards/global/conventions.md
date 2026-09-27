@@ -13,6 +13,7 @@ Bir özellik iki repoyu birden etkiliyorsa (ör. ICD), her repoda ayrı PR açı
 - **Asla:** upstream PX4'ten `pull`/`merge`, `git submodule update --remote`, submodule commit'i değiştirme, `.gitmodules` düzenleme.
 - Değişikliğe izin verilen PX4 yolları `tez/pin/allowed-paths.txt` içindedir. Bir özellik bu listenin dışındaki bir dosyayı değiştirmeyi gerektiriyorsa **önce kullanıcıya sor**; listeye ekleme ayrı ve açık bir PR ile yapılır.
 - Upstream PX4 dosyasını düzenlemek yerine kendi dosyanı ekle (yeni modül, yeni airframe dosyası, yeni model).
+- `v` ile başlayan git tag'i **oluşturma** (PX4 firmware sürümünü `v*` tag'lerinden okur). Tez tag'leri `tez-*` ile başlar.
 
 ### Nereye ne konur
 | İçerik | Yer |
