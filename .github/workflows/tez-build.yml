@@ -1,0 +1,60 @@
+name: PX4 derleme (SITL + Pixhawk 6C)
+
+# Derlenmeyen kod main'e giremesin diye her PR'da iki hedef de derlenir.
+# Ortam, ekip uyelerinin kurulumuyla birebir aynidir: temiz Ubuntu 24.04 + Tools/setup/ubuntu.sh
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - check: derleme-sitl
+            target: px4_sitl_default
+            setup_args: --no-nuttx
+          - check: derleme-fmu-v6c
+            target: px4_fmu-v6c_default
+            setup_args: --no-sim-tools
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # PX4 surumu v* tag'inden okunur (v1.17.0) -> tam gecmis + tag'ler gerekli
+          fetch-depth: 0
+          filter: blob:none
+          submodules: recursive
+
+      - name: PX4 bagimliliklari (Tools/setup/ubuntu.sh ${{ matrix.setup_args }})
+        run: bash Tools/setup/ubuntu.sh ${{ matrix.setup_args }}
+
+      - name: ccache onbellegi
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.target }}-
+
+      - name: Surum kontrolu
+        run: git describe --tags --match "v[0-9]*"
+
+      - name: Derle (make ${{ matrix.target }})
+        run: make ${{ matrix.target }}
+
+      - name: ccache istatistikleri
+        if: always()
+        run: ccache -s || true
