@@ -8,7 +8,7 @@ Holybro X500 V2 + Pixhawk 6C + Raspberry Pi 5 ile auto-follow lisans tezi için 
 - Bu repo PX4'ün fork'u **değildir**; upstream remote yoktur. `git pull` ile PX4'ten güncelleme **çekmeyin**.
 - **Asla** `git submodule update --remote` çalıştırmayın. Doğru komut: `git submodule update --init --recursive`.
 - `main`'e doğrudan push yok; her değişiklik PR ile, en az bir ekip üyesinin onayıyla girer.
-- CI (`PX4 v1.17.0 surum kilidi`) kırmızıysa PR birleştirilmez.
+- CI kırmızıysa PR birleştirilmez: `verify-pin` (sürüm kilidi), `derleme-sitl` ve `derleme-fmu-v6c` (kod iki hedefte de derlenmeli; ~20-30 dk).
 - Değişikliğe izin verilen PX4 yolları: `tez/pin/allowed-paths.txt`. Yeni yol eklemek ekipçe konuşulur.
 - **`v` ile başlayan tag açmayın** (ör. `v1.0`): PX4 firmware sürümünü `v*` tag'lerinden okur; yanlış tag derlemeyi bozar veya firmware'i yanlış sürümle etiketler. Kendi tag'leriniz `tez-*` ile başlar (ör. `tez-ucus-testi-1`). GitHub'da `v*` tag oluşturma engellidir.
 
