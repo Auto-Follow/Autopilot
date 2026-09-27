@@ -14,7 +14,8 @@ Ekipteki herkes **aynı sürümleri** kullanır. Güncelleme ekipçe karar veril
 | Agent OS | **v2.1.1** (`6a6495111e`) — v3 kullanılmıyor; profil `px4-tez` | `tez/env/install-agent-os.sh` (resmi `base-install.sh` main=v3 indirir, kullanmayın) |
 | PlotJuggler | **3.17.2** (x86_64 AppImage, sha256 `6d427ca15f2d937699587eec668d1583e2468bc27bab8aaaee81276ad85941df`) — 4.0 kullanılmıyor | Sürüm adıyla indirilir |
 | Gazebo Python bağları | python3-gz-transport13 13.6.0, python3-gz-msgs10 10.4.0, python3-gz-sim8 8.15.0 | `apt-mark hold` |
-| Yardımcı bilgisayar Python | `companion-requirements.txt` (OpenCV, pymavlink, MAVProxy, pyulog, pytest, ruff…) | venv: `python3 -m venv --system-site-packages ~/Desktop/Projects/Algan-Otopilot/.venv-tez` |
+| Laptop analiz/araç Python | `analiz-requirements.txt` (pyulog, MAVProxy, pandas, matplotlib, SciPy…) — log analizi ve SITL denemeleri için | venv: `~/Desktop/Projects/Algan-Otopilot/.venv-tez` |
+| Pi / görüntü işleme Python | **`algan-vision` reposunda** (`requirements/*.txt`, NumPy 2.4.6 — Python 3.11 uyumu) | repo içi `.venv` |
 
 ## Gazebo paketlerini dondurmak
 ```bash
@@ -50,10 +51,10 @@ sudo apt install -y --no-install-recommends clangd valgrind python3-venv python3
 sudo apt-mark hold python3-gz-transport13 python3-gz-msgs10 python3-gz-sim8
 ```
 
-## Yardımcı bilgisayar Python ortamı
+## Laptop analiz/araç Python ortamı (Pi kodu için `algan-vision` reposuna bakın)
 ```bash
 python3 -m venv --system-site-packages ~/Desktop/Projects/Algan-Otopilot/.venv-tez
-~/Desktop/Projects/Algan-Otopilot/.venv-tez/bin/pip install -r tez/env/companion-requirements.txt
+~/Desktop/Projects/Algan-Otopilot/.venv-tez/bin/pip install -r tez/env/analiz-requirements.txt
 ```
 
 ## VS Code eklentileri

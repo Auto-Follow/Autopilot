@@ -17,7 +17,8 @@ Kesinleşmiş olanlar düz, henüz kesinleşmemiş olanlar **(taslak)** olarak i
 - Gazebo Classic **kullanılmaz** (Ubuntu 24.04'te yok); `gazebo-classic_*` hedeflerini önerme.
 
 ### Yardımcı bilgisayar / görüntü işleme
-- Python 3.12, OpenCV, NumPy, pymavlink — sürümler `tez/env/companion-requirements.txt`
+- Repo: `algan-vision`. Python **3.11+** (Pi işletim sistemi henüz kesinleşmedi: Raspberry Pi OS = 3.11, Ubuntu = 3.12; kod iki sürümde de çalışmalı)
+- OpenCV 5.0, NumPy 2.4.6, pymavlink — sabit sürümler `algan-vision/requirements/*.txt`
 - Pixhawk ile iletişim: MAVLink **(taslak — mesaj seti/ICD henüz kesinleşmedi)**
 - ROS 2 **şu an kullanılmıyor (taslak karar)**; ROS 2 bağımlılığı ekleme.
 
