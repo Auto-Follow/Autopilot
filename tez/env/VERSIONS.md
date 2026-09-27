@@ -54,7 +54,7 @@ sudo apt-mark hold python3-gz-transport13 python3-gz-msgs10 python3-gz-sim8
 ## Laptop analiz/araç Python ortamı (Pi kodu için `Vision` reposuna bakın)
 ```bash
 python3 -m venv --system-site-packages ~/Desktop/Projects/Auto-Follow/.venv-tez
-~/Desktop/Projects/Auto-Follow/.venv-tez/bin/pip install -r tez/env/analiz-requirements.txt
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/pip install -r ~/Desktop/Projects/Auto-Follow/Autopilot/tez/env/analiz-requirements.txt
 ```
 
 ## VS Code eklentileri

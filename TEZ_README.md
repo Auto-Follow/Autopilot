@@ -10,19 +10,53 @@ Holybro X500 V2 + Pixhawk 6C + Raspberry Pi 5 ile auto-follow lisans tezi için 
 - `main`'e doğrudan push yok; her değişiklik PR ile, en az bir ekip üyesinin onayıyla girer.
 - CI (`PX4 v1.17.0 surum kilidi`) kırmızıysa PR birleştirilmez.
 - Değişikliğe izin verilen PX4 yolları: `tez/pin/allowed-paths.txt`. Yeni yol eklemek ekipçe konuşulur.
+- **`v` ile başlayan tag açmayın** (ör. `v1.0`): PX4 firmware sürümünü `v*` tag'lerinden okur; yanlış tag derlemeyi bozar veya firmware'i yanlış sürümle etiketler. Kendi tag'leriniz `tez-*` ile başlar (ör. `tez-ucus-testi-1`). GitHub'da `v*` tag oluşturma engellidir.
 
 ## Kilidi yerelde kontrol etmek
 ```bash
 tez/pin/verify_pin.sh --worktree
 ```
 
-## Klonlama (ekip üyeleri)
-```bash
-git clone --recurse-submodules https://github.com/Auto-Follow/Autopilot.git
-cd Autopilot
-bash Tools/setup/ubuntu.sh        # Ubuntu 24.04: derleyiciler + Gazebo Harmonic
-tez/pin/verify_pin.sh --worktree
+## Yeni ekip üyesi: kurulum sırası (Ubuntu 24.04)
+
+**Klasör yapısı (herkeste aynı olmalı):**
 ```
+~/Desktop/Projects/Auto-Follow/
+├── Autopilot/     ← bu repo (PX4)
+├── Vision/        ← Pi / görüntü işleme reposu
+└── .venv-tez/     ← laptop log analizi Python ortamı
+```
+
+```bash
+# 1) Klonla
+mkdir -p ~/Desktop/Projects/Auto-Follow && cd ~/Desktop/Projects/Auto-Follow
+sudo apt install -y git
+git clone --recurse-submodules https://github.com/Auto-Follow/Autopilot.git
+git clone https://github.com/Auto-Follow/Vision.git
+cd Autopilot
+
+# 2) PX4 bağımlılıkları + Gazebo Harmonic (15-30 dk)
+bash Tools/setup/ubuntu.sh
+mv Tools/setup/xtensa-esp-elf-*.tar.xz ~/Downloads/ 2>/dev/null   # script'in repoda bıraktığı 112 MB arşiv (commit'lemeyin)
+
+# 3) Kilidi ve derlemeyi doğrula
+tez/pin/verify_pin.sh --worktree
+make px4_sitl && make px4_fmu-v6c_default
+```
+4) **Oturumu kapatıp açın** (Pixhawk USB seri port izni — `dialout` grubu).
+5) `tez/env/VERSIONS.md`'deki adımlar: Gazebo paketlerini dondurma, QGroundControl 5.1.4, geliştirme araçları, VS Code eklentileri, (hibrit GPU'lu laptopta) NVIDIA ayarı, analiz Python ortamı.
+6) Agent OS: `tez/env/install-agent-os.sh`
+7) Vision reposu: `../Vision/README.md`
+
+## Sorun giderme
+| Belirti | Çözüm |
+|---|---|
+| Klasörü taşıdıktan/yeniden adlandırdıktan sonra `make px4_fmu-v6c_default` → `Kconfig ... not found` (eski yol) | NuttX kaynak klasörüne üretilen dosyalar eski yolu tutuyor: `(cd platforms/nuttx/NuttX/nuttx && git clean -fdX) && (cd platforms/nuttx/NuttX/apps && git clean -fdX) && rm -rf build` |
+| Klasör taşındıktan sonra SITL/Gazebo eski yolu arıyor | `rm -rf build && make px4_sitl` |
+| `verify_pin` → "yerel submodule'lar kayitli commit'te degil" | `git submodule update --init --recursive` (**`--remote` DEĞİL**) |
+| `git status`'ta `Tools/setup/xtensa-esp-elf-*.tar.xz` | Repo dışına taşıyın; commit'lemeyin (GitHub 100 MB sınırı) |
+| `git status` → `modified: platforms/nuttx/NuttX/nuttx (untracked content)` | Pixhawk derlemesinin ürettiği `tools/jlink-nuttx`; zararsız, commit'e girmez, kilidi etkilemez |
+| Gazebo çok yavaş / Intel GPU kullanıyor | `tez/env/VERSIONS.md` → NVIDIA PRIME offload bölümü |
 
 ## Sık kullanılan komutlar
 | Amaç | Komut |
