@@ -86,8 +86,11 @@ PARKUR = [("walk", 20.0, 1.5), ("turn", 90.0), ("walk", 20.0, 1.5), ("wait", 5.0
           ("turn", 180.0), ("walk", 20.0, 1.5), ("arc", 180.0, 10.0, 1.5), ("wait", 5.0)]
 TURN_RATE_DEG_S = 90.0
 
-FOLLOW_DEFAULTS = {"FLW_TGT_DST": 8.0, "FLW_TGT_HT": 8.0, "FLW_TGT_FA": 180.0, "FLW_TGT_ALT_M": 0,
-                   "FLW_TGT_MAX_VEL": 5.0}  # keep the target on the 200 m colorful area [m]
+# Fixed follow geometry per camera, chosen by deney.py optimum_egik / optimum_duz (05.10.2026, 2 runs each, camera
+# fixes without velocity): tilted (45 deg) 10 m high / 10 m back, level camera 8 m / 30 m. PX4 Follow Me unchanged.
+FOLLOW_HT_DST = (10.0, 10.0) if CAMERA_PITCH_DEG >= 20 else (8.0, 30.0)
+FOLLOW_DEFAULTS = {"FLW_TGT_DST": FOLLOW_HT_DST[1], "FLW_TGT_HT": FOLLOW_HT_DST[0], "FLW_TGT_FA": 180.0,
+                   "FLW_TGT_ALT_M": 0, "FLW_TGT_MAX_VEL": 5.0}  # keep the target on the 200 m colorful area [m]
 
 # PX4 custom modes (main_mode, sub_mode)
 MODE_TAKEOFF = (4, 2)
@@ -601,7 +604,8 @@ class VehicleLink:
         for name, value in FOLLOW_DEFAULTS.items():
             self.set_param(name, value)
             time.sleep(0.05)
-        self._log("Follow Me parametreleri varsayılana ayarlandı (DST=8 m, HT=8 m, FA=180°, ALT_M=0)")
+        self._log(f"Follow Me parametreleri varsayılana ayarlandı (HT={FOLLOW_HT_DST[0]:g} m, "
+                  f"DST={FOLLOW_HT_DST[1]:g} m, FA=180°, ALT_M=0)")
 
     def takeoff(self):
         self.set_mode(MODE_TAKEOFF)

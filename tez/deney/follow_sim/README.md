@@ -6,7 +6,8 @@
 > tasarlanacak. Sonuçlar (`sonuclar/`, 30 MB) repoya konmadı; özeti `Kamera_Geolocation_WiFi_Raporu.pdf`.
 
 PX4 Follow Me modunun ([dokümandaki](https://docs.px4.io/v1.17/en/flight_modes_mc/follow_me) gibi) Gazebo'da
-denenmesi: kırmızı hedef yürür, drone varsayılan parametrelerle (8 m geride, 8 m yukarıda, tam arkadan) takip eder,
+denenmesi: kırmızı hedef yürür, drone tam arkadan takip eder (eğik kamerada 10 m yukarıda / 10 m geride, düz
+kamerada 8 m / 30 m; aşağıdaki "Sabit takip geometrisi" bölümü; PX4 varsayılanı 8 m / 8 m),
 kamera ışını / yükseklik / zemin kesişimleri sahnede çizilir.
 
 ## Kullanım
@@ -164,6 +165,19 @@ python3 analiz.py sonuclar/kamera_egim40                   # grafik + ozet.md
 
 Kadraj analizi kayıtlı gerçek pozdan her eğim (0–70°) için ayrı hesaplanır; tek uçuş bütün eğimleri karşılaştırır.
 Sonuçlar `sonuclar/` altında.
+
+### Sabit takip geometrisi (05.10.2026, `--deney optimum_egik` / `optimum_duz`)
+
+PX4 Follow Me'ye dokunmadan sadece `FLW_TGT_HT` / `FLW_TGT_DST` seçildi. Kamera konumu, hızsız, normal ve ×2 hızlı
+hedef, her geometri 2 tur (`python3 karsilastir.py --tekrar sonuclar/opt_egik_r1 sonuclar/opt_egik_r2`):
+
+| Kamera | Seçilen | Normal / hızlı kadraj | En uzun kayıp | Kopma | Konum hatası medyan / %95 |
+|---|---|---|---|---|---|
+| 45° eğik | **10 m / 10 m** | %93 / %69 | 4.0 s | 0/4 | 0.33–0.56 / ~1.05 m |
+| Düz | **8 m / 30 m** | %76 / %68 | 4.0 s | 0/4 | 1.1–1.2 / 2.4 m |
+
+8/8 hızlı hedefte zayıf (%56, 9.7 s kayıp); hedefi kadraj ortasının altına koyan 50–51° geometriler daha kötü (10/8 iki
+kez koptu). Uzak/yüksek takip hızlı hedefte daha sağlam; düz kamera en iyi ayarında bile 2–3 kat konum hatası verir.
 
 ### Kalman filtresi ve mesafe bandı (05.10.2026)
 

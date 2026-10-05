@@ -77,6 +77,16 @@ EXPERIMENTS = {
                _sc("hizli_kalman_bant", 8, 8, kaynak="kamera", kamera_hiz="kalman", hiz_carpan=2.0,
                    bant=BAND_TILTED),
                _sc("normal_kalman", 8, 8, kaynak="kamera", kamera_hiz="kalman")],
+    # Fixed geometry search (PX4 Follow Me unchanged, no velocity, FOLLOW_TARGET from the camera): normal and fast
+    # (x2) target for each candidate FLW_TGT_HT / FLW_TGT_DST. Tilted camera: view angle at the camera axis (45 deg)
+    # or a little below it (50 deg), leaving room for the upward shift while the drone lags and pitches nose-down.
+    "optimum_egik": [_sc(f"h{h:g}_d{d:g}_{tag}", h, d, kaynak="kamera", hiz_carpan=f)
+                     for h, d in ((8, 8), (10, 10), (12, 12), (10, 8), (12, 10))
+                     for tag, f in (("normal", 1.0), ("hizli", 2.0))],
+    # Level camera: the target is only visible 0-20 deg below the horizon, kept in the lower part of the image.
+    "optimum_duz": [_sc(f"h{h:g}_d{d:g}_{tag}", h, d, kaynak="kamera", hiz_carpan=f)
+                    for h, d in ((5, 19), (8, 30), (5, 24), (3, 11))
+                    for tag, f in (("normal", 1.0), ("hizli", 2.0))],
     # Level camera kept far enough to see the target (8 m high, 30 m back = 15 deg view), normal speed.
     # Run with --egim 0.
     "duz": [_sc("duz_dst30_hizsiz", 8, 30, kaynak="kamera"),
