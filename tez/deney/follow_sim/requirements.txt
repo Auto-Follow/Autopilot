@@ -1,0 +1,6 @@
+# Experiment-only environment (.venv, created by kur.sh). Versions match ORTAK-SURUMLER / Vision.
+# System packages used via --system-site-packages: python3-gz-transport13, python3-gz-msgs10, python3-gi (GStreamer),
+# python3-tk. Plots/report (analiz.py, rapor_olustur.py) need matplotlib/pandas (.venv-tez) and reportlab.
+numpy==2.4.6
+opencv-python==5.0.0.93
+pymavlink==2.4.50

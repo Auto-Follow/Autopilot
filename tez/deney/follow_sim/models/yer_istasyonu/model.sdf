@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <model name="yer_istasyonu">
+    <!-- Ground control station (laptop + Wi-Fi antenna mast). Its position is GCS_POSITION in follow_core.py. -->
+    <static>true</static>
+    <link name="link">
+      <visual name="table">
+        <pose>0 0 0.72 0 0 0</pose>
+        <geometry><box><size>0.7 1.2 0.04</size></box></geometry>
+        <material><ambient>0.45 0.3 0.15 1</ambient><diffuse>0.45 0.3 0.15 1</diffuse></material>
+      </visual>
+      <visual name="table_leg">
+        <pose>0 0 0.36 0 0 0</pose>
+        <geometry><box><size>0.5 0.08 0.7</size></box></geometry>
+        <material><ambient>0.25 0.25 0.25 1</ambient><diffuse>0.25 0.25 0.25 1</diffuse></material>
+      </visual>
+      <visual name="laptop_base">
+        <pose>0 0 0.75 0 0 0</pose>
+        <geometry><box><size>0.25 0.35 0.02</size></box></geometry>
+        <material><ambient>0.2 0.2 0.22 1</ambient><diffuse>0.2 0.2 0.22 1</diffuse></material>
+      </visual>
+      <visual name="laptop_screen">
+        <pose>-0.12 0 0.87 0 -0.25 0</pose>
+        <geometry><box><size>0.01 0.35 0.24</size></box></geometry>
+        <material><ambient>0.1 0.3 0.6 1</ambient><diffuse>0.1 0.3 0.6 1</diffuse><emissive>0.1 0.3 0.6 1</emissive></material>
+      </visual>
+      <visual name="mast">
+        <pose>0.2 0.55 1.25 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>2.5</length></cylinder></geometry>
+        <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+      </visual>
+      <visual name="antenna">
+        <pose>0.2 0.55 2.55 0 0 0</pose>
+        <geometry><box><size>0.06 0.25 0.35</size></box></geometry>
+        <material><ambient>0.1 0.4 1 1</ambient><diffuse>0.1 0.4 1 1</diffuse><emissive>0.05 0.2 0.5 1</emissive></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

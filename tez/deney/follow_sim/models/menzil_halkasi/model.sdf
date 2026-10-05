@@ -1,0 +1,549 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <model name="menzil_halkasi">
+    <!-- 100 m Wi-Fi range ring (option A) around the ground station. Generated; keep R = LINK_RANGE_M. -->
+    <static>true</static>
+    <link name="link">
+      <visual name="s0">
+        <pose>100.000 0.000 0.03 0 0 1.5708</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s1">
+        <pose>99.756 6.976 0.03 0 0 1.6406</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s2">
+        <pose>99.027 13.917 0.03 0 0 1.7104</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s3">
+        <pose>97.815 20.791 0.03 0 0 1.7802</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s4">
+        <pose>96.126 27.564 0.03 0 0 1.8500</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s5">
+        <pose>93.969 34.202 0.03 0 0 1.9199</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s6">
+        <pose>91.355 40.674 0.03 0 0 1.9897</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s7">
+        <pose>88.295 46.947 0.03 0 0 2.0595</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s8">
+        <pose>84.805 52.992 0.03 0 0 2.1293</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s9">
+        <pose>80.902 58.779 0.03 0 0 2.1991</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s10">
+        <pose>76.604 64.279 0.03 0 0 2.2689</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s11">
+        <pose>71.934 69.466 0.03 0 0 2.3387</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s12">
+        <pose>66.913 74.314 0.03 0 0 2.4086</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s13">
+        <pose>61.566 78.801 0.03 0 0 2.4784</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s14">
+        <pose>55.919 82.904 0.03 0 0 2.5482</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s15">
+        <pose>50.000 86.603 0.03 0 0 2.6180</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s16">
+        <pose>43.837 89.879 0.03 0 0 2.6878</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s17">
+        <pose>37.461 92.718 0.03 0 0 2.7576</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s18">
+        <pose>30.902 95.106 0.03 0 0 2.8274</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s19">
+        <pose>24.192 97.030 0.03 0 0 2.8972</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s20">
+        <pose>17.365 98.481 0.03 0 0 2.9671</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s21">
+        <pose>10.453 99.452 0.03 0 0 3.0369</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s22">
+        <pose>3.490 99.939 0.03 0 0 3.1067</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s23">
+        <pose>-3.490 99.939 0.03 0 0 3.1765</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s24">
+        <pose>-10.453 99.452 0.03 0 0 3.2463</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s25">
+        <pose>-17.365 98.481 0.03 0 0 3.3161</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s26">
+        <pose>-24.192 97.030 0.03 0 0 3.3859</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s27">
+        <pose>-30.902 95.106 0.03 0 0 3.4558</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s28">
+        <pose>-37.461 92.718 0.03 0 0 3.5256</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s29">
+        <pose>-43.837 89.879 0.03 0 0 3.5954</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s30">
+        <pose>-50.000 86.603 0.03 0 0 3.6652</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s31">
+        <pose>-55.919 82.904 0.03 0 0 3.7350</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s32">
+        <pose>-61.566 78.801 0.03 0 0 3.8048</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s33">
+        <pose>-66.913 74.314 0.03 0 0 3.8746</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s34">
+        <pose>-71.934 69.466 0.03 0 0 3.9444</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s35">
+        <pose>-76.604 64.279 0.03 0 0 4.0143</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s36">
+        <pose>-80.902 58.779 0.03 0 0 4.0841</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s37">
+        <pose>-84.805 52.992 0.03 0 0 4.1539</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s38">
+        <pose>-88.295 46.947 0.03 0 0 4.2237</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s39">
+        <pose>-91.355 40.674 0.03 0 0 4.2935</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s40">
+        <pose>-93.969 34.202 0.03 0 0 4.3633</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s41">
+        <pose>-96.126 27.564 0.03 0 0 4.4331</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s42">
+        <pose>-97.815 20.791 0.03 0 0 4.5029</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s43">
+        <pose>-99.027 13.917 0.03 0 0 4.5728</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s44">
+        <pose>-99.756 6.976 0.03 0 0 4.6426</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s45">
+        <pose>-100.000 0.000 0.03 0 0 4.7124</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s46">
+        <pose>-99.756 -6.976 0.03 0 0 4.7822</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s47">
+        <pose>-99.027 -13.917 0.03 0 0 4.8520</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s48">
+        <pose>-97.815 -20.791 0.03 0 0 4.9218</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s49">
+        <pose>-96.126 -27.564 0.03 0 0 4.9916</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s50">
+        <pose>-93.969 -34.202 0.03 0 0 5.0615</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s51">
+        <pose>-91.355 -40.674 0.03 0 0 5.1313</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s52">
+        <pose>-88.295 -46.947 0.03 0 0 5.2011</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s53">
+        <pose>-84.805 -52.992 0.03 0 0 5.2709</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s54">
+        <pose>-80.902 -58.779 0.03 0 0 5.3407</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s55">
+        <pose>-76.604 -64.279 0.03 0 0 5.4105</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s56">
+        <pose>-71.934 -69.466 0.03 0 0 5.4803</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s57">
+        <pose>-66.913 -74.314 0.03 0 0 5.5501</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s58">
+        <pose>-61.566 -78.801 0.03 0 0 5.6200</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s59">
+        <pose>-55.919 -82.904 0.03 0 0 5.6898</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s60">
+        <pose>-50.000 -86.603 0.03 0 0 5.7596</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s61">
+        <pose>-43.837 -89.879 0.03 0 0 5.8294</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s62">
+        <pose>-37.461 -92.718 0.03 0 0 5.8992</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s63">
+        <pose>-30.902 -95.106 0.03 0 0 5.9690</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s64">
+        <pose>-24.192 -97.030 0.03 0 0 6.0388</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s65">
+        <pose>-17.365 -98.481 0.03 0 0 6.1087</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s66">
+        <pose>-10.453 -99.452 0.03 0 0 6.1785</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s67">
+        <pose>-3.490 -99.939 0.03 0 0 6.2483</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s68">
+        <pose>3.490 -99.939 0.03 0 0 6.3181</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s69">
+        <pose>10.453 -99.452 0.03 0 0 6.3879</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s70">
+        <pose>17.365 -98.481 0.03 0 0 6.4577</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s71">
+        <pose>24.192 -97.030 0.03 0 0 6.5275</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s72">
+        <pose>30.902 -95.106 0.03 0 0 6.5973</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s73">
+        <pose>37.461 -92.718 0.03 0 0 6.6672</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s74">
+        <pose>43.837 -89.879 0.03 0 0 6.7370</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s75">
+        <pose>50.000 -86.603 0.03 0 0 6.8068</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s76">
+        <pose>55.919 -82.904 0.03 0 0 6.8766</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s77">
+        <pose>61.566 -78.801 0.03 0 0 6.9464</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s78">
+        <pose>66.913 -74.314 0.03 0 0 7.0162</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s79">
+        <pose>71.934 -69.466 0.03 0 0 7.0860</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s80">
+        <pose>76.604 -64.279 0.03 0 0 7.1558</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s81">
+        <pose>80.902 -58.779 0.03 0 0 7.2257</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s82">
+        <pose>84.805 -52.992 0.03 0 0 7.2955</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s83">
+        <pose>88.295 -46.947 0.03 0 0 7.3653</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s84">
+        <pose>91.355 -40.674 0.03 0 0 7.4351</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s85">
+        <pose>93.969 -34.202 0.03 0 0 7.5049</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s86">
+        <pose>96.126 -27.564 0.03 0 0 7.5747</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s87">
+        <pose>97.815 -20.791 0.03 0 0 7.6445</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s88">
+        <pose>99.027 -13.917 0.03 0 0 7.7144</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+      <visual name="s89">
+        <pose>99.756 -6.976 0.03 0 0 7.7842</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry><box><size>7.184 0.5 0.02</size></box></geometry>
+        <material><ambient>1 0.85 0 1</ambient><diffuse>1 0.85 0 1</diffuse><emissive>0.6 0.5 0 1</emissive></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

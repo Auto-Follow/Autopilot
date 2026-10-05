@@ -1,0 +1,37 @@
+#!/bin/sh
+# Follow Me simulation hook. PX4 SITL sources "<airframe>.post" after MAVLink has started
+# (rcS: [ -e "$autostart_file".post ] && . "$autostart_file".post). Installed by tez/deney/follow_sim/kur.sh as
+# build/px4_sitl_default/etc/init.d-posix/airframes/4010_gz_x500_mono_cam.post -> this file.
+# Does nothing unless started by baslat.sh (renkli_duz* world, FOLLOW_SIM_DIR set), so plain
+# `make px4_sitl gz_x500_mono_cam` runs stay untouched.
+
+case "$PX4_GZ_WORLD" in renkli_duz*) follow_world=1 ;; *) follow_world=0 ;; esac
+if [ "$px4_instance" = "0" ] && [ "$follow_world" = "1" ] && [ -n "$FOLLOW_SIM_DIR" ]; then
+	# WSL only: extra MAVLink link to QGroundControl on Windows. SITL only talks to localhost, which Windows
+	# cannot reach under WSL2 NAT (the Windows host is the default gateway). On native Linux QGC uses localhost.
+	if grep -qi microsoft /proc/version 2>/dev/null; then
+		follow_qgc_ip=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+		if [ -n "$follow_qgc_ip" ]; then
+			mavlink start -x -u 14557 -r 4000000 -f -t "$follow_qgc_ip" -o 14550
+		fi
+	fi
+
+	# Annotated camera stream -> QGC (UDP 5600) + video_izleyici.py (UDP 5601). renkli_duz* worlds disable
+	# Gazebo's raw GstCameraSystem stream, which would otherwise also use port 5600. FOLLOW_VIDEO=0 disables it.
+	if [ "${FOLLOW_VIDEO:-1}" != "0" ] && [ -x "$FOLLOW_SIM_DIR/.venv/bin/python" ]; then
+		nohup "$FOLLOW_SIM_DIR/.venv/bin/python" "$FOLLOW_SIM_DIR/video/goruntu_yayini.py" \
+			--world "$PX4_GZ_WORLD" --model "${PX4_SIM_MODEL#*gz_}_${px4_instance}" > /tmp/follow_video.log 2>&1 &
+		echo "INFO  [follow_sim] Isaretli kamera yayini baslatiliyor (QGC: UDP 5600, izleyici: UDP 5601)"
+	fi
+
+	# Follow Me control panel (target, FOLLOW_TARGET, virtual RC sticks, scene drawing). FOLLOW_PANEL=0 disables it.
+	if [ "${FOLLOW_PANEL:-1}" != "0" ] && [ -f "$FOLLOW_SIM_DIR/follow_panel.py" ]; then
+		if python3 -c "import tkinter" 2>/dev/null; then
+			FOLLOW_DRONE_MODEL="${PX4_SIM_MODEL#*gz_}_${px4_instance}" FOLLOW_PANEL_AUTO_EXIT=1 \
+				nohup python3 "$FOLLOW_SIM_DIR/follow_panel.py" > /tmp/follow_panel.log 2>&1 &
+			echo "INFO  [follow_sim] Follow Me paneli açılıyor"
+		else
+			echo "WARN  [follow_sim] Panel için tkinter yok: sudo apt install -y python3-tk"
+		fi
+	fi
+fi

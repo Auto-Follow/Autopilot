@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <model name="renkli_zemin">
+    <static>true</static>
+    <link name="link">
+      <collision name="collision">
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>1000 1000</size>
+          </plane>
+        </geometry>
+      </collision>
+      <!-- Colorful checker area (5 m tiles) -->
+      <visual name="checker">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>200 200</size>
+          </plane>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://renkli_zemin/materials/textures/renkli_zemin.png</albedo_map>
+              <roughness>0.9</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <!-- Neutral surroundings, slightly lower to avoid z-fighting -->
+      <visual name="surroundings">
+        <pose>0 0 -0.02 0 0 0</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>1000 1000</size>
+          </plane>
+        </geometry>
+        <material>
+          <ambient>0.55 0.62 0.45 1</ambient>
+          <diffuse>0.55 0.62 0.45 1</diffuse>
+          <specular>0 0 0 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
