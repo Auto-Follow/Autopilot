@@ -165,6 +165,19 @@ python3 analiz.py sonuclar/kamera_egim40                   # grafik + ozet.md
 Kadraj analizi kayıtlı gerçek pozdan her eğim (0–70°) için ayrı hesaplanır; tek uçuş bütün eğimleri karşılaştırır.
 Sonuçlar `sonuclar/` altında.
 
+### Kalman filtresi ve mesafe bandı (05.10.2026)
+
+- **Kalman** (`follow_core.TargetKalman`): kamera fix'lerinden sabit hız modeliyle konum + hız. Ölçüm gürültüsü bakış
+  açısına göre büyür (görüş doğrultusunda h / sin²(açı), dik yönde eğik mesafe × açı hatası), aykırı fix'ler χ² kapısıyla
+  atılır. Panelde / senaryoda `kamera_hiz`: `yok` (NaN, PX4 kestirir), `kalman`, `gercek` (gerçek hız, üst sınır).
+- **Mesafe bandı** (`follow_core.DistanceBand`): hedefin ayak noktasını görüntüde iki satır arasında tutmak için
+  `FLW_TGT_DST`'yi uçuşta değiştirir (PX4 v1.17 değişen parametreyi hemen uygular). Eğik kamerada %25–75, düz kamerada
+  %60–90 satırları.
+- Deney grupları: `--deney kalman --egim 45` (hızlı hedef: parkur hızları ×2) ve `--deney duz --egim 0` (düz kamera,
+  8 m yükseklik, 30 m geride). İlk ölçüm (tek tekrar): gerçek hız bile hızlı hedefte kadrajı sadece %68 → %73'e çıkarıyor,
+  kayıpların asıl sebebi drone'un ±30–40° burun eğimi (gimbal gerekir); bu ayarlı Kalman hızlı hedefte bir kez kopardı,
+  düz kamerada drone'u sertleştirdi (ayar gerekiyor). Düz kamera 30 m'de takip ediyor ama geolocation hatası ~3 kat.
+
 ## Dosyalar
 
 | Yol | İçerik |

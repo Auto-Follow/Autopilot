@@ -220,8 +220,18 @@ class Panel(tk.Tk):
                         command=self._source_changed).pack(anchor="w")
         ttk.Radiobutton(gf, text="Kameradan hesap (Vision: piksel → konum)", value="kamera",
                         variable=self.source_var, command=self._source_changed).pack(anchor="w")
+        ttk.Label(gf, text="Kameradan konumla gönderilen hız:").pack(anchor="w", pady=(6, 0))
+        self.camvel_var = tk.StringVar(value=self.sim.camera_velocity)
+        for key, label in (("yok", "Yok (PX4 konumlardan kestirir)"), ("kalman", "Kalman filtresi (konum + hız)"),
+                           ("gercek", "Gerçek hız (üst sınır, karşılaştırma)")):
+            ttk.Radiobutton(gf, text=label, value=key, variable=self.camvel_var,
+                            command=self._camvel_changed).pack(anchor="w")
+        self.band_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(gf, text="Mesafe bandı: hedefi görüntüde tut\n(FLW_TGT_DST uçuşta otomatik)",
+                        variable=self.band_var, command=self._band_toggled).pack(anchor="w", pady=(4, 0))
         self.fix_vars = {}
-        for key, label in (("fix", "Hesaplanan konum"), ("err", "Hata (gerçeğe göre)"), ("geom", "Bakış açısı / h")):
+        for key, label in (("fix", "Hesaplanan konum"), ("err", "Hata (gerçeğe göre)"), ("geom", "Bakış açısı / h"),
+                           ("kf", "Kalman hızı / bant")):
             row = ttk.Frame(gf)
             row.pack(fill="x", pady=(2, 0))
             ttk.Label(row, text=label, foreground=MUTED, width=20).pack(side="left")
@@ -294,6 +304,10 @@ class Panel(tk.Tk):
             v["fix"].set(f"{f.lat:.7f}, {f.lon:.7f}")
             v["err"].set(f"{f.error_m:5.2f} m (K {f.error_ne[0]:+.2f}, D {f.error_ne[1]:+.2f})")
             v["geom"].set(f"{f.depression_deg:4.1f}° / {f.height:4.1f} m")
+        est = self.sim.kalman.estimate(self.sim._sim_now)
+        kf = f"{math.hypot(est[2], est[3]):4.1f} m/s" if est is not None else "—"
+        band = f"DST {self.sim.band.dst:4.1f} m" if self.sim.band.enabled else "kapalı"
+        v["kf"].set(f"{kf} / {band}")
         ft = self.sim.ft_link
         pct = 100.0 * ft.dropped / ft.submitted if ft.submitted else 0.0
         self.ft_stats.set(f"gönderilen {ft.submitted}, düşen {ft.dropped} (%{pct:.0f})")
@@ -340,6 +354,26 @@ class Panel(tk.Tk):
         subprocess.Popen([python, viewer], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True)
         self.sim.link._log("Kamera penceresi açılıyor (F: tam ekran, Q: kapat)")
+
+    def _camvel_changed(self):
+        mode = self.camvel_var.get()
+        self.sim.kalman.reset()
+        self.sim.camera_velocity = mode
+        self.sim.link._log({"yok": "Kamera konumu hızsız gidiyor (PX4 hızı kestirir)",
+                            "kalman": "Kamera konumu Kalman filtresinden: konum + hız",
+                            "gercek": "Kamera konumu + GERÇEK hedef hızı (karşılaştırma için üst sınır)"}[mode])
+
+    def _band_toggled(self):
+        if self.band_var.get():
+            # same bands as deney.py: tilted camera keeps the middle half, a level camera the lower part
+            self.sim.band.v_top, self.sim.band.v_bottom = (0.25, 0.75) if CAMERA_PITCH_DEG >= 20 else (0.6, 0.9)
+            self.sim.band.start(FOLLOW_DEFAULTS["FLW_TGT_DST"])
+            self.sim.link._log(f"Mesafe bandı AÇIK: hedef görüntünün %{self.sim.band.v_top * 100:.0f}–"
+                               f"%{self.sim.band.v_bottom * 100:.0f} satırları arasında tutulur")
+        else:
+            self.sim.band.stop()
+            self.sim.link.set_param("FLW_TGT_DST", float(FOLLOW_DEFAULTS["FLW_TGT_DST"]))
+            self.sim.link._log("Mesafe bandı kapalı, FLW_TGT_DST varsayılana döndü")
 
     def _vision_toggled(self):
         on = self.vision_var.get()

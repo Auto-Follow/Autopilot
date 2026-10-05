@@ -36,10 +36,16 @@ def parse_args():
 
 
 # Scenario fields: ht, dst (FLW_TGT_HT/DST), kaynak ("gercek" true GPS / "kamera" geolocation), hiz (send the
-# target velocity), ft_delay (s), ft_loss (0-1), ft_burst (mean burst length, messages)
+# target velocity), ft_delay (s), ft_loss (0-1), ft_burst (mean burst length, messages), kamera_hiz (velocity sent
+# with camera fixes: "yok" / "kalman" / "gercek"), hiz_carpan (parkour speed factor), bant (None or (top, bottom)
+# image-row fractions: FLW_TGT_DST is moved in flight to keep the target's foot point in that band)
+BAND_TILTED = (0.25, 0.75)
+BAND_LEVEL = (0.6, 0.9)  # a level camera sees the target steepest near the bottom of the image
+
+
 def _sc(name, ht, dst, **kw):
     base = {"name": name, "ht": ht, "dst": dst, "kaynak": "gercek", "hiz": False, "ft_delay": 0.0, "ft_loss": 0.0,
-            "ft_burst": 1.0}
+            "ft_burst": 1.0, "kamera_hiz": "yok", "hiz_carpan": 1.0, "bant": None}
     base.update(kw)
     return base
 
@@ -62,6 +68,20 @@ EXPERIMENTS = {
                 _sc("gecikme0_kayip60", 8, 8, kaynak="kamera", ft_loss=0.6),
                 _sc("gecikme0_kayip30_patlama", 8, 8, kaynak="kamera", ft_loss=0.3, ft_burst=20.0),
                 _sc("gecikme500_kayip30", 8, 8, kaynak="kamera", ft_delay=0.5, ft_loss=0.3)],
+    # Fast target (parkour speeds x2: walk 3 m/s, run 6 m/s), FOLLOW_TARGET from the camera: no velocity vs. a
+    # Kalman filter (position + velocity) vs. the true velocity (upper bound), plus Kalman + distance band.
+    # Run with --egim 45.
+    "kalman": [_sc("hizli_hizsiz", 8, 8, kaynak="kamera", hiz_carpan=2.0),
+               _sc("hizli_kalman", 8, 8, kaynak="kamera", kamera_hiz="kalman", hiz_carpan=2.0),
+               _sc("hizli_gercek_hiz", 8, 8, kaynak="kamera", kamera_hiz="gercek", hiz_carpan=2.0),
+               _sc("hizli_kalman_bant", 8, 8, kaynak="kamera", kamera_hiz="kalman", hiz_carpan=2.0,
+                   bant=BAND_TILTED),
+               _sc("normal_kalman", 8, 8, kaynak="kamera", kamera_hiz="kalman")],
+    # Level camera kept far enough to see the target (8 m high, 30 m back = 15 deg view), normal speed.
+    # Run with --egim 0.
+    "duz": [_sc("duz_dst30_hizsiz", 8, 30, kaynak="kamera"),
+            _sc("duz_dst30_kalman", 8, 30, kaynak="kamera", kamera_hiz="kalman"),
+            _sc("duz_bant_kalman", 8, 30, kaynak="kamera", kamera_hiz="kalman", bant=BAND_LEVEL)],
 }
 
 
@@ -165,6 +185,9 @@ def main():
         for sc in scenarios:
             sim.target_source = "gercek"
             sim.send_target_velocity = sc["hiz"]
+            sim.camera_velocity = "yok"
+            sim.band.stop()
+            sim.target.parkur_speed_scale = sc["hiz_carpan"]
             sim.ft_link.delay_s = sim.ft_link.loss = 0.0
             sim.target.set_pattern("dur")
             link.set_param("FLW_TGT_HT", float(sc["ht"]))
@@ -175,6 +198,11 @@ def main():
                 link.set_mode(fc.MODE_FOLLOW)
                 time.sleep(3)
             sim.target_source = sc["kaynak"]
+            sim.kalman.reset()
+            sim.camera_velocity = sc["kamera_hiz"]
+            if sc["bant"]:
+                sim.band.v_top, sim.band.v_bottom = sc["bant"]
+                sim.band.start(sc["dst"])
             sim.ft_link.delay_s, sim.ft_link.loss, sim.ft_link.burst = sc["ft_delay"], sc["ft_loss"], sc["ft_burst"]
             sim.ft_link.submitted = sim.ft_link.dropped = 0
             rec.start(sc["name"])
@@ -183,7 +211,8 @@ def main():
             wait_for(lambda: sim.target.parkur_finished, 200, "parkur")
             time.sleep(4)  # catch the drone settling after the last wait
             n = rec.stop(out / f"{sc['name']}.csv")
-            info = dict(sc, rows=n, duration_s=round(time.monotonic() - t0, 1), egim=args.egim,
+            sim.band.stop()
+            info = dict(sc, rows=n, kf_rejected=sim.kalman.rejected_total, duration_s=round(time.monotonic() - t0, 1), egim=args.egim,
                         ft_submitted=sim.ft_link.submitted, ft_dropped=sim.ft_link.dropped,
                         mode_end=link.state.mode)
             summary.append(info)

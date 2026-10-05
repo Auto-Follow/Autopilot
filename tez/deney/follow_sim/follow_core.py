@@ -26,6 +26,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 from gz.math7 import Angle, Quaterniond, SphericalCoordinates, Vector3d
 from gz.msgs10.boolean_pb2 import Boolean
 from gz.msgs10.marker_pb2 import Marker
@@ -371,6 +372,7 @@ class TargetMover:
         self._seg = 0  # parkur: current segment index
         self._seg_done = 0.0  # parkur: progress in the current segment (m, deg or s)
         self.parkur_finished = False
+        self.parkur_speed_scale = 1.0  # deney.py: faster target (walk/run/arc speeds times this)
         self._lock = threading.Lock()
 
     def set_pattern(self, pattern):
@@ -423,7 +425,7 @@ class TargetMover:
             return
         kind, *a = PARKUR[self._seg]
         if kind == "walk":
-            step = min(a[1] * dt, a[0] - self._seg_done)
+            step = min(a[1] * self.parkur_speed_scale * dt, a[0] - self._seg_done)
             self._walk(step)
             total = a[0]
         elif kind == "turn":
@@ -431,7 +433,7 @@ class TargetMover:
             self.yaw += math.copysign(math.radians(step), a[0])
             total = abs(a[0])
         elif kind == "arc":  # left arc: a = (deg, radius, speed)
-            step = min(math.degrees(a[2] * dt / a[1]), a[0] - self._seg_done)
+            step = min(math.degrees(a[2] * self.parkur_speed_scale * dt / a[1]), a[0] - self._seg_done)
             self.yaw += math.radians(step)
             self._walk(math.radians(step) * a[1])
             total = a[0]
@@ -726,6 +728,132 @@ class GeoFix:
     error_ne: tuple = (float("nan"), float("nan"))
 
 
+class TargetKalman:
+    """Constant-velocity Kalman filter of the camera fixes in the EKF local frame (north, east): gives FOLLOW_TARGET
+    a smoothed position and a velocity, which the camera itself cannot measure.
+
+    The fix error is dominated by the ray-angle error (attitude, timing, pixel). Along the line of sight it grows
+    with shallow viewing angles (h / sin^2(depression) per rad), across it with the slant range, so the measurement
+    covariance is built in that frame. Fixes far outside the prediction (chi-square gate) are rejected."""
+
+    ANGLE_SIGMA_RAD = math.radians(1.0)
+    POS_SIGMA_FLOOR_M = 0.5  # measured fix error in SITL: median 0.33-0.46 m (EKF yaw bias included)
+    ACCEL_PSD = 2.0  # white-acceleration process noise [m^2/s^3]
+    GATE_CHI2 = 13.8  # 2 dof, p = 0.001
+    MAX_GAP_S = 3.0  # no fix for this long -> start over
+    MAX_REJECTS = 5  # this many gated fixes in a row -> start over at the newest one
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.x = None  # [n, e, vn, ve]
+        self.P = None
+        self.t = None
+        self.rejects = 0
+        self.rejected_total = 0
+
+    def _measurement_cov(self, fix, drone_ne):
+        dn, de = fix.north - drone_ne[0], fix.east - drone_ne[1]
+        rng = math.hypot(dn, de)
+        u = np.array([dn / rng, de / rng]) if rng > 0.1 else np.array([1.0, 0.0])
+        s = math.sin(math.radians(max(fix.depression_deg, 1.0)))
+        sig_along = max(self.POS_SIGMA_FLOOR_M, self.ANGLE_SIGMA_RAD * fix.height / s ** 2)
+        sig_cross = max(self.POS_SIGMA_FLOOR_M, self.ANGLE_SIGMA_RAD * fix.slant)
+        cross = np.array([-u[1], u[0]])
+        return sig_along ** 2 * np.outer(u, u) + sig_cross ** 2 * np.outer(cross, cross)
+
+    def _predicted(self, t):
+        dt = t - self.t
+        F = np.eye(4)
+        F[0, 2] = F[1, 3] = dt
+        q = self.ACCEL_PSD
+        Q1 = np.array([[dt ** 3 / 3, dt ** 2 / 2], [dt ** 2 / 2, dt]]) * q
+        Q = np.zeros((4, 4))
+        Q[np.ix_([0, 2], [0, 2])] = Q1
+        Q[np.ix_([1, 3], [1, 3])] = Q1
+        return F @ self.x, F @ self.P @ F.T + Q
+
+    def update(self, t, fix, drone_ne):
+        """Fuses one camera fix taken at sim time t. Returns False if the fix was rejected."""
+        z = np.array([fix.north, fix.east])
+        R = self._measurement_cov(fix, drone_ne)
+        if self.x is None or t - self.t > self.MAX_GAP_S or self.rejects >= self.MAX_REJECTS:
+            self.x = np.array([z[0], z[1], 0.0, 0.0])
+            self.P = np.diag([R[0, 0], R[1, 1], 4.0, 4.0])  # velocity unknown: 2 m/s 1-sigma
+            self.t, self.rejects = t, 0
+            return True
+        if t <= self.t:
+            return False
+        x, P = self._predicted(t)
+        H = np.zeros((2, 4))
+        H[0, 0] = H[1, 1] = 1.0
+        y = z - H @ x
+        S = H @ P @ H.T + R
+        if float(y @ np.linalg.solve(S, y)) > self.GATE_CHI2:
+            self.rejects += 1
+            self.rejected_total += 1
+            return False
+        K = P @ H.T @ np.linalg.inv(S)
+        self.x, self.P, self.t, self.rejects = x + K @ y, (np.eye(4) - K @ H) @ P, t, 0
+        return True
+
+    def estimate(self, t):
+        """(north, east, v_north, v_east) predicted to sim time t, or None."""
+        if self.x is None or t is None or t - self.t > self.MAX_GAP_S:
+            return None
+        x, _ = self._predicted(max(t, self.t))
+        return tuple(float(v) for v in x)
+
+
+class DistanceBand:
+    """Keeps the target's foot point between two image rows by moving FLW_TGT_DST in flight (PX4 Follow Me applies
+    a changed FLW_TGT_DST immediately). Inside the band the distance is left alone; when the target is above the
+    band (far, shallow view) the drone is brought closer, below it (near, steep) it is sent further away.
+
+    The new distance puts the target back just inside the band edge: with the flat-ground geometry the horizontal
+    distance for a depression angle a is h / tan(a)."""
+
+    UPDATE_S = 0.5
+    MAX_STEP_M = 2.0  # per update -> at most 4 m/s change of the follow distance
+    INNER_MARGIN = 0.1  # aim this fraction of the band height inside the edge
+
+    def __init__(self, link, camera, v_top=0.25, v_bottom=0.75, d_min=5.0, d_max=60.0):
+        self.link, self.cam = link, camera
+        self.v_top, self.v_bottom = v_top, v_bottom  # fractions of the image height (0 = top)
+        self.d_min, self.d_max = d_min, d_max
+        self.enabled = False
+        self.dst = None  # current FLW_TGT_DST commanded by the band
+        self._last = 0.0
+
+    def start(self, dst):
+        self.enabled, self.dst, self._last = True, float(dst), 0.0
+
+    def stop(self):
+        self.enabled = False
+
+    def _depression_at_row(self, v):
+        return self.cam.pitch_down_deg + math.degrees(math.atan((v - self.cam.cy) / self.cam.fy))
+
+    def update(self, now, fix):
+        if not self.enabled or fix is None or now - self._last < self.UPDATE_S:
+            return
+        self._last = now
+        img_h = self.cam.height
+        v = fix.pixel[1] / img_h
+        if self.v_top <= v <= self.v_bottom:
+            return
+        band = self.v_bottom - self.v_top
+        goal_v = (self.v_top + self.INNER_MARGIN * band) if v < self.v_top else (self.v_bottom - self.INNER_MARGIN * band)
+        goal_dep = self._depression_at_row(goal_v * img_h)
+        if goal_dep <= 1.0:
+            return
+        goal = fix.height / math.tan(math.radians(goal_dep))
+        step = max(-self.MAX_STEP_M, min(self.MAX_STEP_M, goal - self.dst))
+        self.dst = max(self.d_min, min(self.d_max, self.dst + step))
+        self.link.set_param("FLW_TGT_DST", float(self.dst))
+
+
 class FollowSim:
     """Ties everything together; runs the 20 Hz update loop in a background thread."""
 
@@ -755,6 +883,12 @@ class FollowSim:
         # Geolocation and the FOLLOW_TARGET source: "gercek" = true target GPS, "kamera" = computed from the image
         self.target_source = "gercek"
         self.geo_fix = None
+        # Velocity sent with camera fixes: "yok" (NaN, PX4 estimates it), "kalman" (TargetKalman), "gercek" (true
+        # target velocity: the upper bound a perfect filter could reach)
+        self.camera_velocity = "yok"
+        self.kalman = TargetKalman()
+        self.band = DistanceBand(self.link, CAMERA)
+        self._sim_now = None
         self._last_det_stamp = None
         self._target_hist = deque(maxlen=200)  # (sim_time, x, y) of the true target
         self.ft_link = LinkImpairment()  # FOLLOW_TARGET path
@@ -845,6 +979,8 @@ class FollowSim:
         lat, lon = geoloc.ned_to_geodetic(fix.north, fix.east, origin[0], origin[1])
         gf = GeoFix(now, det["sim_time"], lat, lon, fix.north, fix.east, fix.slant, fix.depression_deg, fix.height,
                     (det["u"], det["v"]))
+        self.kalman.update(det["sim_time"], gf, (ned[0], ned[1]))
+        self.band.update(now, gf)
         truth = self._true_target_at(det["sim_time"])
         if truth is not None:
             t_lat, t_lon, _ = self.target_geodetic(*truth)
@@ -869,6 +1005,14 @@ class FollowSim:
                 return False
             alt = self.link.ekf_origin[2] - self._ground_down()  # ground AMSL (unused with FLW_TGT_ALT_M = 0)
             msg = (fix.lat, fix.lon, alt, None, None)  # the camera gives no velocity: PX4 estimates it
+            if self.camera_velocity == "kalman":
+                est = self.kalman.estimate(self._sim_now)
+                if est is not None:
+                    origin = self.link.ekf_origin
+                    k_lat, k_lon = geoloc.ned_to_geodetic(est[0], est[1], origin[0], origin[1])
+                    msg = (k_lat, k_lon, alt, est[2], est[3])
+            elif self.camera_velocity == "gercek":
+                msg = (fix.lat, fix.lon, alt, vy, vx)  # ENU -> NED
         else:
             if not (self.target_seen or not self.vision_mode):
                 return False
@@ -896,6 +1040,7 @@ class FollowSim:
                 sim_time = self.gz.sim_time()
                 if sim_time is not None:
                     self._target_hist.append((sim_time, x, y))
+                    self._sim_now = sim_time
 
                 pose = self.gz.drone_pose()
                 self.geometry = compute_geometry(pose[0], pose[1], (x, y)) if pose is not None else None
@@ -956,4 +1101,9 @@ class FollowSim:
             row.update(fix_n=f.north, fix_e=f.east, fix_err=f.error_m, fix_err_n=f.error_ne[0],
                        fix_err_e=f.error_ne[1], fix_age=now - f.stamp, fix_sim_t=f.sim_time, fix_h=f.height,
                        fix_dep=f.depression_deg)
+        est = self.kalman.estimate(sim_time)
+        if est is not None:
+            row.update(kf_n=est[0], kf_e=est[1], kf_vn=est[2], kf_ve=est[3])
+        row.update(kf_rejected=self.kalman.rejected_total, cam_vel=self.camera_velocity,
+                   band_dst=self.band.dst if self.band.enabled else nan)
         return row
