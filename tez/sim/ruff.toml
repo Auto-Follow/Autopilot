@@ -1,0 +1,8 @@
+# Same rules as Vision/pyproject.toml; longer lines because the tools print Turkish report lines.
+#   ../Vision/.venv/bin/ruff format tez/sim && ../Vision/.venv/bin/ruff check tez/sim
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "ANN"]
+ignore = ["ANN401"]

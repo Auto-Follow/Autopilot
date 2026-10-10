@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+# @name Gazebo x500 tez (Auto-Follow thesis)
+#
+# @type Quadrotor
+#
+# @maintainer Auto-Follow thesis team
+#
+# Holybro X500 V2 with a Camera Module 3 tilted 45 deg down (model tez/sim/models/x500_tez).
+# Gazebo is started by tez/sim/calistir.sh with the model already in the world; PX4 attaches to it
+# (PX4_GZ_MODEL_NAME), so the locked PX4 model folder is not used.
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_tez}
+PX4_GZ_MODEL_NAME=${PX4_GZ_MODEL_NAME:=x500_tez_0}
+
+. ${R}etc/init.d-posix/airframes/4001_gz_x500
+
+# Rate controller gains of the real vehicle (ROMFS/px4fmu_common/init.d/airframes/4019_x500_v2)
+param set-default IMU_GYRO_CUTOFF 30
+param set-default MC_ROLLRATE_P 0.14
+param set-default MC_PITCHRATE_P 0.14
+param set-default MC_ROLLRATE_I 0.3
+param set-default MC_PITCHRATE_I 0.3
+param set-default MC_ROLLRATE_D 0.004
+param set-default MC_PITCHRATE_D 0.004
