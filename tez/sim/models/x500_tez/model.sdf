@@ -6,10 +6,44 @@
       <uri>model://x500</uri>
     </include>
 
-    <!-- Raspberry Pi Camera Module 3, Standard lens. Mounted at the front like x500_mono_cam, pitched 45 deg down
+    <!-- Camera mount under the bottom plate at the front, between the two slide bars, like the X500 V2 "Depth Camera
+         Mount" (docs.px4.io/v1.17/en/frames_multicopter/holybro_x500v2_pixhawk6c). base_link is the centre of the
+         body plate; the plate spans about +-0.025 m around it, the landing gear reaches 0.227 m below it.
+         Mount dimensions are approximate until measured on the real vehicle. Visual only (no collision). -->
+    <link name="camera_mount">
+      <pose relative_to="base_link">0.12 0 -0.035 0 0 0</pose>
+      <inertial>
+        <mass>0.015</mass>
+        <inertia>
+          <ixx>0.000002</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000002</iyy>
+          <iyz>0</iyz>
+          <izz>0.000002</izz>
+        </inertia>
+      </inertial>
+      <visual name="bracket">
+        <geometry>
+          <box>
+            <size>0.05 0.06 0.02</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>0.1 0.1 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <joint name="camera_mount_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>camera_mount</child>
+    </joint>
+
+    <!-- Raspberry Pi Camera Module 3, Standard lens, on the front face of the mount, pitched 45 deg down
          (0.785398 rad; positive pitch turns the optical axis +X towards -Z). -->
     <link name="camera_link">
-      <pose relative_to="base_link">0.12 0 0.242 0 0.785398 0</pose>
+      <pose relative_to="base_link">0.151 0 -0.035 0 0.785398 0</pose>
       <inertial>
         <mass>0.010</mass>
         <inertia>

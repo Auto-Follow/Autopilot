@@ -35,7 +35,8 @@ tez/sim/calistir.sh --ekransiz    # pencere yok (otomatik testler için)
 - Kapatma: `pxh>` içinde `shutdown` veya Ctrl+C. Gazebo da kapanır.
 - Her açılış temiz parametrelerle başlar (ekip standardı: testler birbirinin parametresini devralmaz).
 
-Kamera: Camera Module 3 Standard (yatay 66°, 2304×1296, 30 fps), 45° aşağı, Gazebo konusu
+Kamera: Camera Module 3 Standard (yatay 66°, 2304×1296, 30 fps), gövdenin altında ön kızaklardaki tutucuda
+(X500 V2 "Depth Camera Mount" yeri), 45° aşağı, Gazebo konusu
 `/x500_tez/kamera/image` (+ `/x500_tez/kamera/camera_info`).
 
 ## F0 kabul testi
@@ -65,7 +66,7 @@ kapanması. Loglar: `build/px4_sitl_tez/tez_kabul/`.
 |---|---|
 | `tez/sim/derle.sh` | PX4 SITL + tez modülleri → `build/px4_sitl_tez` |
 | `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır |
-| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + 45° Camera Module 3 |
+| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız hali) |
 | `tez/sim/araclar/` | Kabul testleri |
