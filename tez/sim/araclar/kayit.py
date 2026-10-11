@@ -1,15 +1,18 @@
-"""Ground truth recorder: drone and camera poses from Gazebo, target from the scenario, at a fixed sim-time rate.
+"""Ground truth recorder: one row per drone camera frame, stamped with the frame's sim time.
 
-Each row says where the drone, its camera and the target are, and where the target appears in the drone camera
-image (pinhole model with the camera's own camera_info). Rows are stamped with Gazebo sim time, which is also
-PX4's time in SITL.
+Each row says where the drone, its camera and the target are, where the target appears in that frame (the camera's
+own camera_info, distortion included) and the true line of sight to it in the frames of the team's pixel -> LOS chain
+(optical, body FRD, NED; see kamera.py). Gazebo publishes poses at 50 Hz and frames at ~30 Hz on different sim
+times, so the drone pose is interpolated to each frame time. Sim time is also PX4's time in SITL.
 """
 
 import math
 import os
 import threading
+from collections import deque
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
+os.environ.setdefault("GZ_IP", "127.0.0.1")  # same as calistir.sh
 
 import numpy as np  # noqa: E402
 from gz.msgs10.camera_info_pb2 import CameraInfo  # noqa: E402
@@ -17,37 +20,109 @@ from gz.msgs10.pose_v_pb2 import Pose_V  # noqa: E402
 from gz.transport13 import Node  # noqa: E402
 
 from hedef import Scenario  # noqa: E402
+from kamera import ENU_TO_NED, FLU_TO_FRD, GZ_CAMERA_TO_OPTICAL, Camera, deviation, quat_to_dcm  # noqa: E402
 
 DRONE_MODEL = "x500_tez_0"
 CAMERA_LINK = "camera_link"
 CAMERA_TOPIC = "/x500_tez/kamera"
-TARGET_HEIGHT = 1.75  # [m] head of the human target above ground
-TARGET_CENTER = 0.9  # [m] body centre used for "in view"
+# Mingfei actor; the "in view" point and the LOS use the body centre
+TARGET_POINTS = (("ayak", 0.0), ("merkez", 0.9), ("bas", 1.75))  # [m] above ground
+POSE_HISTORY = 100  # poses kept for interpolation (2 s at 50 Hz)
 
 
-def rotation(qw: float, qx: float, qy: float, qz: float) -> np.ndarray:
-    """Rotation matrix (body -> world) of a unit quaternion."""
-    return np.array(
-        [
-            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
-            [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
-            [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
-        ]
+def nlerp(q0: np.ndarray, q1: np.ndarray, f: float) -> np.ndarray:
+    """Quaternion interpolation; over 20 ms the difference to slerp is far below a pixel."""
+    if np.dot(q0, q1) < 0:
+        q1 = -q1
+    q = (1 - f) * q0 + f * q1
+    return q / np.linalg.norm(q)
+
+
+def euler_frd_ned(r_world_flu: np.ndarray) -> tuple[float, float, float]:
+    """PX4 roll, pitch, yaw [deg] of a Gazebo model orientation (ENU world, FLU body)."""
+    r = ENU_TO_NED @ r_world_flu @ FLU_TO_FRD
+    return (
+        math.degrees(math.atan2(r[2, 1], r[2, 2])),
+        math.degrees(-math.asin(max(-1.0, min(1.0, r[2, 0])))),
+        math.degrees(math.atan2(r[1, 0], r[0, 0])),
     )
 
 
+def camera_to_body_dcm(r_rel: np.ndarray) -> np.ndarray:
+    """C_cb (optical -> body FRD) of a camera link with orientation r_rel relative to its FLU model."""
+    return FLU_TO_FRD @ r_rel @ GZ_CAMERA_TO_OPTICAL.T
+
+
+def truth_row(
+    t: float,
+    sc: Scenario,
+    camera: Camera,
+    p_model: np.ndarray,
+    q_model: np.ndarray,
+    p_rel: np.ndarray,
+    r_rel: np.ndarray,
+) -> dict:
+    """Ground truth at sim time t for a drone pose (world ENU) and the camera pose relative to the drone."""
+    r_model = quat_to_dcm(*q_model)
+    r_cam = r_model @ r_rel
+    p_cam = p_model + r_model @ p_rel
+    tx, ty, tyaw, tspeed, tkind = sc.truth(t)
+    roll, pitch, yaw = euler_frd_ned(r_model)
+    row = {
+        "t": t,
+        "dron_x": p_model[0],
+        "dron_y": p_model[1],
+        "dron_z": p_model[2],
+        "dron_qw": q_model[0],
+        "dron_qx": q_model[1],
+        "dron_qy": q_model[2],
+        "dron_qz": q_model[3],
+        "dron_roll_deg": roll,
+        "dron_pitch_deg": pitch,
+        "dron_yaw_deg": yaw,
+        "kamera_x": p_cam[0],
+        "kamera_y": p_cam[1],
+        "kamera_z": p_cam[2],
+        "hedef_x": tx,
+        "hedef_y": ty,
+        "hedef_yaw": tyaw,
+        "hedef_hiz": tspeed,
+        "hedef_animasyon": tkind,
+        "yatay_mesafe": math.hypot(tx - p_model[0], ty - p_model[1]),
+    }
+    for label, height in TARGET_POINTS:
+        ray = GZ_CAMERA_TO_OPTICAL @ r_cam.T @ (np.array([tx, ty, height]) - p_cam)
+        uv = camera.project(ray)
+        u, v = uv if uv is not None else (math.nan, math.nan)
+        row[f"{label}_u"], row[f"{label}_v"], row[f"{label}_gorunur"] = u, v, uv is not None and camera.contains(u, v)
+        if label == "merkez":
+            d_world = np.array([tx, ty, height]) - p_cam
+            row["menzil_m"] = float(np.linalg.norm(d_world))
+            los = {
+                "kamera": ray / np.linalg.norm(ray),  # optical
+                "govde": FLU_TO_FRD @ r_model.T @ d_world / row["menzil_m"],  # body FRD, from the camera
+                "ned": ENU_TO_NED @ d_world / row["menzil_m"],
+            }
+            for frame, vec in los.items():
+                row[f"los_{frame}_x"], row[f"los_{frame}_y"], row[f"los_{frame}_z"] = vec
+            row["sapma_yatay_deg"], row["sapma_dikey_deg"], _ = deviation(los["govde"], "body")
+    row["kadrajda"] = row["merkez_gorunur"]
+    return row
+
+
 class Recorder:
-    def __init__(self, scenario: Scenario, world: str, rate_hz: float = 20.0) -> None:
+    def __init__(self, scenario: Scenario, world: str) -> None:
         self.sc = scenario
-        self.world = world
-        self.period = 1.0 / rate_hz
         self.rows: list[dict] = []
         self.sim_time = 0.0
-        self.camera: dict | None = None  # intrinsics from camera_info
+        self.camera: Camera | None = None
         self.camera_offset: tuple[float, float, float] | None = None  # camera link relative to the model [m]
+        self.camera_dcm: np.ndarray | None = None  # C_cb, optical -> body FRD
         self._lock = threading.Lock()
-        self._next = 0.0
         self._recording = False
+        self._poses: deque[tuple[float, np.ndarray, np.ndarray]] = deque(maxlen=POSE_HISTORY)
+        self._frames: deque[float] = deque()  # frame times waiting for a later pose
+        self._rel: tuple[np.ndarray, np.ndarray] | None = None
         self._node = Node()
         self._node.subscribe(Pose_V, f"/world/{world}/dynamic_pose/info", self._on_pose)
         self._node.subscribe(CameraInfo, f"{CAMERA_TOPIC}/camera_info", self._on_info)
@@ -63,66 +138,59 @@ class Recorder:
             return list(self.rows)
 
     def _on_info(self, msg: CameraInfo) -> None:
-        if self.camera is None:
-            k = msg.intrinsics.k
-            self.camera = {"fx": k[0], "fy": k[4], "cx": k[2], "cy": k[5], "w": msg.width, "h": msg.height}
+        # camera_info is published with every image and carries the image's time stamp
+        t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
+        with self._lock:
+            if self.camera is None:
+                self.camera = Camera.from_camera_info(msg)
+            if self._recording:
+                self._frames.append(t)
+                self._flush()
 
     def _on_pose(self, msg: Pose_V) -> None:
         t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
-        self.sim_time = t
-        if not self._recording or t < self._next or self.camera is None:
-            return
-        poses = {p.name: p for p in msg.pose}
-        if DRONE_MODEL not in poses or CAMERA_LINK not in poses:
-            return
-        self._next = t + self.period
-        row = self._row(t, poses[DRONE_MODEL], poses[CAMERA_LINK])
+        model = cam = None
+        for p in msg.pose:
+            if p.name == DRONE_MODEL:
+                model = p
+            elif p.name == CAMERA_LINK:
+                cam = p
         with self._lock:
-            self.rows.append(row)
+            self.sim_time = t
+            if cam is not None and self._rel is None:
+                o = cam.orientation
+                self._rel = (
+                    np.array([cam.position.x, cam.position.y, cam.position.z]),
+                    quat_to_dcm(o.w, o.x, o.y, o.z),
+                )
+                self.camera_offset = tuple(float(v) for v in self._rel[0])
+                self.camera_dcm = camera_to_body_dcm(self._rel[1])
+            if model is not None:
+                o = model.orientation
+                self._poses.append(
+                    (
+                        t,
+                        np.array([model.position.x, model.position.y, model.position.z]),
+                        np.array([o.w, o.x, o.y, o.z]),
+                    )
+                )
+                self._flush()
 
-    def _row(self, t: float, model: object, cam_rel: object) -> dict:
-        # Link poses in dynamic_pose/info are relative to their model
-        r_model = rotation(model.orientation.w, model.orientation.x, model.orientation.y, model.orientation.z)
-        p_model = np.array([model.position.x, model.position.y, model.position.z])
-        r_rel = rotation(cam_rel.orientation.w, cam_rel.orientation.x, cam_rel.orientation.y, cam_rel.orientation.z)
-        p_rel = np.array([cam_rel.position.x, cam_rel.position.y, cam_rel.position.z])
-        if self.camera_offset is None:
-            self.camera_offset = tuple(float(v) for v in p_rel)
-        r_cam = r_model @ r_rel
-        p_cam = p_model + r_model @ p_rel
+    def _flush(self) -> None:
+        """Turn every waiting frame time that now lies between two poses into a row (lock held)."""
+        if self.camera is None or self._rel is None:
+            return
+        while self._frames and self._poses and self._frames[0] <= self._poses[-1][0]:
+            t = self._frames.popleft()
+            pose = self._pose_at(t)
+            if pose is not None:
+                self.rows.append(truth_row(t, self.sc, self.camera, *pose, *self._rel))
 
-        tx, ty, tyaw, tspeed, tkind = self.sc.truth(t)
-        row = {
-            "t": t,
-            "dron_x": p_model[0],
-            "dron_y": p_model[1],
-            "dron_z": p_model[2],
-            "dron_qw": model.orientation.w,
-            "dron_qx": model.orientation.x,
-            "dron_qy": model.orientation.y,
-            "dron_qz": model.orientation.z,
-            "kamera_x": p_cam[0],
-            "kamera_y": p_cam[1],
-            "kamera_z": p_cam[2],
-            "hedef_x": tx,
-            "hedef_y": ty,
-            "hedef_yaw": tyaw,
-            "hedef_hiz": tspeed,
-            "hedef_animasyon": tkind,
-            "yatay_mesafe": math.hypot(tx - p_model[0], ty - p_model[1]),
-        }
-        for label, height in (("ayak", 0.0), ("merkez", TARGET_CENTER), ("bas", TARGET_HEIGHT)):
-            u, v, visible = self._project(np.array([tx, ty, height]), r_cam, p_cam)
-            row[f"{label}_u"], row[f"{label}_v"], row[f"{label}_gorunur"] = u, v, visible
-        row["kadrajda"] = row["merkez_gorunur"]
-        return row
-
-    def _project(self, point: np.ndarray, r_cam: np.ndarray, p_cam: np.ndarray) -> tuple[float, float, bool]:
-        """Pixel (u, v) of a world point in the drone image. Gazebo camera frame: x forward, y left, z up."""
-        d = r_cam.T @ (point - p_cam)
-        if d[0] <= 0.05:
-            return math.nan, math.nan, False
-        c = self.camera
-        u = c["cx"] - c["fx"] * d[1] / d[0]
-        v = c["cy"] - c["fy"] * d[2] / d[0]
-        return u, v, bool(0 <= u < c["w"] and 0 <= v < c["h"])
+    def _pose_at(self, t: float) -> tuple[np.ndarray, np.ndarray] | None:
+        poses = list(self._poses)
+        for i in range(len(poses) - 1, 0, -1):  # newest first: frames wait for at most a few poses
+            (t0, p0, q0), (t1, p1, q1) = poses[i - 1], poses[i]
+            if t0 <= t <= t1:
+                f = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
+                return p0 + f * (p1 - p0), nlerp(q0, q1, f)
+        return None

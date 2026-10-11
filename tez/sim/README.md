@@ -44,12 +44,13 @@ Kamera: Camera Module 3 Standard (yatay 66°, 2304×1296, 30 fps), gövdenin alt
 ## F0 kabul testi
 
 ```bash
-tez/sim/araclar/f0_kabul.sh       # pencere açmaz, ~2 dakika, sonunda "SONUÇ: GEÇTİ"
+tez/sim/araclar/f0_kabul.sh              # simi kendisi açar (pencere yok), ~1.5 dakika, sonunda "SONUÇ: GEÇTİ"
+tez/sim/araclar/f0_kabul.sh --acik-sim   # zaten açık bir sim üzerinde (ör. Gazebo + QGC penceresiyle izlemek için)
 ```
 
-Kontrol ettikleri: kamera çözünürlüğü, hızı ve odak uzaklığı; modun QGC listesinde olması; yerde arm reddi;
-10 m kalkış; tez moduna geçiş ve 15 s konum tutma (sapma < 0.5 m); iniş ve disarm; PX4 ve Gazebo'nun temiz
-kapanması. Loglar: `build/px4_sitl_tez/tez_kabul/`.
+Kontrol ettikleri: kamera çözünürlüğü, hızı (sim saniyesi başına kare) ve odak uzaklığı; modun QGC listesinde
+olması; yerde arm reddi; 10 m kalkış; tez moduna geçiş ve 15 s konum tutma (sapma < 0.5 m); iniş ve disarm; PX4 ve
+Gazebo'nun temiz kapanması; modun hiç "unresponsive" işaretlenmemesi. Log: `build/px4_sitl_tez/tez_kabul/sim.log`.
 
 ## Senaryolar (F1)
 
@@ -69,8 +70,8 @@ alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar.
 | Dosya | İçerik |
 |---|---|
 | `rapor.html` | Sonuç (GEÇTİ / KALDI / TAMAMLANMADI), ölçütler, üstten harita, mesafe ve kamera görüntüsü grafikleri |
-| `dogru_cevap.csv` | 20 Hz: dron ve kamera konumu, hedef konumu/hızı, hedefin dron görüntüsündeki pikseli (ayak, merkez, baş) ve kadrajda olup olmadığı |
-| `ozet.json` | Ölçütler ve sonuç (makineyle okunur) |
+| `dogru_cevap.csv` | **Dron kamerasının her karesi için bir satır** (~30 Hz, karenin sim zamanıyla): dron konumu ve duruşu (roll/pitch/yaw, PX4 yönleriyle), kamera konumu, hedef konumu/hızı, hedefin o karedeki pikseli (ayak, merkez, baş) ve kadrajda olup olmadığı, kameradan hedefe menzil ve **doğru görüş vektörü** (aşağıda) |
+| `ozet.json` | Ölçütler ve sonuç (makineyle okunur); kameranın kalibrasyonu ve gövdeye montajı (ofset, C_cb) |
 | `ucus.ulg` | PX4 uçuş kaydı (PlotJuggler / pyulog) |
 | `dunya.sdf`, `senaryo.yaml`, `sim.log` | Koşunun girdileri ve logu |
 
@@ -84,11 +85,24 @@ Yeni senaryo yazmak için `senaryolar/yuruyen_insan.yaml`'ı kopyalayın. Alanla
 Koordinatlar Gazebo dünyasına göredir: **x doğu, y kuzey [m]**; dron (0, 0)'dan doğuya bakarak kalkar. Yanlış yazılan
 bir alan, hangi alan olduğu söylenerek reddedilir.
 
+Görüş vektörü (LOS) sütunları, ekibin "Pikselden Vektöre Dönüşüm" belgesindeki zincirle aynı eksenlerdedir
+(`araclar/kamera.py`, testleri belgenin örnek sayılarını kullanır):
+
+| Sütun | Eksenler |
+|---|---|
+| `los_kamera_x/y/z` | kamera optik eksenleri: x sağ, y aşağı, z ileri (görüntü işlemenin ürettiği vektör) |
+| `los_govde_x/y/z` | gövde FRD: x burun, y sağ, z aşağı (kameradan hedefe, gövde eksenlerinde) |
+| `los_ned_x/y/z` | NED: kuzey, doğu, aşağı |
+| `sapma_yatay_deg`, `sapma_dikey_deg` | burundan sapma: sağa ve aşağı pozitif |
+
+Görüş vektörü hedefin gövde merkezine (yerden 0.9 m) göredir. Gazebo dünya koordinatları (`dron_x`, `hedef_x`...)
+ise x doğu, y kuzey, z yukarı.
+
 Doğru cevap hakkında: Gazebo Harmonic insan (actor) konumunu yayınlamaz; hedefin konumu senaryodaki yoldan
 hesaplanır. `--dogrula` bunu tepe kamerasıyla kontrol eder (gölgeler kapanır); yürürken gövde merkezi yolun
 0.05–0.19 m önündedir. Ayrıntı: `models/insan/KAYNAK.md`.
 
-F1 kabul testi (senaryoyu iki kez koşar, ~6 dakika):
+F1 kabul testi (senaryoyu iki kez koşar, ~6 dakika; `araclar/f1_testi.py`):
 
 ```bash
 tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koşu aynı (≤ 0.15 m)
@@ -117,9 +131,16 @@ tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koş
 | `tez/sim/kur.sh` | Git'e girmeyen dosyaları indirir (insan modeli) |
 | `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kaynak: `KAYNAK.md`) |
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kayıt), `rapor.py` (rapor), `px4_baglanti.py` (MAVLink) |
-| `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `px4_baglanti.py` (MAVLink) |
+| `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
+| `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 | `tez/px4/src/modules/tez_auto_follow/` | Tez uçuş modu (iskelet) |
 | `ROMFS/.../airframes/4030_gz_x500_tez(.post)` | SITL airframe: x500 + gerçek X500 V2 (4019) açısal hız kazançları; modu başlatır |
 
-Python araçları: `ruff format tez/sim && ruff check tez/sim` (`tez/sim/ruff.toml`).
+Python araçları:
+
+```bash
+P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
+$P -m pytest tez/sim/testler                     # birim testleri, simsiz, ~1 s
+../Vision/.venv/bin/ruff format --config tez/sim/ruff.toml tez/sim && ../Vision/.venv/bin/ruff check --config tez/sim/ruff.toml tez/sim
+```

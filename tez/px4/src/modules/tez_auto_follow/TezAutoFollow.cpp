@@ -72,12 +72,19 @@ void TezAutoFollow::Run()
 	perf_begin(_loop_perf);
 
 	if (_mode_id < 0) {
-		// The commander may not be ready right after boot: repeat the request until it is accepted.
-		if (hrt_elapsed_time(&_last_registration_request) > REGISTRATION_RETRY_INTERVAL) {
-			send_registration_request();
+		check_registration_reply();
+
+		if (_mode_id < 0 && !_registration_failed
+		    && (_registration_requests == 0 || hrt_elapsed_time(&_last_registration_request) > REGISTRATION_RETRY_INTERVAL)) {
+			if (_registration_requests < REGISTRATION_MAX_REQUESTS) {
+				send_registration_request();
+
+			} else {
+				PX4_ERR("no answer from the commander to %d registration requests, giving up", _registration_requests);
+				_registration_failed = true;
+			}
 		}
 
-		check_registration_reply();
 		perf_end(_loop_perf);
 		return;
 	}
@@ -120,6 +127,7 @@ void TezAutoFollow::send_registration_request()
 	request.register_mode = true;
 	_register_ext_component_request_pub.publish(request);
 	_last_registration_request = request.timestamp;
+	_registration_requests++;
 }
 
 void TezAutoFollow::check_registration_reply()
@@ -132,7 +140,9 @@ void TezAutoFollow::check_registration_reply()
 		}
 
 		if (!reply.success) {
+			// A rejection (no free mode slot, ...) does not go away by asking again
 			PX4_ERR("mode registration rejected by commander");
+			_registration_failed = true;
 			continue;
 		}
 
@@ -182,10 +192,20 @@ void TezAutoFollow::reply_to_arming_check(uint8_t request_id)
 
 void TezAutoFollow::on_mode_entered()
 {
-	_hold_position = matrix::Vector3f(_local_position.x, _local_position.y, _local_position.z);
-	_hold_yaw = _local_position.heading;
-	PX4_INFO("mode active, holding N %.1f E %.1f D %.1f m", (double)_hold_position(0), (double)_hold_position(1),
-		 (double)_hold_position(2));
+	// The commander only enters the mode while the local position is valid (mode_req_local_position), but this module
+	// may still hold an older sample: never hold a position the estimator did not mark valid.
+	const bool position_valid = _local_position.timestamp != 0 && _local_position.xy_valid && _local_position.z_valid;
+	_hold_position = position_valid ? matrix::Vector3f(_local_position.x, _local_position.y, _local_position.z)
+			 : matrix::Vector3f(NAN, NAN, NAN);
+	_hold_yaw = _local_position.heading_good_for_control ? _local_position.heading : NAN;
+
+	if (position_valid) {
+		PX4_INFO("mode active, holding N %.1f E %.1f D %.1f m", (double)_hold_position(0), (double)_hold_position(1),
+			 (double)_hold_position(2));
+
+	} else {
+		PX4_WARN("mode active without a valid local position, stopping in place");
+	}
 }
 
 void TezAutoFollow::update_setpoint()
@@ -194,7 +214,9 @@ void TezAutoFollow::update_setpoint()
 	trajectory_setpoint_s setpoint{};
 	setpoint.timestamp = hrt_absolute_time();
 	_hold_position.copyTo(setpoint.position);
-	matrix::Vector3f(NAN, NAN, NAN).copyTo(setpoint.velocity);
+	// Without a position to hold, stop with a zero velocity setpoint instead
+	(_hold_position.isAllFinite() ? matrix::Vector3f(NAN, NAN, NAN) : matrix::Vector3f(0.f, 0.f, 0.f)).copyTo(
+		setpoint.velocity);
 	matrix::Vector3f(NAN, NAN, NAN).copyTo(setpoint.acceleration);
 	matrix::Vector3f(NAN, NAN, NAN).copyTo(setpoint.jerk);
 	setpoint.yaw = _hold_yaw;
@@ -219,7 +241,8 @@ void TezAutoFollow::unregister()
 
 int TezAutoFollow::print_status()
 {
-	PX4_INFO("mode '%s': %s, nav_state %d, %s", MODE_NAME, _mode_id >= 0 ? "registered" : "not registered", _mode_id,
+	PX4_INFO("mode '%s': %s, nav_state %d, %s", MODE_NAME,
+		 _mode_id >= 0 ? "registered" : (_registration_failed ? "registration failed" : "not registered"), _mode_id,
 		 _active ? "active" : "inactive");
 	perf_print_counter(_loop_perf);
 	return 0;

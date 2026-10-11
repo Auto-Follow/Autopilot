@@ -12,158 +12,49 @@ to tez/sim/sonuclar/<date>_<scenario>/.
 
 import argparse
 import datetime as dt
-import math
-import os
 import shutil
-import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
-os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
+import dogrulama
+import hedef
+import rapor
+from kayit import Recorder
+from px4_baglanti import HOLD_MODE_NAME, TEZ_MODE_NAME, Vehicle
+from simulasyon import BUILD, SIM_DIR, Simulation
 
-import numpy as np  # noqa: E402
-from gz.msgs10.image_pb2 import Image  # noqa: E402
-from gz.transport13 import Node  # noqa: E402
-
-import hedef  # noqa: E402
-import rapor  # noqa: E402
-from kayit import Recorder  # noqa: E402
-from px4_baglanti import TEZ_MODE_NAME, Vehicle  # noqa: E402
-
-SIM_DIR = hedef.SIM_DIR
-REPO = SIM_DIR.parent.parent
-BUILD = REPO / "build" / "px4_sitl_tez"
-PX4_HOLD_MODE = (4 << 16) | (3 << 24)  # PX4 custom_mode of Auto/Hold (main mode 4, sub mode 3)
+STALL_TIMEOUT = 15.0  # [s wall] sim time not advancing for this long = Gazebo is stuck
 
 
 def log(text: str) -> None:
     print(f"[{dt.datetime.now():%H:%M:%S}] {text}", flush=True)
 
 
-class Simulation:
-    """calistir.sh in the background; always shut down, even after an error."""
-
-    def __init__(self, world_file: Path, out: Path, headless: bool) -> None:
-        self.log_path = out / "sim.log"
-        args = [str(SIM_DIR / "calistir.sh"), "--dunya", str(world_file)] + (["--ekransiz"] if headless else [])
-        self.started = time.time()
-        self.proc = subprocess.Popen(
-            args, stdin=subprocess.DEVNULL, stdout=self.log_path.open("w"), stderr=subprocess.STDOUT
-        )
-
-    def wait_ready(self, timeout: float = 150.0) -> bool:
-        t_end = time.monotonic() + timeout
-        while time.monotonic() < t_end:
-            if self.proc.poll() is not None:
-                return False
-            if "registered as" in self.log_path.read_text(errors="replace"):
-                return True
-            time.sleep(1)
-        return False
-
-    def stop(self) -> None:
-        if self.proc.poll() is None:
-            subprocess.run(
-                [str(BUILD / "bin" / "px4-shutdown")],
-                cwd=BUILD / "rootfs",
-                capture_output=True,
-                timeout=20,
-                check=False,
-            )
-            try:
-                self.proc.wait(40)
-            except subprocess.TimeoutExpired:
-                self.proc.terminate()
-                self.proc.wait(10)
-
-    def newest_ulog(self) -> Path | None:
-        logs = [p for p in (BUILD / "rootfs" / "log").rglob("*.ulg") if p.stat().st_mtime >= self.started]
-        return max(logs, key=lambda p: p.stat().st_mtime) if logs else None
-
-
-class OverheadCheck:
-    """Grab overhead frames at chosen sim times and locate the target in them (see hedef.overhead_camera)."""
-
-    def __init__(self, sc: hedef.Scenario, camera_pos: tuple[float, float, float], times: list[float]) -> None:
-        self.sc = sc
-        self.pos = camera_pos
-        self.times = times
-        self.frames: dict[float, np.ndarray] = {}
-        self._lock = threading.Lock()
-        self._node = Node()
-        self._node.subscribe(Image, "/dogrulama/image", self._on_image)
-
-    def _on_image(self, msg: Image) -> None:
-        t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
-        for want in self.times:
-            if want not in self.frames and abs(t - want) < 0.06:
-                img = np.frombuffer(msg.data, np.uint8).reshape(msg.height, msg.width, 3).copy()
-                with self._lock:
-                    self.frames[want] = img
-
-    def results(self, drone_at: dict[float, tuple[float, float, float]], out: Path) -> list[dict]:
-        rows = []
-        for want in self.times:
-            with self._lock:
-                img = self.frames.get(want)
-            tx, ty, *_ = self.sc.truth(want)
-            row = {
-                "t": want,
-                "hesap_x": tx,
-                "hesap_y": ty,
-                "goruntu_x": math.nan,
-                "goruntu_y": math.nan,
-                "fark": math.nan,
-            }
-            if img is not None:
-                est = self._locate(img, drone_at.get(want))
-                if est is not None:
-                    row.update(goruntu_x=est[0], goruntu_y=est[1], fark=math.hypot(est[0] - tx, est[1] - ty))
-                if want == self.times[len(self.times) // 2]:
-                    import cv2
-
-                    cv2.imwrite(str(out / "dogrulama_tepe.png"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-            rows.append(row)
-        return rows
-
-    def _locate(self, img: np.ndarray, drone: tuple[float, float, float] | None) -> tuple[float, float] | None:
-        """Target centroid on the ground [m]: pixels unlike the grass, drone excluded. Image up = +x, right = -y."""
-        h_px, w_px = img.shape[:2]
-        cx, cy, cz = self.pos
-        f = (w_px / 2) / math.tan(hedef.OVERHEAD_HFOV / 2)
-        ground = np.median(img.reshape(-1, 3), axis=0)
-        diff = np.abs(img.astype(int) - ground).sum(axis=2)
-        ys, xs = np.nonzero(diff > 60)
-        if drone is not None:
-            dz = cz - drone[2]
-            du = w_px / 2 - (drone[1] - cy) * f / dz
-            dv = h_px / 2 - (drone[0] - cx) * f / dz
-            keep = np.hypot(xs - du, ys - dv) > 0.8 * f / dz  # drone body ~0.6 m across
-            xs, ys = xs[keep], ys[keep]
-        if len(xs) < 15:
-            return None
-        scale = (cz - hedef.ACTOR_HIP_HEIGHT * 0.9) / f  # metres per pixel at the body's mean height
-        return float(cx + (h_px / 2 - ys.mean()) * scale), float(cy - (xs.mean() - w_px / 2) * scale)
-
-
 def fly(sc: hedef.Scenario, rec: Recorder, events: list[str]) -> bool:
     v = Vehicle()
-    tez_mode = v.find_mode(TEZ_MODE_NAME)
-    if tez_mode is None:
-        events.append("Tez modu PX4'ün mod listesinde yok")
+    try:
+        return _fly(v, sc, rec, events)
+    finally:
+        v.close()
+
+
+def _fly(v: Vehicle, sc: hedef.Scenario, rec: Recorder, events: list[str]) -> bool:
+    modes = v.modes()
+    name = TEZ_MODE_NAME if sc.drone_mode == "tez" else HOLD_MODE_NAME
+    if name not in modes:
+        events.append(f"'{name}' PX4'ün mod listesinde yok")
         return False
+    mode = modes[name]
     log(f"Kalkış: {sc.altitude:.0f} m")
     if not v.takeoff(sc.altitude):
         events.append("Kalkış başarısız")
         return False
-    time.sleep(3)
-    mode = tez_mode if sc.drone_mode == "tez" else PX4_HOLD_MODE
-    if not (v.set_custom_mode(mode) and v.in_mode(mode)):
-        events.append(f"'{sc.drone_mode}' moduna geçilemedi")
+    time.sleep(3)  # let the takeoff mode settle into its hover
+    if not v.switch_mode(mode):
+        events.append(f"'{name}' moduna geçilemedi")
         return False
-    events.append(f"Dron {rec.sim_time:.1f} s'de hazır ({sc.drone_mode} modunda, {sc.altitude:.0f} m)")
+    events.append(f"Dron {rec.sim_time:.1f} s'de hazır ({name}, {sc.altitude:.0f} m)")
     if rec.sim_time > sc.start_time - 1:
         events.append(
             f"Dron hedef yürümeye başlamadan hazır olamadı ({rec.sim_time:.0f} s > {sc.start_time:.0f} s): "
@@ -172,16 +63,71 @@ def fly(sc: hedef.Scenario, rec: Recorder, events: list[str]) -> bool:
         return False
     rec.start()
     log(f"Kayıt başladı; hedef {sc.start_time:.0f} s'de yürümeye başlayacak, senaryo {sc.end_time:.0f} s'de bitecek")
+    last_t, last_change = rec.sim_time, time.monotonic()
     while rec.sim_time < sc.end_time:
-        hb = v.m.recv_match(type="HEARTBEAT", blocking=True, timeout=1)
-        if hb is not None and hb.get_srcComponent() == 1 and hb.custom_mode != mode:
+        current = v.current_mode(timeout=1.0)
+        if current is not None and current != mode:
             events.append(f"{rec.sim_time:.1f} s: dron senaryo modundan çıktı")
-            mode = hb.custom_mode
+            mode = current
+        if rec.sim_time != last_t:
+            last_t, last_change = rec.sim_time, time.monotonic()
+        elif time.monotonic() - last_change > STALL_TIMEOUT:
+            rec.stop()
+            events.append(f"Simülasyon zamanı {last_t:.1f} s'de durdu (Gazebo takıldı)")
+            return False
     rec.stop()
     log("Senaryo bitti, iniş")
     if not v.land():
         events.append("İniş/disarm tamamlanamadı")
     return True
+
+
+def run(sc: hedef.Scenario, out: Path, headless: bool, verify: bool) -> dict:
+    """Fly the scenario once and write the report into `out`; returns the summary (ozet.json)."""
+    out.mkdir(parents=True, exist_ok=True)
+    shutil.copy(sc.source, out / "senaryo.yaml")
+    check_pos = dogrulama.camera_pose(sc) if verify else None
+    world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "", shadows=not verify)
+    log(f"Senaryo '{sc.name}': hedef yolu {sc.path_length():.1f} m, {sc.walk_end - sc.start_time:.1f} s; çıktı {out}")
+
+    events: list[str] = []
+    rec = Recorder(sc, sc.world)
+    check = dogrulama.OverheadCheck(sc, check_pos) if verify else None
+    sim = Simulation(out, world_file, headless)
+    completed = False
+    try:
+        with sim:
+            if not sim.wait_ready():
+                events.append("Simülasyon açılmadı (sim.log'a bakın)")
+            else:
+                log("PX4 ve Gazebo hazır")
+                completed = fly(sc, rec, events)
+            log("Simülasyon kapatılıyor")
+    except KeyboardInterrupt:
+        events.append("Kullanıcı durdurdu (Ctrl+C)")
+    except Exception as e:  # noqa: BLE001 - the report must still be written
+        events.append(f"Beklenmeyen hata: {type(e).__name__}: {e}")
+    events += sim.problems()
+
+    ulog = sim.newest_ulog()
+    if ulog is not None:
+        shutil.copy(ulog, out / "ucus.ulg")
+    rows = rec.snapshot()
+    checks = check.results(rows, out) if check is not None else []
+    return rapor.write(
+        out,
+        sc,
+        rows,
+        events,
+        completed,
+        checks,
+        rec.camera.as_dict() if rec.camera else None,
+        {
+            "ofset_m": rec.camera_offset,
+            "dcm_optik_govde": rec.camera_dcm.tolist() if rec.camera_dcm is not None else None,
+        },
+        (out / "ucus.ulg") if ulog else None,
+    )
 
 
 def main() -> int:
@@ -205,61 +151,7 @@ def main() -> int:
         return 2
 
     out = args.cikti or SIM_DIR / "sonuclar" / f"{dt.datetime.now():%Y%m%d_%H%M%S}_{sc.name}"
-    out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(sc.source, out / "senaryo.yaml")
-    world_file, camera_pos = hedef.write_world(sc, out, args.dogrula)
-    log(f"Senaryo '{sc.name}': hedef yolu {sc.path_length():.1f} m, {sc.walk_end - sc.start_time:.1f} s; çıktı {out}")
-
-    events: list[str] = []
-    rec = Recorder(sc, sc.world)
-    check = None
-    if args.dogrula:
-        step = max(2.0, (sc.walk_end - sc.start_time) / 8)
-        times = [round(sc.start_time - 5.0, 1)] + [
-            round(t, 1) for t in np.arange(sc.start_time + 1.0, sc.walk_end + 0.01, step)
-        ]
-        times.append(round(sc.end_time - 1.0, 1))
-        check = OverheadCheck(sc, camera_pos, sorted(set(times)))
-
-    sim = Simulation(world_file, out, args.ekransiz)
-    completed = False
-    try:
-        if not sim.wait_ready():
-            events.append("Simülasyon açılmadı (sim.log'a bakın)")
-        else:
-            log("PX4 ve Gazebo hazır")
-            completed = fly(sc, rec, events)
-    except KeyboardInterrupt:
-        events.append("Kullanıcı durdurdu (Ctrl+C)")
-    except Exception as e:  # noqa: BLE001 - any failure must still shut the simulation down and be reported
-        events.append(f"Beklenmeyen hata: {type(e).__name__}: {e}")
-    finally:
-        log("Simülasyon kapatılıyor")
-        sim.stop()
-
-    ulog = sim.newest_ulog()
-    if ulog is not None:
-        shutil.copy(ulog, out / "ucus.ulg")
-    rows = rec.snapshot()
-    checks = []
-    if check is not None and rows:
-        drone_at = {}
-        for want in check.times:
-            nearest = min(rows, key=lambda r: abs(r["t"] - want))
-            drone_at[want] = (nearest["dron_x"], nearest["dron_y"], nearest["dron_z"])
-        checks = check.results(drone_at, out)
-
-    summary = rapor.write(
-        out,
-        sc,
-        rows,
-        events,
-        completed,
-        checks,
-        rec.camera,
-        rec.camera_offset,
-        (out / "ucus.ulg") if ulog else None,
-    )
+    summary = run(sc, out, args.ekransiz, args.dogrula)
     log(f"Rapor: {out / 'rapor.html'}")
     log(f"SONUÇ: {summary['sonuc']}")
     return 0 if summary["sonuc"] == "GEÇTİ" else 1

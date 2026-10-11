@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pymavlink import mavutil
 
 TEZ_MODE_NAME = "Tez Auto Follow"
+HOLD_MODE_NAME = "Hold"
 
 
 class Vehicle:
@@ -17,15 +18,19 @@ class Vehicle:
         if self.m.wait_heartbeat(timeout=timeout) is None:
             raise RuntimeError("PX4'ten heartbeat gelmedi (calistir.sh çalışıyor mu?)")
         # The x500 airframe refuses to arm without a ground station (NAV_DLL_ACT 2): act as one.
+        self._closed = threading.Event()
         threading.Thread(target=self._send_gcs_heartbeat, daemon=True).start()
         for name, rate_hz in (("LOCAL_POSITION_NED", 10), ("EXTENDED_SYS_STATE", 2)):
             msg_id = getattr(mavutil.mavlink, f"MAVLINK_MSG_ID_{name}")
             self.command(mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, msg_id, 1e6 / rate_hz, quiet=True)
 
+    def close(self) -> None:
+        self._closed.set()
+        self.m.close()
+
     def _send_gcs_heartbeat(self) -> None:
-        while True:
+        while not self._closed.wait(1.0):
             self.m.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS, mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
-            time.sleep(1.0)
 
     def log(self, text: str) -> None:
         if self.verbose:
@@ -53,44 +58,50 @@ class Vehicle:
                 return msg
         return None
 
-    def find_mode(self, name: str) -> int | None:
-        """custom_mode of the mode called `name`, from AVAILABLE_MODES (index 0 asks for all modes)."""
-        # PX4 sends the modes before the COMMAND_ACK, so do not wait for the ack (command() would drop them).
+    def modes(self, timeout: float = 15.0) -> dict[str, int]:
+        """{mode name: custom_mode} of every mode PX4 offers (AVAILABLE_MODES, what QGC shows)."""
+        # Index 0 asks for all modes. PX4 sends them before the COMMAND_ACK, so do not wait for the ack
+        # (command() would drop them).
         self.m.mav.command_long_send(
             self.m.target_system,
             self.m.target_component,
             mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
             0,
             mavutil.mavlink.MAVLINK_MSG_ID_AVAILABLE_MODES,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            *[0] * 6,
         )
-        seen: set[str] = set()
-        t_end = time.monotonic() + 15
-        while time.monotonic() < t_end:
+        found: dict[str, int] = {}
+        indices: set[int] = set()  # names are not unique (unavailable modes all come as "(Mode not available)")
+        total = None
+        t_end = time.monotonic() + timeout
+        while time.monotonic() < t_end and len(indices) != total:
             msg = self.m.recv_match(type="AVAILABLE_MODES", blocking=True, timeout=1)
-            if msg is None:
-                continue
-            seen.add(msg.mode_name)
-            if msg.mode_name == name:
-                return msg.custom_mode
-        self.log(f"görülen modlar: {sorted(seen)}")
-        return None
+            if msg is not None:
+                found[msg.mode_name] = msg.custom_mode
+                indices.add(msg.mode_index)
+                total = msg.number_modes
+        if len(indices) != total:
+            self.log(f"mod listesi eksik geldi ({len(indices)}/{total}): {sorted(found)}")
+        return found
 
-    def set_custom_mode(self, custom_mode: int) -> bool:
+    def switch_mode(self, custom_mode: int, timeout: float = 5.0) -> bool:
+        """Ask for a mode and wait until PX4's heartbeat reports it."""
         # PX4 packs main mode into byte 2 and sub mode into byte 3 of custom_mode
         main_mode, sub_mode = (custom_mode >> 16) & 0xFF, (custom_mode >> 24) & 0xFF
-        return self.command(
+        if not self.command(
             mavutil.mavlink.MAV_CMD_DO_SET_MODE, mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, main_mode, sub_mode
-        )
+        ):
+            return False
+        return self.current_mode(timeout, want=custom_mode) == custom_mode
 
-    def in_mode(self, custom_mode: int, timeout: float = 5.0) -> bool:
-        hb = self.wait(["HEARTBEAT"], lambda h: h.get_srcComponent() == 1 and h.custom_mode == custom_mode, timeout)
-        return hb is not None
+    def current_mode(self, timeout: float = 3.0, want: int | None = None) -> int | None:
+        """custom_mode in the next autopilot heartbeat (or the first one equal to `want`)."""
+        hb = self.wait(
+            ["HEARTBEAT"],
+            lambda h: h.get_srcComponent() == 1 and (want is None or h.custom_mode == want),
+            timeout,
+        )
+        return hb.custom_mode if hb is not None else None
 
     def set_param(self, name: str, value: float) -> None:
         self.m.mav.param_set_send(

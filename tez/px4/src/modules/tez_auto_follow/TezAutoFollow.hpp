@@ -100,7 +100,10 @@ private:
 	// The commander declares an external mode unresponsive if an arming check request is not answered within
 	// 50 ms (externalChecks.hpp REQUEST_TIMEOUT), so the loop runs well below that.
 	static constexpr hrt_abstime RUN_INTERVAL = 10_ms;
-	static constexpr hrt_abstime REGISTRATION_RETRY_INTERVAL = 1_s;
+	// The commander answers a registration within one of its cycles. A repeated request would register the mode a
+	// second time (ModeManagement only warns about the duplicate name), so repeat rarely and give up after a while.
+	static constexpr hrt_abstime REGISTRATION_RETRY_INTERVAL = 5_s;
+	static constexpr int REGISTRATION_MAX_REQUESTS = 3;
 
 	uORB::Subscription _arming_check_request_sub{ORB_ID(arming_check_request)};
 	uORB::Subscription _register_ext_component_reply_sub{ORB_ID(register_ext_component_reply)};
@@ -119,10 +122,12 @@ private:
 
 	uint64_t _registration_request_id{0};
 	hrt_abstime _last_registration_request{0};
+	int _registration_requests{0};
+	bool _registration_failed{false};
 	int8_t _arming_check_id{-1};
 	int8_t _mode_id{-1};
 
 	bool _active{false};
-	matrix::Vector3f _hold_position{}; // [m] NED, local frame
-	float _hold_yaw{0.f};              // [rad]
+	matrix::Vector3f _hold_position{}; // [m] NED, local frame; NAN when the estimate was not valid on entry
+	float _hold_yaw{NAN};              // [rad]
 };

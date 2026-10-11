@@ -19,7 +19,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from hedef import SUCCESS_KEYS, Scenario  # noqa: E402
+import dogrulama  # noqa: E402
+from hedef import SIM_DIR, SUCCESS_KEYS, Scenario  # noqa: E402
 
 # Reference palette (dataviz skill): categorical slots 1-2, light surface, text and grid tokens
 TARGET_COLOR = "#2a78d6"
@@ -29,7 +30,12 @@ TEXT = "#0b0b0b"
 TEXT_2 = "#52514e"
 GRID = "#e4e3df"
 OUT_OF_VIEW = "#ecebe7"
-VERIFY_LIMIT = 0.3  # [m] overhead check: walking body centroid is 0.05-0.19 m ahead of the path (2026-10-11 test)
+# Success key -> (metric, the metric must be at least (True) or at most (False) the threshold)
+SUCCESS_RULES = {
+    "kadrajda_kalma_min": ("kadrajda_kalma", True),
+    "en_uzun_kayip_max_s": ("en_uzun_kayip_s", False),
+    "yatay_mesafe_max_m": ("yatay_mesafe_max_m", False),
+}
 
 
 def _style(ax: plt.Axes) -> None:
@@ -108,13 +114,10 @@ def evaluate(sc: Scenario, m: dict) -> list[tuple[str, str, float, float, bool]]
     """(key, description, threshold, value, passed) for every success threshold in the scenario."""
     checks = []
     for key, threshold in sc.success.items():
-        if key == "kadrajda_kalma_min":
-            value, ok = m.get("kadrajda_kalma", math.nan), m.get("kadrajda_kalma", -1) >= threshold
-        elif key == "en_uzun_kayip_max_s":
-            value, ok = m.get("en_uzun_kayip_s", math.nan), m.get("en_uzun_kayip_s", math.inf) <= threshold
-        else:  # yatay_mesafe_max_m
-            value, ok = m.get("yatay_mesafe_max_m", math.nan), m.get("yatay_mesafe_max_m", math.inf) <= threshold
-        checks.append((key, SUCCESS_KEYS[key], threshold, value, bool(ok)))
+        metric, at_least = SUCCESS_RULES[key]
+        value = m.get(metric, math.nan)
+        ok = not math.isnan(value) and (value >= threshold if at_least else value <= threshold)
+        checks.append((key, SUCCESS_KEYS[key], threshold, value, ok))
     return checks
 
 
@@ -171,14 +174,15 @@ def plot_image_track(df: pd.DataFrame, camera: dict) -> str:
 
 def _git_commit() -> str:
     try:
-        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True)
-        dirty = subprocess.run(["git", "status", "--porcelain", "--", "tez"], capture_output=True, text=True).stdout
+        git = ["git", "-C", str(SIM_DIR)]
+        out = subprocess.run([*git, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True)
+        dirty = subprocess.run([*git, "status", "--porcelain", "--", ".."], capture_output=True, text=True).stdout
         return out.stdout.strip() + (" (+ commit'lenmemiş değişiklik)" if dirty.strip() else "")
     except (OSError, subprocess.CalledProcessError):
         return "?"
 
 
-def _fmt(value: float, key: str) -> str:
+def _fmt(value: float | None, key: str = "") -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "–"
     if key.startswith("kadrajda"):
@@ -201,6 +205,17 @@ METRIC_LABELS = {
 }
 
 
+def _json_safe(value: object) -> object:
+    """NaN is not valid JSON: write null instead."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def write(
     out: Path,
     sc: Scenario,
@@ -209,7 +224,7 @@ def write(
     completed: bool,
     checks: list[dict],
     camera: dict | None,
-    camera_offset: tuple[float, float, float] | None,
+    camera_mount: dict | None,
     ulog: Path | None,
 ) -> dict:
     df = pd.DataFrame(rows)
@@ -218,10 +233,9 @@ def write(
     m = metrics(sc, df) if not df.empty else {}
     m.update(ulog_summary(ulog))
     success = evaluate(sc, m)
-    verify_ok = None
+    verify_ok = dogrulama.passed(checks)
     if checks:
         diffs = [c["fark"] for c in checks if not math.isnan(c["fark"])]
-        verify_ok = len(diffs) == len(checks) and max(diffs) <= VERIFY_LIMIT
         m["dogrulama_fark_max_m"] = max(diffs) if diffs else math.nan
     if not completed or df.empty:
         result = "TAMAMLANMADI"
@@ -240,8 +254,9 @@ def write(
         "dogrulama": checks,
         "olaylar": events,
         "kamera": camera,
-        "kamera_ofseti_m": camera_offset,
+        "kamera_montaji": camera_mount,
     }
+    summary = _json_safe(summary)
     (out / "ozet.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False, default=float), encoding="utf-8")
 
     figures = []
@@ -277,15 +292,16 @@ def _html(sc: Scenario, s: dict, success: list, figures: list[tuple[str, str]], 
     verify_html = ""
     if s["dogrulama"]:
         rows = "".join(
-            f"<tr><td class=num>{c['t']:.1f}</td><td class=num>{c['hesap_x']:.2f}, {c['hesap_y']:.2f}</td>"
-            f"<td class=num>{c['goruntu_x']:.2f}, {c['goruntu_y']:.2f}</td><td class=num>{c['fark']:.2f}</td></tr>"
+            f"<tr><td class=num>{c['t']:.1f}</td><td class=num>{_fmt(c['hesap_x'])}, {_fmt(c['hesap_y'])}</td>"
+            f"<td class=num>{_fmt(c['goruntu_x'])}, {_fmt(c['goruntu_y'])}</td>"
+            f"<td class=num>{_fmt(c['fark'])}</td></tr>"
             for c in s["dogrulama"]
         )
         img = ""
         if (out / "dogrulama_tepe.png").is_file():
             img = "<p class=muted>Örnek tepe kamerası karesi: <code>dogrulama_tepe.png</code></p>"
         verify_html = f"""<h2>Hedef konumu doğrulaması</h2>
-<p>Hakemin hesapladığı hedef konumu ile tepe kamerasında görülen konum (gövde merkezi). Sınır {VERIFY_LIMIT} m:
+<p>Hakemin hesapladığı hedef konumu ile tepe kamerasında görülen konum (gövde merkezi). Sınır {dogrulama.LIMIT} m:
 yürürken gövde merkezi yolun 0.05–0.19 m önündedir (öne eğik duruş ve adım döngüsü).</p>
 <table><tr><th>Zaman [s]</th><th>Hesap x, y [m]</th><th>Görüntü x, y [m]</th><th>Fark [m]</th></tr>
 {rows}</table>{img}"""

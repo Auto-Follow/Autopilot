@@ -3,11 +3,10 @@
 Coordinates are Gazebo world coordinates: x east, y north [m], the drone takes off at (0, 0) facing east.
 The target's position at any sim time is computed from the path, not read back from Gazebo: Gazebo Harmonic
 animates actors only on the rendering side and does not publish their pose. senaryo.py --dogrula checks the
-rendered target against this computation with an overhead camera.
+rendered target against this computation with an overhead camera (dogrulama.py).
 """
 
 import math
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,8 +23,6 @@ SUCCESS_KEYS = {
     "yatay_mesafe_max_m": "dron ile hedef arasındaki yatay mesafe, en fazla [m]",
 }
 DRONE_MODES = {"tez", "bekle"}
-OVERHEAD_HFOV = 1.2  # [rad] verification camera (--dogrula)
-OVERHEAD_SIZE = (1600, 1200)  # [px]
 
 
 @dataclass
@@ -78,6 +75,12 @@ class Scenario:
 
     def path_length(self) -> float:
         return sum(math.dist(s.p0, s.p1) for s in self.segments)
+
+    def bounds(self) -> tuple[float, float, float, float]:
+        """(x_min, x_max, y_min, y_max) of the path [m]."""
+        xs = [p for s in self.segments for p in (s.p0[0], s.p1[0])]
+        ys = [p for s in self.segments for p in (s.p0[1], s.p1[1])]
+        return min(xs), max(xs), min(ys), max(ys)
 
 
 def _point(value: object, where: str) -> tuple[float, float]:
@@ -160,13 +163,7 @@ def load(name_or_path: str) -> Scenario:
 def _segments(sc: Scenario, path: list) -> list[Segment]:
     if not isinstance(path, list) or not path:
         raise ValueError("hedef.yol: en az bir adım olmalı (liste)")
-    # Moves first, so the waiting target already faces its first direction.
-    pos, t = sc.start, sc.start_time
-    first_move = next((step for step in path if isinstance(step, dict) and "nokta" in step), None)
-    yaw = 0.0
-    if first_move is not None:
-        p = _point(first_move["nokta"], "hedef.yol[...].nokta")
-        yaw = math.atan2(p[1] - pos[1], p[0] - pos[0])
+    pos, t, yaw = sc.start, sc.start_time, 0.0
     segments = [Segment(0.0, t, "stand", pos, pos, yaw)]
     for i, step in enumerate(path):
         where = f"hedef.yol[{i}]"
@@ -187,10 +184,15 @@ def _segments(sc: Scenario, path: list) -> list[Segment]:
         if distance < 0.05:
             raise ValueError(f"{where}.nokta: bir önceki noktayla aynı yer")
         yaw = math.atan2(target[1] - pos[1], target[0] - pos[0])
-        duration = distance / speed
-        segments.append(Segment(t, t + duration, "run" if speed > RUN_SPEED else "walk", pos, target, yaw))
-        pos, t = target, t + duration
+        segments.append(Segment(t, t + distance / speed, "run" if speed > RUN_SPEED else "walk", pos, target, yaw))
+        pos, t = target, segments[-1].t1
     segments.append(Segment(t, t + FOREVER, "stand", pos, pos, yaw))
+    # The waiting target already faces its first direction
+    first_yaw = next((s.yaw for s in segments if s.kind != "stand"), 0.0)
+    for s in segments:
+        if s.kind != "stand":
+            break
+        s.yaw = first_yaw
     return segments
 
 
@@ -233,57 +235,15 @@ def actor_sdf(sc: Scenario) -> str:
 """
 
 
-def overhead_camera(sc: Scenario, height: float) -> tuple[str, tuple[float, float, float]]:
-    """Static nadir camera over the target path (verification only). Image up = +x (east), image right = -y."""
-    xs = [p for s in sc.segments for p in (s.p0[0], s.p1[0])]
-    ys = [p for s in sc.segments for p in (s.p0[1], s.p1[1])]
-    pos = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, height)
-    sdf = f"""
-    <model name="dogrulama_kamerasi">
-      <static>true</static>
-      <pose>{pos[0]:.3f} {pos[1]:.3f} {height:.3f} 0 1.570796 0</pose>
-      <link name="link">
-        <sensor name="tepe" type="camera">
-          <topic>/dogrulama/image</topic>
-          <always_on>1</always_on>
-          <update_rate>10</update_rate>
-          <camera>
-            <horizontal_fov>{OVERHEAD_HFOV}</horizontal_fov>
-            <image><width>{OVERHEAD_SIZE[0]}</width><height>{OVERHEAD_SIZE[1]}</height></image>
-            <clip><near>1</near><far>{height + 20:.0f}</far></clip>
-          </camera>
-        </sensor>
-      </link>
-    </model>
-"""
-    return sdf, pos
-
-
-def overhead_height(sc: Scenario) -> float:
-    """Height [m] at which the overhead camera sees the whole path with a 4 m margin."""
-    xs = [p for s in sc.segments for p in (s.p0[0], s.p1[0])]
-    ys = [p for s in sc.segments for p in (s.p0[1], s.p1[1])]
-    half_h = math.tan(OVERHEAD_HFOV / 2)  # horizontal image axis covers y
-    half_v = half_h * OVERHEAD_SIZE[1] / OVERHEAD_SIZE[0]  # vertical image axis covers x
-    need_x = (max(xs) - min(xs)) / 2 + 4
-    need_y = (max(ys) - min(ys)) / 2 + 4
-    return max(25.0, need_x / half_v, need_y / half_h)
-
-
-def write_world(sc: Scenario, out: Path, verify: bool) -> tuple[Path, tuple[float, float, float] | None]:
-    """Scenario world = base world + target (+ overhead camera, no shadows when verifying)."""
-    base = (SIM_DIR / "worlds" / f"{sc.world}.sdf").read_text(encoding="utf-8")
-    if "</world>" not in base:
+def write_world(sc: Scenario, out: Path, extra_sdf: str = "", shadows: bool = True) -> Path:
+    """Scenario world = base world + target (+ extra models, e.g. the overhead check camera)."""
+    world = (SIM_DIR / "worlds" / f"{sc.world}.sdf").read_text(encoding="utf-8")
+    if "</world>" not in world:
         raise ValueError(f"{sc.world}.sdf: </world> bulunamadı")
-    extra = actor_sdf(sc)
-    camera_pos = None
-    if verify:
-        cam_sdf, camera_pos = overhead_camera(sc, overhead_height(sc))
-        extra += cam_sdf
-        # Shadows shift the measured centroid of the target by ~0.5 m (2026-10-11 test)
-        base = re.sub(r"<shadows>true</shadows>", "<shadows>false</shadows>", base)
-        base = re.sub(r"<cast_shadows>true</cast_shadows>", "<cast_shadows>false</cast_shadows>", base)
-    world = base.replace("</world>", extra + "  </world>", 1)
+    if not shadows:
+        world = world.replace("<shadows>true</shadows>", "<shadows>false</shadows>")
+        world = world.replace("<cast_shadows>true</cast_shadows>", "<cast_shadows>false</cast_shadows>")
+    world = world.replace("</world>", actor_sdf(sc) + extra_sdf + "  </world>", 1)
     path = out / "dunya.sdf"
     path.write_text(world, encoding="utf-8")
-    return path, camera_pos
+    return path
