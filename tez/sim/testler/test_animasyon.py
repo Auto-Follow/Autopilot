@@ -35,5 +35,11 @@ def test_starts_at_the_chosen_frame_and_keeps_moving_forward() -> None:
     assert "0 1 2 3 4" in out  # key times unchanged
 
 
+def test_stride_scale_shortens_the_hip_travel() -> None:
+    out = animasyon.retime(dae(), 0.2, stride_scale=0.5)
+    assert x_of(out, "Hips") == [0.0, 0.05, 0.1, 0.15, 0.2]
+    assert x_of(out, "LeftLeg") == [7.0, 8.0, 9.0, 5.0, 6.0]  # only the hips carry the travel
+
+
 def test_zero_offset_changes_nothing() -> None:
     assert x_of(animasyon.retime(dae(), 0.0), "LeftLeg") == [5.0, 6.0, 7.0, 8.0, 9.0]

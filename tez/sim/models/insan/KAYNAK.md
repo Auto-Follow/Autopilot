@@ -11,7 +11,10 @@ http://creativecommons.org/licenses/by/4.0/ . Kullanırken kaynak gösterilmelid
 `araclar/animasyon.py` ile `walk_tez.dae` ve `run_tez.dae` kopyalarını üretir. Bunlar aynı yürüme/koşu
 döngüsüdür; sadece animasyon kareleri, döngü ayakların yan yana geldiği andan başlayacak şekilde kaydırılmıştır
 (yürüme 0.37 m, koşu 0.24 m kalça ilerlemesi). Orijinal döngü adım ortasında başladığı için duruştan kalkan insan
-"donmuş bir hamle" pozunda kayıyor gibi görünüyordu (2026-10-11, yandan kamera ölçümü).
+"donmuş bir hamle" pozunda kayıyor gibi görünüyordu (2026-10-11, yandan kamera ölçümü). Ayrıca kopyalarda kalçanın
+ilerlemesi 0.91 ile ölçeklenmiştir: hareket yakalama verisi başka oranlı bir iskelete aktarıldığı için kalça,
+bacakların attığı adımdan ~%9 fazla ilerliyordu ve Gazebo insanı kalça ilerlemesine göre taşıdığından basan ayak
+1.4 m/s'de ~0.12 m/s ileri kayıyordu; ölçekli kopyada 0.00 m/s.
 
 Not: Gazebo Harmonic'te bu model `<script><loop>false</loop>` ile kullanılırsa kamera sensörü açıkken
 sunucu kilitleniyor (2026-10-11 denemesi). Senaryo yöneticisi bu yüzden `loop=true` + sonda uzun bir

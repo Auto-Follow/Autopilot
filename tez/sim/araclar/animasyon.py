@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Start a looping actor animation (COLLADA) at another frame: the walk and run cycles of the Mingfei actor begin in
-mid-stride, so a target setting off from standing started in a frozen lunge and seemed to glide. The copies begin
-where the feet pass each other (measured with a side camera, 2026-10-11), the natural pose to start a step from.
+"""Copies of the Mingfei actor's walk/run animations (COLLADA) that do not glide. Measured with a side camera
+(2026-10-11):
 
-    python3 tez/sim/araclar/animasyon.py <source.dae> <target.dae> <offset_m>
+1. The cycles begin in mid-stride, so a target setting off from standing started in a frozen lunge. The copy starts
+   at another frame, where the feet pass each other.
+2. The hips travel ~9 % further per cycle than the legs step (the motion capture was retargeted to a skeleton with
+   other proportions). Gazebo moves the actor by the hip travel (interpolate_x), so the planted foot slid forward
+   ~0.12-0.2 m/s at 1.4 m/s. The copy scales the hip travel to the real stride.
 
-offset_m: hip travel [m] from the first frame to the new first frame. Plain Python (kur.sh runs it before any venv).
-Only the keyframe order changes: frame k0 becomes the first, the frames before it move to the end, and the hip
-translation of the moved frames is advanced by one cycle so it keeps growing.
+    python3 tez/sim/araclar/animasyon.py <source.dae> <target.dae> <offset_m> [stride_scale]
+
+offset_m: hip travel [m] from the first frame to the new first frame; stride_scale: factor on the hip travel. Plain
+Python (kur.sh runs it before any venv). Frame k0 becomes the first, the frames before it move to the end, and the
+hip translation of the moved frames is advanced by one cycle so it keeps growing.
 """
 
 import re
@@ -24,7 +29,7 @@ def _fmt(values: list[float]) -> str:
     return " ".join(f"{v:.6g}" for v in values)
 
 
-def retime(dae: str, offset_m: float) -> str:
+def retime(dae: str, offset_m: float, stride_scale: float = 1.0) -> str:
     root = re.search(r'<animation id="[^"]*">(?:(?!</animation>).)*target="' + ROOT + r'/transform"', dae, re.S)
     if root is None:
         raise ValueError(f"no {ROOT} animation channel")
@@ -46,7 +51,7 @@ def retime(dae: str, offset_m: float) -> str:
         frames = [values[16 * i : 16 * i + 16] for i in order]
         if match.group(1).find(f"_{ROOT}_") >= 0:
             for j, i in enumerate(order):
-                frames[j][3] += (cycle if i < k0 else 0.0) - x[k0] + x[0]
+                frames[j][3] = x[0] + stride_scale * (frames[j][3] + (cycle if i < k0 else 0.0) - x[k0])
         return (
             f'<float_array id="{match.group(1)}" count="{count}">{_fmt([v for f in frames for v in f])}</float_array>'
         )
@@ -60,10 +65,11 @@ def retime(dae: str, offset_m: float) -> str:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         sys.exit(__doc__)
     src, dst, offset = sys.argv[1], sys.argv[2], float(sys.argv[3])
+    scale = float(sys.argv[4]) if len(sys.argv) == 5 else 1.0
     with open(src, encoding="utf-8") as f:
         text = f.read()
     with open(dst, "w", encoding="utf-8") as f:
-        f.write(retime(text, offset))
+        f.write(retime(text, offset, scale))
