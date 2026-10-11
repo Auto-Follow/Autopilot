@@ -6,7 +6,6 @@ animates actors only on the rendering side and does not publish their pose. sena
 rendered target against this computation with an overhead camera (dogrulama.py).
 """
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,7 +15,7 @@ import yaml
 import yuruyus
 
 SIM_DIR = Path(__file__).resolve().parent.parent
-HUMAN_DIR = SIM_DIR / "models" / "insan" / "meshes"  # built by kur.sh (tez/sim/insan)
+ACTOR_HIP_HEIGHT = 1.0  # [m] the actor's root (hips) is put at the waypoint height (Mingfei actor meshes)
 WAYPOINT_STEP = 0.2  # [s] spacing of the actor waypoints while it moves or turns
 FOREVER = 100000.0  # [s] last "stand" segment; the script loops (see models/insan/KAYNAK.md) but never gets there
 MAX_SPEED = 6.0  # [m/s] fastest allowed target (a sprinting adult)
@@ -185,14 +184,6 @@ def _steps(start: tuple[float, float], path: object) -> list[tuple]:
     return steps
 
 
-def human_info() -> dict:
-    """insan.json written by tez/sim/insan/uret.py: hip heights, strides and natural speeds of the animations."""
-    path = HUMAN_DIR / "insan.json"
-    if not path.is_file():
-        raise FileNotFoundError("İnsan modeli kurulu değil. Önce: tez/sim/kur.sh")
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def _runs(kind: np.ndarray) -> list[tuple[int, int]]:
     """[first, last] sample index of every stretch with one animation; neighbours share their boundary sample."""
     change = np.flatnonzero(kind[1:] != kind[:-1]) + 1
@@ -204,7 +195,7 @@ def _runs(kind: np.ndarray) -> list[tuple[int, int]]:
 def actor_sdf(sc: Scenario) -> str:
     """The target as a Gazebo actor whose script follows sc.track (one trajectory per animation stretch)."""
     tr = sc.track
-    heights = {k: v["kalca_yukseklik_m"] for k, v in human_info()["animasyonlar"].items()}
+    z = ACTOR_HIP_HEIGHT
     trajectories, animations = [], []
     pieces = [(a, b, str(tr.kind[a])) for a, b in _runs(tr.kind)]
     for i, (a, b, kind) in enumerate(pieces):
@@ -214,8 +205,6 @@ def actor_sdf(sc: Scenario) -> str:
         # the track (only two end points made a 10 m walk run slow-fast-slow, up to 0.5 m off; 2026-10-11 test).
         step = max(1, round(WAYPOINT_STEP / yuruyus.DT))
         idx = [a, b] if still else sorted({*range(a, b, step), b})
-        # The actor's root (hips) is put at the waypoint height; the animation's own hip height is dropped
-        z = heights[kind]
         waypoints = [
             f"          <waypoint><time>{tr.t[k] - tr.t[a]:.4f}</time>"
             f"<pose>{tr.x[k]:.4f} {tr.y[k]:.4f} {z} 0 0 {tr.yaw[k]:.6f}</pose></waypoint>"
@@ -227,7 +216,7 @@ def actor_sdf(sc: Scenario) -> str:
             # that uses an animation file (SceneManager.cc, animInterpolateCheck); later ones would play by time and
             # the feet would slide. Every moving trajectory gets its own spelling of the file path.
             name = f"{kind}_{i}"
-            path = "./" * i + f"{kind}.dae"
+            path = "./" * i + f"{kind}_tez.dae"
             animations.append(
                 f'      <animation name="{name}"><filename>model://insan/meshes/{path}</filename>'
                 "<interpolate_x>true</interpolate_x></animation>"
@@ -236,7 +225,7 @@ def actor_sdf(sc: Scenario) -> str:
             f'        <trajectory id="{i}" type="{name}">\n' + "\n".join(waypoints) + "\n        </trajectory>"
         )
     last = len(tr.t) - 1
-    end_pose = f"{tr.x[last]:.4f} {tr.y[last]:.4f} {heights['stand']} 0 0 {tr.yaw[last]:.6f}"
+    end_pose = f"{tr.x[last]:.4f} {tr.y[last]:.4f} {z} 0 0 {tr.yaw[last]:.6f}"
     trajectories.append(
         f'        <trajectory id="{len(pieces)}" type="stand">\n'
         f"          <waypoint><time>0</time><pose>{end_pose}</pose></waypoint>\n"
@@ -249,6 +238,8 @@ def actor_sdf(sc: Scenario) -> str:
     <actor name="hedef">
       <skin><filename>model://insan/meshes/walk.dae</filename></skin>
       <animation name="stand"><filename>model://insan/meshes/stand.dae</filename></animation>
+      <!-- moving trajectories use walk_tez.dae / run_tez.dae: the same cycles, starting with the feet together and
+           with the hip travel scaled to the real stride (kur.sh, araclar/animasyon.py) -->
 {anims}
       <script>
         <!-- loop=false freezes Gazebo while a camera renders the actor; the last segment lasts {FOREVER:.0f} s -->
