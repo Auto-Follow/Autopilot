@@ -1,0 +1,5 @@
+# Downloaded by kur.sh
+models/insan/meshes/
+# Scenario outputs (logs, ULog, reports)
+sonuclar/
+__pycache__/

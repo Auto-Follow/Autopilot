@@ -3,8 +3,9 @@
 Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodlarını gerçek uçuştan önce Gazebo'da
 **ölçerek** denemesi için ortak ortam. Tasarım: "Auto-Follow Simülasyon ve Test Ortamı — Tasarım Önerisi" belgesi.
 
-> **Durum: F0 (iskelet).** Tez dronu + düz alan dünyası + PX4'te görünen boş "Tez Auto Follow" modu.
-> Hedef (yürüyen insan), senaryolar, hakem ve rapor sonraki aşamalarda (F1–F4) gelecek.
+> **Durum: F1 (hakem çekirdeği).** Tez dronu + düz alan + PX4'te görünen "Tez Auto Follow" modu (iskelet: yerinde
+> bekler) + yürüyen insan hedefi, YAML senaryo, doğru cevap kaydı, ULog ve otomatik HTML rapor.
+> Sıradaki: F2 (kontrol ekibi için "mükemmel algılayıcı"), F3 (görüntü ekibi için kamera ve etiketli kareler).
 
 PX4 kaynağı değişmez. Tez modu `tez/px4/` altında **harici modül** olarak derlenir; dron ve dünya `tez/sim/` altında
 durur. PX4 tarafında sadece kilit listesinde izinli iki dosya eklenir: airframe `4030_gz_x500_tez` (+ `.post`).
@@ -16,6 +17,7 @@ durur. PX4 tarafında sadece kilit listesinde izinli iki dosya eklenir: airframe
 ```bash
 cd ~/Desktop/Projects/Auto-Follow/Autopilot
 tez/sim/derle.sh            # ilk sefer birkaç dakika; çıktı build/px4_sitl_tez
+tez/sim/kur.sh              # insan hedef modelini indirir (~11 MB, sha256 kontrollü; git'e girmez)
 ```
 
 `derle.sh` ayrı bir klasöre derler; ekibin normal `build/px4_sitl_default` derlemesine dokunmaz.
@@ -49,6 +51,49 @@ Kontrol ettikleri: kamera çözünürlüğü, hızı ve odak uzaklığı; modun 
 10 m kalkış; tez moduna geçiş ve 15 s konum tutma (sapma < 0.5 m); iniş ve disarm; PX4 ve Gazebo'nun temiz
 kapanması. Loglar: `build/px4_sitl_tez/tez_kabul/`.
 
+## Senaryolar (F1)
+
+Senaryo, hedefin yolunu ve dronun ne yapacağını anlatan bir YAML dosyasıdır (`tez/sim/senaryolar/`). Koşturmak:
+
+```bash
+P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
+$P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan              # Gazebo penceresiyle (~3 dakika)
+$P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --ekransiz   # pencere yok
+$P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --dogrula    # + tepe kamerasıyla hedef konumu kontrolü
+```
+
+Senaryo yöneticisi dünyayı (temel dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve senaryonun moduna
+alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar. Çıktı `tez/sim/sonuclar/<tarih>_<ad>/`
+(git'e girmez):
+
+| Dosya | İçerik |
+|---|---|
+| `rapor.html` | Sonuç (GEÇTİ / KALDI / TAMAMLANMADI), ölçütler, üstten harita, mesafe ve kamera görüntüsü grafikleri |
+| `dogru_cevap.csv` | 20 Hz: dron ve kamera konumu, hedef konumu/hızı, hedefin dron görüntüsündeki pikseli (ayak, merkez, baş) ve kadrajda olup olmadığı |
+| `ozet.json` | Ölçütler ve sonuç (makineyle okunur) |
+| `ucus.ulg` | PX4 uçuş kaydı (PlotJuggler / pyulog) |
+| `dunya.sdf`, `senaryo.yaml`, `sim.log` | Koşunun girdileri ve logu |
+
+Yeni senaryo yazmak için `senaryolar/yuruyen_insan.yaml`'ı kopyalayın. Alanlar:
+
+- `drone.yukseklik_m`, `drone.mod` (`tez` veya `bekle` = PX4 Hold)
+- `hedef.baslangic: [x, y]` ve `hedef.yol`: sırayla `{nokta: [x, y], hiz_mps: v}` (v > 2 m/s koşu) veya `{dur_s: s}`
+- `zamanlama.baslama_s`: hedefin yürümeye başladığı simülasyon zamanı (dron o ana kadar hazır olmalı; ~30 s sürer)
+- `basari`: eşikler — `kadrajda_kalma_min`, `en_uzun_kayip_max_s`, `yatay_mesafe_max_m`. Boşsa sadece ölçülür.
+
+Koordinatlar Gazebo dünyasına göredir: **x doğu, y kuzey [m]**; dron (0, 0)'dan doğuya bakarak kalkar. Yanlış yazılan
+bir alan, hangi alan olduğu söylenerek reddedilir.
+
+Doğru cevap hakkında: Gazebo Harmonic insan (actor) konumunu yayınlamaz; hedefin konumu senaryodaki yoldan
+hesaplanır. `--dogrula` bunu tepe kamerasıyla kontrol eder (gölgeler kapanır); yürürken gövde merkezi yolun
+0.05–0.19 m önündedir. Ayrıntı: `models/insan/KAYNAK.md`.
+
+F1 kabul testi (senaryoyu iki kez koşar, ~6 dakika):
+
+```bash
+tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koşu aynı (≤ 0.15 m)
+```
+
 ## Kontrol ekibi: modu nereye yazıyorum?
 
 `tez/px4/src/modules/tez_auto_follow/TezAutoFollow.cpp`
@@ -69,7 +114,11 @@ kapanması. Loglar: `build/px4_sitl_tez/tez_kabul/`.
 | `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız hali) |
-| `tez/sim/araclar/` | Kabul testleri |
+| `tez/sim/kur.sh` | Git'e girmeyen dosyaları indirir (insan modeli) |
+| `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kaynak: `KAYNAK.md`) |
+| `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kayıt), `rapor.py` (rapor), `px4_baglanti.py` (MAVLink) |
+| `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri |
 | `tez/px4/src/modules/tez_auto_follow/` | Tez uçuş modu (iskelet) |
 | `ROMFS/.../airframes/4030_gz_x500_tez(.post)` | SITL airframe: x500 + gerçek X500 V2 (4019) açısal hız kazançları; modu başlatır |
 

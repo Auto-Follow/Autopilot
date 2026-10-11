@@ -6,3 +6,7 @@ target-version = "py312"
 [lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "ANN"]
 ignore = ["ANN401"]
+
+[lint.isort]
+# modules in araclar/ import each other by plain name (the scripts run from that folder)
+known-first-party = ["px4_baglanti", "hedef", "kayit", "rapor"]

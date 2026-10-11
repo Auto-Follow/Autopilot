@@ -15,7 +15,6 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
 
@@ -24,7 +23,9 @@ from gz.msgs10.image_pb2 import Image  # noqa: E402
 from gz.transport13 import Node  # noqa: E402
 from pymavlink import mavutil  # noqa: E402
 
-MODE_NAME = "Tez Auto Follow"
+from px4_baglanti import TEZ_MODE_NAME, Vehicle  # noqa: E402
+
+MODE_NAME = TEZ_MODE_NAME
 CAMERA_TOPIC = "/x500_tez/kamera"
 CAMERA_SIZE = (2304, 1296)  # [px]
 CAMERA_HFOV = math.radians(66.0)  # Camera Module 3 Standard
@@ -82,92 +83,10 @@ def check_camera() -> None:
     report("kamera odak uzaklığı", abs(fx - fx_expected) < 2.0, f"fx {fx:.1f} px (66° için {fx_expected:.1f})")
 
 
-class Vehicle:
-    def __init__(self) -> None:
-        self.m = mavutil.mavlink_connection("udpin:127.0.0.1:14540", dialect="development")
-        if self.m.wait_heartbeat(timeout=60) is None:
-            sys.exit("HATA: PX4'ten heartbeat gelmedi (calistir.sh çalışıyor mu?)")
-        # The x500 airframe refuses to arm without a ground station (NAV_DLL_ACT 2): act as one.
-        threading.Thread(target=self._send_gcs_heartbeat, daemon=True).start()
-        for name, rate_hz in (("LOCAL_POSITION_NED", 10), ("EXTENDED_SYS_STATE", 2)):
-            msg_id = getattr(mavutil.mavlink, f"MAVLINK_MSG_ID_{name}")
-            self.command(mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, msg_id, 1e6 / rate_hz, quiet=True)
-
-    def _send_gcs_heartbeat(self) -> None:
-        while True:
-            self.m.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS, mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
-            time.sleep(1.0)
-
-    def command(self, cmd: int, *params: float, quiet: bool = False) -> bool:
-        p = list(params) + [0.0] * (7 - len(params))
-        self.m.mav.command_long_send(self.m.target_system, self.m.target_component, cmd, 0, *p)
-        ack = self.m.recv_match(type="COMMAND_ACK", condition=f"COMMAND_ACK.command=={cmd}", blocking=True, timeout=5)
-        accepted = ack is not None and ack.result == mavutil.mavlink.MAV_RESULT_ACCEPTED
-        if not accepted and not quiet:
-            print(f"     komut {cmd} reddedildi: {ack.result if ack else 'cevap yok'}", flush=True)
-        return accepted
-
-    def wait(self, types: list[str], pred: Callable, timeout: float) -> object | None:
-        """Return the first message of the given types that satisfies pred; print PX4 status texts meanwhile."""
-        t_end = time.monotonic() + timeout
-        while time.monotonic() < t_end:
-            msg = self.m.recv_match(type=[*types, "STATUSTEXT"], blocking=True, timeout=1)
-            if msg is None:
-                continue
-            if msg.get_type() == "STATUSTEXT":
-                print(f"     PX4: {msg.text}", flush=True)
-            elif pred(msg):
-                return msg
-        return None
-
-    def find_mode(self, name: str) -> int | None:
-        """custom_mode of the mode called `name`, from AVAILABLE_MODES (index 0 asks for all modes)."""
-        # PX4 sends the modes before the COMMAND_ACK, so do not wait for the ack (command() would drop them).
-        self.m.mav.command_long_send(
-            self.m.target_system,
-            self.m.target_component,
-            mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
-            0,
-            mavutil.mavlink.MAVLINK_MSG_ID_AVAILABLE_MODES,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        )
-        seen: set[str] = set()
-        t_end = time.monotonic() + 15
-        while time.monotonic() < t_end:
-            msg = self.m.recv_match(type="AVAILABLE_MODES", blocking=True, timeout=1)
-            if msg is None:
-                continue
-            seen.add(msg.mode_name)
-            if msg.mode_name == name:
-                return msg.custom_mode
-        print(f"     görülen modlar: {sorted(seen)}", flush=True)
-        return None
-
-    def set_custom_mode(self, custom_mode: int) -> bool:
-        # PX4 packs main mode into byte 2 and sub mode into byte 3 of custom_mode
-        main_mode, sub_mode = (custom_mode >> 16) & 0xFF, (custom_mode >> 24) & 0xFF
-        return self.command(
-            mavutil.mavlink.MAV_CMD_DO_SET_MODE, mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, main_mode, sub_mode
-        )
-
-    def set_param(self, name: str, value: float) -> None:
-        self.m.mav.param_set_send(
-            self.m.target_system, self.m.target_component, name.encode(), value, mavutil.mavlink.MAV_PARAM_TYPE_REAL32
-        )
-        self.m.recv_match(type="PARAM_VALUE", condition=f"PARAM_VALUE.param_id=='{name}'", blocking=True, timeout=5)
-
-
 def flight(v: Vehicle, custom_mode: int) -> None:
-    nan = math.nan
     if v.wait(["LOCAL_POSITION_NED"], lambda _: True, 60) is None:
         report("konum kestirimi", False, "LOCAL_POSITION_NED gelmedi")
         return
-    v.set_param("MIS_TAKEOFF_ALT", TAKEOFF_ALT)
     report(
         "tez modunda arm reddi",
         not v.set_custom_mode(custom_mode)
@@ -176,26 +95,15 @@ def flight(v: Vehicle, custom_mode: int) -> None:
     )
     time.sleep(1)
 
-    # PX4 rejects arming until the estimator is ready; retry for up to a minute like a pilot would.
-    t_end = time.monotonic() + 60
-    armed = False
-    while time.monotonic() < t_end and not armed:
-        armed = v.command(mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, -1, 0, 0, nan, nan, nan, nan, quiet=True) and v.command(
-            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 1, quiet=True
-        )
-        if not armed:
-            time.sleep(2)
-    if not report("kalkış", armed, "kalkış komutu ve arm kabul edildi" if armed else "60 s içinde arm edilemedi"):
-        return
-    climbed = v.wait(["LOCAL_POSITION_NED"], lambda p: -p.z > TAKEOFF_ALT - 0.5, 60)
-    if not report("kalkış yüksekliği", climbed is not None, f"{TAKEOFF_ALT:.0f} m"):
+    climbed = v.takeoff(TAKEOFF_ALT)
+    if not report("kalkış", climbed, f"{TAKEOFF_ALT:.0f} m'ye kalktı" if climbed else "kalkılamadı"):
         return
     time.sleep(3)  # let the takeoff mode settle into its hover
 
     if not report("tez moduna geçiş", v.set_custom_mode(custom_mode), MODE_NAME):
         return
-    hb = v.wait(["HEARTBEAT"], lambda h: h.get_srcComponent() == 1 and h.custom_mode == custom_mode, 5)
-    report("aktif mod", hb is not None, "HEARTBEAT tez modunu gösteriyor" if hb else "mod değişmedi")
+    active = v.in_mode(custom_mode)
+    report("aktif mod", active, "HEARTBEAT tez modunu gösteriyor" if active else "mod değişmedi")
 
     start = v.wait(["LOCAL_POSITION_NED"], lambda _: True, 5)
     max_xy = max_z = 0.0
@@ -214,15 +122,7 @@ def flight(v: Vehicle, custom_mode: int) -> None:
         f"en büyük sapma yatay {max_xy:.2f} m, dikey {max_z:.2f} m (sınır {HOLD_TOLERANCE} m)",
     )
 
-    v.command(mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0, nan, nan, nan, nan)
-    landed = v.wait(["EXTENDED_SYS_STATE"], lambda s: s.landed_state == mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND, 90)
-    report("iniş", landed is not None, "yere indi")
-    disarmed = v.wait(
-        ["HEARTBEAT"],
-        lambda h: h.get_srcComponent() == 1 and not (h.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED),
-        20,
-    )
-    report("disarm", disarmed is not None, "motorlar durdu")
+    report("iniş ve disarm", v.land(), "yere indi, motorlar durdu")
 
 
 def main() -> int:

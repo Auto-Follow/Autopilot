@@ -5,6 +5,7 @@
 #   tez/sim/calistir.sh                    # Gazebo window + PX4 shell (pxh>) in this terminal
 #   tez/sim/calistir.sh --ekransiz         # no Gazebo window (automatic tests)
 #   tez/sim/calistir.sh --dunya duz_alan   # world from tez/sim/worlds (default: duz_alan)
+#   tez/sim/calistir.sh --dunya yol/dunya.sdf  # any world file (scenario worlds written by araclar/senaryo.py)
 #
 # QGroundControl connects by itself (UDP 14550). Ctrl+C or `shutdown` in pxh> stops PX4 and Gazebo;
 # without a terminal (--ekransiz from a script) use: (cd build/px4_sitl_tez/rootfs && ../bin/px4-shutdown)
@@ -21,13 +22,21 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	--dunya) DUNYA="$2"; shift 2 ;;
 	--ekransiz) EKRANSIZ=1; shift ;;
-	-h | --help) sed -n '2,10p' "$0"; exit 0 ;;
+	-h | --help) sed -n '2,12p' "$0"; exit 0 ;;
 	*) echo "Bilinmeyen seçenek: $1 (yardım: --help)" >&2; exit 2 ;;
 	esac
 done
 
-WORLD_FILE="$SIM/worlds/$DUNYA.sdf"
-[ -f "$WORLD_FILE" ] || { echo "Dünya yok: $WORLD_FILE" >&2; exit 2; }
+if [[ "$DUNYA" == *.sdf ]]; then
+	WORLD_FILE="$(realpath "$DUNYA")"
+	[ -f "$WORLD_FILE" ] || { echo "Dünya dosyası yok: $DUNYA" >&2; exit 2; }
+	# PX4 and the clock topic use the <world name>, not the file name
+	DUNYA="$(sed -n 's/.*<world name="\([^"]*\)".*/\1/p' "$WORLD_FILE" | head -1)"
+	[ -n "$DUNYA" ] || { echo "Dünya dosyasında <world name=...> yok: $WORLD_FILE" >&2; exit 2; }
+else
+	WORLD_FILE="$SIM/worlds/$DUNYA.sdf"
+	[ -f "$WORLD_FILE" ] || { echo "Dünya yok: $WORLD_FILE" >&2; exit 2; }
+fi
 [ -x "$BUILD/bin/px4" ] || { echo "PX4 derlenmemiş. Önce: tez/sim/derle.sh" >&2; exit 2; }
 if pgrep -x px4 > /dev/null || pgrep -f "^gz sim" > /dev/null; then
 	echo "Zaten çalışan bir PX4 veya Gazebo var (ps -ef | grep -E 'px4|gz sim'). Önce onu kapatın." >&2
