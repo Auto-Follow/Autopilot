@@ -1,6 +1,7 @@
 """MAVLink connection to PX4 SITL for the simulation tools (acts as the ground station on UDP 14540)."""
 
 import math
+import socket
 import threading
 import time
 from collections.abc import Callable
@@ -15,6 +16,9 @@ class Vehicle:
     def __init__(self, timeout: float = 60.0, verbose: bool = True) -> None:
         self.verbose = verbose
         self.m = mavutil.mavlink_connection("udpin:127.0.0.1:14540", dialect="development")
+        # PX4 streams up to 4 MB/s on this link; while the tools are busy (camera frames) the default 208 KB socket
+        # buffer overflowed and a COMMAND_ACK was lost (F1 run, 2026-10-11). Linux caps it at net.core.rmem_max.
+        self.m.port.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
         if self.m.wait_heartbeat(timeout=timeout) is None:
             raise RuntimeError("PX4'ten heartbeat gelmedi (calistir.sh çalışıyor mu?)")
         # The x500 airframe refuses to arm without a ground station (NAV_DLL_ACT 2): act as one.
@@ -85,14 +89,19 @@ class Vehicle:
         return found
 
     def switch_mode(self, custom_mode: int, timeout: float = 5.0) -> bool:
-        """Ask for a mode and wait until PX4's heartbeat reports it."""
+        """Ask for a mode and wait until PX4's heartbeat reports it (the heartbeat decides, not the ack)."""
         # PX4 packs main mode into byte 2 and sub mode into byte 3 of custom_mode
         main_mode, sub_mode = (custom_mode >> 16) & 0xFF, (custom_mode >> 24) & 0xFF
-        if not self.command(
-            mavutil.mavlink.MAV_CMD_DO_SET_MODE, mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, main_mode, sub_mode
-        ):
-            return False
-        return self.current_mode(timeout, want=custom_mode) == custom_mode
+        for _ in range(2):
+            self.command(
+                mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+                mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                main_mode,
+                sub_mode,
+            )
+            if self.current_mode(timeout, want=custom_mode) == custom_mode:
+                return True
+        return False
 
     def current_mode(self, timeout: float = 3.0, want: int | None = None) -> int | None:
         """custom_mode in the next autopilot heartbeat (or the first one equal to `want`)."""

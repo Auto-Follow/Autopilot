@@ -1,6 +1,7 @@
 """Ground truth recorder: one row per drone camera frame, stamped with the frame's sim time.
 
-Each row says where the drone, its camera and the target are, where the target appears in that frame (the camera's
+Each row says where the drone, its camera and the target are (and the other people of the scenario, if any: their
+position and body-centre pixel), where the target appears in that frame (the camera's
 own camera_info, distortion included) and the true line of sight to it in the frames of the team's pixel -> LOS chain
 (optical, body FRD, NED; see kamera.py). Gazebo publishes poses at 50 Hz and frames at ~30 Hz on different sim
 times, so the drone pose is interpolated to each frame time. Sim time is also PX4's time in SITL.
@@ -16,10 +17,11 @@ os.environ.setdefault("GZ_IP", "127.0.0.1")  # same as calistir.sh
 
 import numpy as np  # noqa: E402
 from gz.msgs10.camera_info_pb2 import CameraInfo  # noqa: E402
+from gz.msgs10.image_pb2 import Image  # noqa: E402
 from gz.msgs10.pose_v_pb2 import Pose_V  # noqa: E402
 from gz.transport13 import Node  # noqa: E402
 
-from hedef import Scenario  # noqa: E402
+from hedef import OTHER_LABEL, TARGET_LABEL, Scenario  # noqa: E402
 from kamera import ENU_TO_NED, FLU_TO_FRD, GZ_CAMERA_TO_OPTICAL, Camera, deviation, quat_to_dcm  # noqa: E402
 
 DRONE_MODEL = "x500_tez_0"
@@ -28,6 +30,29 @@ CAMERA_TOPIC = "/x500_tez/kamera"
 # Mingfei actor; the "in view" point and the LOS use the body centre
 TARGET_POINTS = (("ayak", 0.0), ("merkez", 0.9), ("bas", 1.75))  # [m] above ground
 POSE_HISTORY = 100  # poses kept for interpolation (2 s at 50 Hz)
+SEG_TOPIC = "/x500_tez/kamera_seg/labels_map"  # models/x500_tez: segmentation camera, half resolution
+SEG_SCALE = 2  # drone camera pixels per segmentation pixel
+VISIBLE_PX = 40  # [px of the drone camera] fewer visible pixels of the target = not visible (hidden or too small)
+
+
+def visible_parts(labels: np.ndarray, wanted: dict[int, str]) -> dict:
+    """Visible pixel count and bounding box (drone camera pixels) of each labelled person in a segmentation frame.
+
+    labels: (h, w) label per pixel; wanted: label -> column prefix. Box columns are pixel edges: u0 <= u < u1.
+    """
+    counts = np.bincount(labels.ravel(), minlength=256)
+    out = {}
+    for label, prefix in wanted.items():
+        n = int(counts[label]) if label < len(counts) else 0
+        out[f"{prefix}_piksel"] = n * SEG_SCALE * SEG_SCALE
+        box = (math.nan,) * 4
+        if n:
+            mask = labels == label
+            cols, rows = np.flatnonzero(mask.any(axis=0)), np.flatnonzero(mask.any(axis=1))
+            box = (cols[0] * SEG_SCALE, rows[0] * SEG_SCALE, (cols[-1] + 1) * SEG_SCALE, (rows[-1] + 1) * SEG_SCALE)
+        for key, value in zip(("u0", "v0", "u1", "v1"), box, strict=True):
+            out[f"{prefix}_kutu_{key}"] = value
+    return out
 
 
 def nlerp(q0: np.ndarray, q1: np.ndarray, f: float) -> np.ndarray:
@@ -107,6 +132,19 @@ def truth_row(
                 row[f"los_{frame}_x"], row[f"los_{frame}_y"], row[f"los_{frame}_z"] = vec
             row["sapma_yatay_deg"], row["sapma_dikey_deg"], _ = deviation(los["govde"], "body")
     row["kadrajda"] = row["merkez_gorunur"]
+    # Other people (distractors): where they are and whether their body centre is in this frame
+    seen = 0
+    for i, person in enumerate(sc.others, start=1):
+        px, py, *_ = person.track.at(t)
+        uv = camera.project(GZ_CAMERA_TO_OPTICAL @ r_cam.T @ (np.array([px, py, TARGET_POINTS[1][1]]) - p_cam))
+        u, v = uv if uv is not None else (math.nan, math.nan)
+        inside = uv is not None and camera.contains(u, v)
+        row.update(
+            {f"insan{i}_x": px, f"insan{i}_y": py, f"insan{i}_u": u, f"insan{i}_v": v, f"insan{i}_kadrajda": inside}
+        )
+        seen += inside
+    if sc.others:
+        row["kadrajdaki_diger_insan"] = seen
     return row
 
 
@@ -123,19 +161,43 @@ class Recorder:
         self._poses: deque[tuple[float, np.ndarray, np.ndarray]] = deque(maxlen=POSE_HISTORY)
         self._frames: deque[float] = deque()  # frame times waiting for a later pose
         self._rel: tuple[np.ndarray, np.ndarray] | None = None
+        self._seg: dict[int, dict] = {}  # frame time [us] -> visible_parts()
+        self._labels = {TARGET_LABEL: "hedef"} | {OTHER_LABEL + i: f"insan{i + 1}" for i in range(len(scenario.others))}
         self._node = Node()
         self._node.subscribe(Pose_V, f"/world/{world}/dynamic_pose/info", self._on_pose)
         self._node.subscribe(CameraInfo, f"{CAMERA_TOPIC}/camera_info", self._on_info)
 
     def start(self) -> None:
+        # segmentation frames only from now on: parsing them in Python all the time slowed the MAVLink tools
+        self._node.subscribe(Image, SEG_TOPIC, self._on_seg)
         self._recording = True
 
     def stop(self) -> None:
         self._recording = False
+        self._node.unsubscribe(SEG_TOPIC)
 
     def snapshot(self) -> list[dict]:
+        """Rows so far, each joined with the segmentation frame of the same time (NaN where none arrived)."""
         with self._lock:
-            return list(self.rows)
+            rows, seg = list(self.rows), dict(self._seg)
+        empty = dict.fromkeys(visible_parts(np.zeros((1, 1), np.uint8), self._labels), math.nan)
+        out = []
+        for r in rows:
+            parts = seg.get(round(r["t"] * 1e6))
+            r = r | (parts or empty)
+            r["gorunur"] = bool(parts) and parts["hedef_piksel"] >= VISIBLE_PX
+            out.append(r)
+        return out
+
+    def _on_seg(self, msg: Image) -> None:
+        if not self._recording:
+            return
+        t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
+        # instance segmentation: the label is in the third channel (the first two encode the instance)
+        labels = np.frombuffer(msg.data, np.uint8).reshape(msg.height, msg.width, 3)[:, :, 2]
+        parts = visible_parts(labels, self._labels)
+        with self._lock:
+            self._seg[round(t * 1e6)] = parts
 
     def _on_info(self, msg: CameraInfo) -> None:
         # camera_info is published with every image and carries the image's time stamp

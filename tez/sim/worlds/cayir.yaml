@@ -1,0 +1,32 @@
+# Çayır: gerçekçi zemin (iki tür çim, aşınmış yamalar, ağaç altında yaprak, toprak patika) ve ağaçlar.
+# Zemin ve ağaçlar bu dosyadan üretilir: tez/sim/kur.sh (araclar/dunya.py). Dosyayı değiştirince kur.sh'ı yeniden
+# çalıştırın; sadece değişen dünya yeniden üretilir.
+#
+# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar; kalkış yerinin 8 m
+# çevresine ağaç konamaz. Ağaçların çarpışma şekli var (gövde silindiri + taç elipsoidi): dron çarparsa düşer.
+# Meşe 6.5–10 m, çam 8–12 m boyundadır: senaryoda uçuş yüksekliğini buna göre seçin.
+
+ad: cayir
+aciklama: Çim alan, içinden geçen toprak patika, tek ağaçlar ve ağaç kümeleri.
+tohum: 3
+
+alan:
+  merkez: [20, 0]      # ayrıntılı (~1.2 cm/piksel) zeminin ortası
+  boyut_m: 120         # 24 m'nin katı; dışı 500 m'ye kadar daha basit zemin
+
+yollar:
+  - noktalar: [[-40, -15], [-12, -9], [10, -4], [28, 5], [48, 18], [80, 26]]
+    genislik_m: 1.6
+  - noktalar: [[28, 5], [36, -8], [42, -30], [46, -60]]
+    genislik_m: 1.2
+
+agaclar:
+  - {tur: cam, konum: [13, 5], olcek: 2.0}   # dronun 10 m yüksekte beklerken gördüğü çam (örtülme testleri)
+  - {tur: mese, konum: [27, 13]}
+  - {tur: cam, konum: [15, -12]}
+  - {tur: mese, konum: [-8, 14]}
+
+agac_gruplari:
+  - {merkez: [52, -24], yaricap_m: 13, sayi: 10}
+  - {merkez: [-22, 30], yaricap_m: 11, sayi: 7}
+  - {merkez: [58, 40], yaricap_m: 10, sayi: 6, turler: [cam]}

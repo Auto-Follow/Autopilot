@@ -63,3 +63,25 @@ def test_nlerp_halfway() -> None:
     q0 = np.array([1.0, 0, 0, 0])
     q1 = np.array([math.cos(0.1), 0, 0, math.sin(0.1)])
     assert kayit.nlerp(q0, q1, 0.5) == pytest.approx([math.cos(0.05), 0, 0, math.sin(0.05)], abs=1e-6)
+
+
+def test_visible_parts_from_segmentation() -> None:
+    labels = np.zeros((10, 20), np.uint8)
+    labels[2:5, 3:6] = 1  # target: 9 segmentation pixels
+    labels[7, 10] = 11
+    parts = kayit.visible_parts(labels, {1: "hedef", 11: "insan1", 12: "insan2"})
+    s = kayit.SEG_SCALE
+    assert parts["hedef_piksel"] == 9 * s * s
+    assert [parts[f"hedef_kutu_{k}"] for k in ("u0", "v0", "u1", "v1")] == [3 * s, 2 * s, 6 * s, 5 * s]
+    assert parts["insan1_piksel"] == s * s and parts["insan2_piksel"] == 0
+    assert math.isnan(parts["insan2_kutu_u0"])
+
+
+def test_other_people_in_the_row() -> None:
+    sc = scenario((20.0, 0.0))
+    other_track, end = yuruyus.plan((9.1, 0.0), 60.0, [("wait", 1.0)], yuruyus.Behaviour())
+    sc.others.append(hedef.Person((9.1, 0.0), other_track, end))
+    row = kayit.truth_row(70.0, sc, CM3, np.array([0.0, 0.0, 10.0]), LEVEL_EAST, CAM_POS, CAM_R)
+    assert row["insan1_x"] == pytest.approx(9.1) and row["insan1_kadrajda"]
+    assert row["insan1_u"] == pytest.approx(1152.0, abs=1.0)
+    assert row["kadrajdaki_diger_insan"] == 1

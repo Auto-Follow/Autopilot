@@ -3,8 +3,9 @@
 Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodlarını gerçek uçuştan önce Gazebo'da
 **ölçerek** denemesi için ortak ortam. Tasarım: "Auto-Follow Simülasyon ve Test Ortamı — Tasarım Önerisi" belgesi.
 
-> **Durum: F1 (hakem çekirdeği).** Tez dronu + düz alan + PX4'te görünen "Tez Auto Follow" modu (iskelet: yerinde
-> bekler) + yürüyen insan hedefi, YAML senaryo, doğru cevap kaydı, ULog ve otomatik HTML rapor.
+> **Durum: F1 (hakem çekirdeği) + gerçekçi dünya.** Tez dronu + düz alan ve dokulu çayır (patika, ağaçlar) +
+> PX4'te görünen "Tez Auto Follow" modu (iskelet: yerinde bekler) + insan gibi yürüyen hedef ve başka insanlar,
+> YAML senaryo, kare kare doğru cevap (görünürlük ve kutu dahil), ULog ve otomatik HTML rapor.
 > Sıradaki: F2 (kontrol ekibi için "mükemmel algılayıcı"), F3 (görüntü ekibi için kamera ve etiketli kareler).
 
 PX4 kaynağı değişmez. Tez modu `tez/px4/` altında **harici modül** olarak derlenir; dron ve dünya `tez/sim/` altında
@@ -17,7 +18,8 @@ durur. PX4 tarafında sadece kilit listesinde izinli iki dosya eklenir: airframe
 ```bash
 cd ~/Desktop/Projects/Auto-Follow/Autopilot
 tez/sim/derle.sh            # ilk sefer birkaç dakika; çıktı build/px4_sitl_tez
-tez/sim/kur.sh              # insan hedef modelini indirir (~11 MB, sha256 kontrollü; git'e girmez)
+tez/sim/kur.sh              # insan modeli, zemin dokuları ve ağaçları indirir (~20 MB, sha256 kontrollü), dünyaları
+                            # üretir (ilk sefer ~3 dakika); git'e girmez. Tekrar çalıştırınca sadece eksik/değişeni yapar
 ```
 
 `derle.sh` ayrı bir klasöre derler; ekibin normal `build/px4_sitl_default` derlemesine dokunmaz.
@@ -75,9 +77,12 @@ alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar.
 | `ucus.ulg` | PX4 uçuş kaydı (PlotJuggler / pyulog) |
 | `dunya.sdf`, `senaryo.yaml`, `sim.log` | Koşunun girdileri ve logu |
 
-Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu) ve `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
-kısa koşu, sert geri dönüş). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
+Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu), `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
+kısa koşu, sert geri dönüş) — ikisi düz alanda — ve `kalabalik_park` (çayırda hedef + dört kişi: patikada yürüyen,
+çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır). Yeni senaryo yazmak için birini
+kopyalayın. Alanlar:
 
+- `dunya`: `duz_alan` (tek renk düz alan, hızlı) veya `cayir` (aşağıda "Dünyalar")
 - `drone.yukseklik_m`, `drone.mod` (`tez` veya `bekle` = PX4 Hold)
 - `hedef.baslangic: [x, y]` ve `hedef.yol`: sırayla `{nokta: [x, y], hiz_mps: v}` (v > 2 m/s koşu) veya `{dur_s: s}`
 - `hedef.davranis` (isteğe bağlı): hedef **insan gibi** hareket eder (`araclar/yuruyus.py`): ilk adımda yürüme hızına
@@ -87,8 +92,17 @@ kısa koşu, sert geri dönüş). Yeni senaryo yazmak için birini kopyalayın. 
   (~8 cm) hafifçe dalgalanır. Alanlar: `dogal` (false = eski ideal hareket), `tohum` (aynı tohum = aynı yürüyüş),
   `hiz_dalgalanma`, `yol_sapmasi_m`. Bu sınırlar yetişkinler için tipik değerlerdir; gerçek hedeflerle ölçülene kadar
   varsayımdır.
+- `hedef.kiyafet` (isteğe bağlı): `{ust: renk, alt: renk, ten: ton}`; renkler `yesil` (modelin kendi kazağı), `kot`
+  (kendi pantolonu), `kirmizi`, `turuncu`, `sari`, `mavi`, `lacivert`, `mor`, `beyaz`, `gri`, `siyah`, `kahverengi`,
+  `bej`, `haki`; ten `acik`, `orta` (modelin kendisi), `esmer`, `koyu`. Varsayılan: yeşil kazak, kot, orta.
+- `diger_insanlar` (isteğe bağlı): hedef olmayan insanlar listesi; her biri hedefle aynı alanları alır (`baslangic`,
+  `yol`, `davranis`, `kiyafet`) ve `gecikme_s` (hedefin başlamasından kaç saniye sonra yola çıkar). Görüntü işleme
+  için karıştırma testi: hedefle aynı kıyafeti verin.
 - `zamanlama.baslama_s`: hedefin yürümeye başladığı simülasyon zamanı (dron o ana kadar hazır olmalı; ~30 s sürer)
-- `basari`: eşikler — `kadrajda_kalma_min`, `en_uzun_kayip_max_s`, `yatay_mesafe_max_m`. Boşsa sadece ölçülür.
+- `basari`: eşikler — `kadrajda_kalma_min`, `gorunur_kalma_min`, `en_uzun_kayip_max_s`, `yatay_mesafe_max_m`. Boşsa
+  sadece ölçülür.
+
+Bir insanın yolu dünyadaki bir ağaç gövdesinden geçerse senaryo reddedilir (Gazebo insanları ağaçla çarpıştırmaz).
 
 Koordinatlar Gazebo dünyasına göredir: **x doğu, y kuzey [m]**; dron (0, 0)'dan doğuya bakarak kalkar. Yanlış yazılan
 bir alan, hangi alan olduğu söylenerek reddedilir.
@@ -106,9 +120,51 @@ Görüş vektörü (LOS) sütunları, ekibin "Pikselden Vektöre Dönüşüm" be
 Görüş vektörü hedefin gövde merkezine (yerden 0.9 m) göredir. Gazebo dünya koordinatları (`dron_x`, `hedef_x`...)
 ise x doğu, y kuzey, z yukarı.
 
+**Görünürlük ve kutular:** `kadrajda` sadece geometridir (gövde merkezi görüntünün içinde mi); ağaç arkasındaki hedef
+de "kadrajda" sayılır. Dronda, kameranın yanında aynı açıda yarım çözünürlüklü bir **segmentasyon kamerası** vardır
+(gerçek bir algılayıcı değil, sadece hakem için; her insan ayrı etiketli). Ondan her kare için:
+
+| Sütun | Anlam |
+|---|---|
+| `gorunur` | hedefin en az 40 pikseli gerçekten görünüyor (örtülü veya çok küçük değil) |
+| `hedef_piksel` | hedefin görünen piksel sayısı (dron kamerası pikseli) |
+| `hedef_kutu_u0/v0/u1/v1` | hedefin görüntüdeki kutusu (bbox), piksel kenarları; görünmüyorsa boş — görüntü ekibi için etiket |
+| `insanN_x/y`, `insanN_u/v`, `insanN_kadrajda` | N. diğer insanın konumu, gövde merkezinin pikseli, kadrajda mı |
+| `insanN_piksel`, `insanN_kutu_*` | N. diğer insanın görünen pikselleri ve kutusu |
+| `kadrajdaki_diger_insan` | o karede kadrajdaki diğer insan sayısı |
+
+Rapor bunlardan "gerçekten göründüğü süre" ve "kadrajda ama örtülü" oranlarını verir.
+
 Doğru cevap hakkında: Gazebo Harmonic insan (actor) konumunu yayınlamaz; hedefin konumu senaryodaki yoldan
-hesaplanır. `--dogrula` bunu tepe kamerasıyla kontrol eder (gölgeler kapanır); yürürken gövde merkezi yolun
-0.05–0.19 m önündedir. Ayrıntı: `models/insan/KAYNAK.md`.
+hesaplanır. `--dogrula` bunu tepe segmentasyon kamerasıyla kontrol eder (zemin dokusu, gölge ve diğer insanlar
+karışmaz; ağaç altında kalan anlar sayılmaz); yürürken gövde merkezi yolun 0.05–0.19 m önündedir. Ayrıntı:
+`models/insan/KAYNAK.md`.
+
+## Önizleme (PX4'süz)
+
+Bir dünyaya veya senaryoya dron kamerasının gözünden bakmak için (kamera sabit, dron yerde durur):
+
+```bash
+$P tez/sim/araclar/onizleme.py --dunya cayir                                  # (0, 0, 10 m)'den 45° fotoğraf
+$P tez/sim/araclar/onizleme.py --senaryo kalabalik_park --video 58:88 --etiket   # WebM + hakemin kutuları
+$P tez/sim/araclar/onizleme.py --dunya cayir --kamera 5,0,12,25,40            # x,y,z,eğim,yön (derece)
+```
+
+Çıktı `tez/sim/sonuclar/<tarih>_onizleme_<ad>/` (videoyu Firefox ile açın).
+
+## Dünyalar
+
+| Dünya | Ne |
+|---|---|
+| `duz_alan` | 500 m × 500 m tek renk düz çim. Hızlı; kabul testleri bunu kullanır |
+| `cayir` | Gerçek fotoğraf dokulu zemin (iki tür çim, aşınmış yamalar, ağaç altında yaprak), toprak patikalar, tek ağaçlar ve ağaç kümeleri (meşe, çam; çarpışma şekilli: dron çarparsa düşer) |
+
+Dokulu bir dünya `worlds/<ad>.yaml` ile tarif edilir, `kur.sh` (`araclar/dunya.py`) zemini ve ağaçları
+`models/<ad>_cevre/`'ye üretir; `worlds/<ad>.sdf` onu `model://<ad>_cevre` ile içerir. Merkezdeki alan (varsayılan
+120 m) tekrarsız ~1.2 cm/piksel dokuyla pişirilir (10 m'den kameranın yerde ayırt ettiği kadar); dışı daha basit.
+Alanlar: `tohum`, `alan: {merkez, boyut_m}`, `yollar: [{noktalar, genislik_m}]`, `agaclar: [{tur: mese|cam, konum,
+olcek}]`, `agac_gruplari: [{merkez, yaricap_m, sayi, turler}]`. Dosyayı değiştirince `kur.sh`'ı tekrar çalıştırın.
+Varlıkların kaynağı ve lisansı (hepsi CC0): `models/dokular/KAYNAK.md`.
 
 F1 kabul testi (senaryoyu iki kez koşar, ~6 dakika; `araclar/f1_testi.py`):
 
@@ -133,13 +189,15 @@ tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koş
 |---|---|
 | `tez/sim/derle.sh` | PX4 SITL + tez modülleri → `build/px4_sitl_tez` |
 | `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır |
-| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) |
+| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
+| `tez/sim/worlds/cayir.sdf`, `cayir.yaml` | Dokulu çayır: zemin ve ağaçlar `cayir.yaml`'dan üretilir (`araclar/dunya.py`) |
 | `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız hali) |
-| `tez/sim/kur.sh` | Git'e girmeyen dosyaları indirir (insan modeli) |
+| `tez/sim/kur.sh` | Git'e girmeyen dosyaları indirir (insan modeli, dokular, ağaçlar) ve dünyaları üretir |
+| `tez/sim/models/dokular/KAYNAK.md` | Zemin dokuları ve ağaçların kaynağı ve lisansı |
 | `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kayma düzeltmeleri ve Gazebo hatası önlemi: `KAYNAK.md`) |
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `px4_baglanti.py` (MAVLink) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `px4_baglanti.py` (MAVLink), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 | `tez/px4/src/modules/tez_auto_follow/` | Tez uçuş modu (iskelet) |

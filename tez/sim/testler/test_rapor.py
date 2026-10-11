@@ -55,3 +55,7 @@ def test_overhead_check_verdict() -> None:
     assert dogrulama.passed([{"fark": 0.1}, {"fark": 0.2}])
     assert not dogrulama.passed([{"fark": 0.1}, {"fark": math.nan}])
     assert not dogrulama.passed([{"fark": 0.5}])
+    # hidden under a tree: skipped, but the target must be seen at half of the check times at least
+    hidden = {"fark": math.nan, "ortulu": True}
+    assert dogrulama.passed([{"fark": 0.1}, hidden])
+    assert not dogrulama.passed([{"fark": 0.1}, hidden, hidden])

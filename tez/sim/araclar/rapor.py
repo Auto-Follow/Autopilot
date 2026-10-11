@@ -15,6 +15,7 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+import dunya  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -30,9 +31,12 @@ TEXT = "#0b0b0b"
 TEXT_2 = "#52514e"
 GRID = "#e4e3df"
 OUT_OF_VIEW = "#ecebe7"
+OTHERS_COLOR = "#8b8a86"  # other people: neutral, they are context, not a series to compare
+TREE_COLOR = "#5f8f4e"
 # Success key -> (metric, the metric must be at least (True) or at most (False) the threshold)
 SUCCESS_RULES = {
     "kadrajda_kalma_min": ("kadrajda_kalma", True),
+    "gorunur_kalma_min": ("gorunur_kalma", True),
     "en_uzun_kayip_max_s": ("en_uzun_kayip_s", False),
     "yatay_mesafe_max_m": ("yatay_mesafe_max_m", False),
 }
@@ -89,7 +93,23 @@ def metrics(sc: Scenario, df: pd.DataFrame) -> dict:
         "en_uzun_kayip_s": max((b - a for a, b in lost), default=0.0),
         "dron_yukseklik_ort_m": float(walk.dron_z.mean()),
         "dron_yatay_hareket_max_m": float(np.hypot(df.dron_x - first.dron_x, df.dron_y - first.dron_y).max()),
+    } | _visibility(walk)
+
+
+def _visibility(walk: pd.DataFrame) -> dict:
+    """From the segmentation camera: how often the target was really visible, and how often hidden while in view."""
+    if "gorunur" not in walk or walk.hedef_piksel.isna().all():
+        return {}
+    seen = walk.gorunur.to_numpy(dtype=bool)
+    m = {
+        "gorunur_kalma": float(seen.mean()),
+        "kadrajda_ortulu": float((walk.kadrajda.to_numpy(dtype=bool) & ~seen).mean()),
+        "segmentasyon_kare_orani": float(walk.hedef_piksel.notna().mean()),
     }
+    others = [c[: -len("_kadrajda")] for c in walk.columns if c.startswith("insan") and c.endswith("_kadrajda")]
+    if others:
+        m["diger_insan_kadrajda_ort"] = float(walk.kadrajdaki_diger_insan.mean())
+    return m
 
 
 def ulog_summary(path: Path | None) -> dict:
@@ -124,6 +144,21 @@ def evaluate(sc: Scenario, m: dict) -> list[tuple[str, str, float, float, bool]]
 def plot_map(sc: Scenario, df: pd.DataFrame) -> str:
     fig, ax = plt.subplots(figsize=(7.2, 5.2))
     _style(ax)
+    spec = dunya.load(sc.world)
+    for i, t in enumerate(spec.trees if spec else []):
+        r = dunya.TREE_KINDS[t.kind].crown_radii[0] * t.scale
+        ax.add_patch(
+            plt.Circle((t.x, t.y), r, color=TREE_COLOR, alpha=0.25, linewidth=0, label="Ağaç tacı" if i == 0 else None)
+        )
+    for i in range(1, len(sc.others) + 1):
+        if f"insan{i}_x" in df:
+            ax.plot(
+                df[f"insan{i}_x"],
+                df[f"insan{i}_y"],
+                color=OTHERS_COLOR,
+                linewidth=1.2,
+                label="Diğer insanlar" if i == 1 else None,
+            )
     ax.plot(df.hedef_x, df.hedef_y, color=TARGET_COLOR, linewidth=2, label="Hedef")
     ax.plot(df.dron_x, df.dron_y, color=DRONE_COLOR, linewidth=2, label="Dron")
     for xs, ys, color in ((df.hedef_x, df.hedef_y, TARGET_COLOR), (df.dron_x, df.dron_y, DRONE_COLOR)):
@@ -197,7 +232,7 @@ def _git_commit() -> str:
 def _fmt(value: float | None, key: str = "") -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "–"
-    if key.startswith("kadrajda"):
+    if key.startswith(("kadrajda", "gorunur", "segmentasyon")):
         return f"%{100 * value:.1f}"
     return f"{value:.2f}"
 
@@ -210,6 +245,9 @@ METRIC_LABELS = {
     "yatay_mesafe_max_m": "Yatay mesafe, en fazla [m]",
     "kadrajda_kalma": "Hedefin kadrajda kaldığı süre",
     "en_uzun_kayip_s": "En uzun kadraj dışı aralık [s]",
+    "gorunur_kalma": "Hedefin gerçekten göründüğü süre (ağaç arkası hariç)",
+    "kadrajda_ortulu": "Hedef kadrajda ama örtülü (ör. ağaç arkasında)",
+    "diger_insan_kadrajda_ort": "Kadrajdaki diğer insan sayısı, ortalama",
     "dron_yukseklik_ort_m": "Dron yüksekliği, ortalama [m]",
     "dron_yatay_hareket_max_m": "Dronun kalkış noktasından en büyük yatay uzaklığı [m]",
     "egim_max_deg": "Dronun en büyük eğimi (ULog) [°]",
@@ -307,15 +345,16 @@ def _html(sc: Scenario, s: dict, success: list, figures: list[tuple[str, str]], 
         rows = "".join(
             f"<tr><td class=num>{c['t']:.1f}</td><td class=num>{_fmt(c['hesap_x'])}, {_fmt(c['hesap_y'])}</td>"
             f"<td class=num>{_fmt(c['goruntu_x'])}, {_fmt(c['goruntu_y'])}</td>"
-            f"<td class=num>{_fmt(c['fark'])}</td></tr>"
+            f"<td class=num>{'ağaç altında, görünmüyor' if c.get('ortulu') else _fmt(c['fark'])}</td></tr>"
             for c in s["dogrulama"]
         )
         img = ""
         if (out / "dogrulama_tepe.png").is_file():
             img = "<p class=muted>Örnek tepe kamerası karesi: <code>dogrulama_tepe.png</code></p>"
         verify_html = f"""<h2>Hedef konumu doğrulaması</h2>
-<p>Hakemin hesapladığı hedef konumu ile tepe kamerasında görülen konum (gövde merkezi). Sınır {dogrulama.LIMIT} m:
-yürürken gövde merkezi yolun 0.05–0.19 m önündedir (öne eğik duruş ve adım döngüsü).</p>
+<p>Hakemin hesapladığı hedef konumu ile tepe segmentasyon kamerasında görülen konum (gövde merkezi). Sınır
+{dogrulama.LIMIT} m: yürürken gövde merkezi yolun 0.05–0.19 m önündedir (öne eğik duruş ve adım döngüsü). Ağaç tacı
+altında kalan anlar sayılmaz; hedef kontrol anlarının en az yarısında görünmelidir.</p>
 <table><tr><th>Zaman [s]</th><th>Hesap x, y [m]</th><th>Görüntü x, y [m]</th><th>Fark [m]</th></tr>
 {rows}</table>{img}"""
     events = "".join(f"<li>{e(x)}</li>" for x in s["olaylar"]) or "<li>Olay yok</li>"

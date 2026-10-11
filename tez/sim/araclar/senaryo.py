@@ -87,7 +87,7 @@ def run(sc: hedef.Scenario, out: Path, headless: bool, verify: bool) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy(sc.source, out / "senaryo.yaml")
     check_pos = dogrulama.camera_pose(sc) if verify else None
-    world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "", shadows=not verify)
+    world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "")
     log(f"Senaryo '{sc.name}': hedef yolu {sc.path_length():.1f} m, {sc.walk_end - sc.start_time:.1f} s; çıktı {out}")
 
     events: list[str] = []
@@ -113,7 +113,7 @@ def run(sc: hedef.Scenario, out: Path, headless: bool, verify: bool) -> dict:
     if ulog is not None:
         shutil.copy(ulog, out / "ucus.ulg")
     rows = rec.snapshot()
-    checks = check.results(rows, out) if check is not None else []
+    checks = check.results(out) if check is not None else []
     return rapor.write(
         out,
         sc,
@@ -134,7 +134,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--senaryo", required=True, help="tez/sim/senaryolar/<ad>.yaml adı veya bir .yaml yolu")
     ap.add_argument("--ekransiz", action="store_true", help="Gazebo penceresi açılmaz")
-    ap.add_argument("--dogrula", action="store_true", help="tepe kamerasıyla hedefin konumunu doğrula (gölgesiz)")
+    ap.add_argument("--dogrula", action="store_true", help="tepe kamerasıyla hedefin konumunu doğrula")
     ap.add_argument("--cikti", type=Path, help="çıktı klasörü (varsayılan tez/sim/sonuclar/<tarih>_<ad>)")
     args = ap.parse_args()
 

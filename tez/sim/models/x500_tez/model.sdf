@@ -92,6 +92,27 @@
           </noise>
         </camera>
       </sensor>
+      <!-- Referee only (not a real sensor): the same view at half resolution with every pixel labelled (actor label
+           plugin: 1 = target, 11+ = other people, 0 = everything else). araclar/kayit.py turns it into the visible
+           pixel count and bounding box of each person per frame: trees hide people, the geometry alone does not know. -->
+      <sensor name="segmentasyon" type="segmentation">
+        <topic>/x500_tez/kamera_seg</topic>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <visualize>false</visualize>
+        <camera>
+          <segmentation_type>instance</segmentation_type>
+          <horizontal_fov>1.151917</horizontal_fov>
+          <image>
+            <width>1152</width>
+            <height>648</height>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>500</far>
+          </clip>
+        </camera>
+      </sensor>
     </link>
 
     <joint name="camera_joint" type="fixed">
