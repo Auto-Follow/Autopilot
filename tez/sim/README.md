@@ -75,10 +75,17 @@ alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar.
 | `ucus.ulg` | PX4 uçuş kaydı (PlotJuggler / pyulog) |
 | `dunya.sdf`, `senaryo.yaml`, `sim.log` | Koşunun girdileri ve logu |
 
-Yeni senaryo yazmak için `senaryolar/yuruyen_insan.yaml`'ı kopyalayın. Alanlar:
+Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu) ve `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
+kısa koşu, sert geri dönüş). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
 
 - `drone.yukseklik_m`, `drone.mod` (`tez` veya `bekle` = PX4 Hold)
 - `hedef.baslangic: [x, y]` ve `hedef.yol`: sırayla `{nokta: [x, y], hiz_mps: v}` (v > 2 m/s koşu) veya `{dur_s: s}`
+- `hedef.davranis` (isteğe bağlı): hedef **insan gibi** hareket eder (`araclar/yuruyus.py`): ~1 s'de hızlanır ve
+  yavaşlar (yürürken 1 m/s², koşarken 2.5 m/s²), köşeleri yayla döner (yarıçap v²/1.5 m/s²; 1.4 m/s'de ~1.3 m),
+  135°'den keskin dönüşte durup yerinde döner, beklemeden sonra önce yeni yöne döner, hızı (%5) ve çizgisi (~8 cm)
+  hafifçe dalgalanır. Alanlar: `dogal` (false = eski ideal hareket), `tohum` (aynı tohum = aynı yürüyüş),
+  `hiz_dalgalanma`, `yol_sapmasi_m`. Bu sınırlar yetişkinler için tipik değerlerdir; gerçek hedeflerle ölçülene kadar
+  varsayımdır.
 - `zamanlama.baslama_s`: hedefin yürümeye başladığı simülasyon zamanı (dron o ana kadar hazır olmalı; ~30 s sürer)
 - `basari`: eşikler — `kadrajda_kalma_min`, `en_uzun_kayip_max_s`, `yatay_mesafe_max_m`. Boşsa sadece ölçülür.
 

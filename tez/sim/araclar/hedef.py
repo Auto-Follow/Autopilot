@@ -6,37 +6,26 @@ animates actors only on the rendering side and does not publish their pose. sena
 rendered target against this computation with an overhead camera (dogrulama.py).
 """
 
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import yaml
 
+import yuruyus
+
 SIM_DIR = Path(__file__).resolve().parent.parent
-RUN_SPEED = 2.0  # [m/s] above this the target uses the run animation instead of walk
 ACTOR_HIP_HEIGHT = 1.0  # [m] actor origin above ground for the Mingfei actor meshes
-WAYPOINT_STEP = 0.2  # [s] spacing of the actor waypoints along a walk/run segment
+WAYPOINT_STEP = 0.2  # [s] spacing of the actor waypoints while it moves or turns
 FOREVER = 100000.0  # [s] last "stand" segment; the script loops (see models/insan/KAYNAK.md) but never gets there
+MAX_SPEED = 6.0  # [m/s] fastest allowed target (a sprinting adult)
 SUCCESS_KEYS = {
     "kadrajda_kalma_min": "hedefin kadrajda kaldığı süre oranı, en az [0..1]",
     "en_uzun_kayip_max_s": "hedefin kadrajdan çıktığı en uzun aralık, en fazla [s]",
     "yatay_mesafe_max_m": "dron ile hedef arasındaki yatay mesafe, en fazla [m]",
 }
 DRONE_MODES = {"tez", "bekle"}
-
-
-@dataclass
-class Segment:
-    t0: float  # [s] sim time
-    t1: float
-    kind: str  # Gazebo animation: stand | walk | run
-    p0: tuple[float, float]
-    p1: tuple[float, float]
-    yaw: float  # [rad] heading in the world frame (0 = east)
-
-    @property
-    def speed(self) -> float:
-        return math.dist(self.p0, self.p1) / (self.t1 - self.t0) if self.kind != "stand" else 0.0
+BEHAVIOUR_KEYS = {"dogal", "tohum", "hiz_dalgalanma", "yol_sapmasi_m"}
 
 
 @dataclass
@@ -49,14 +38,11 @@ class Scenario:
     start: tuple[float, float]
     start_time: float
     end_wait: float
-    segments: list[Segment] = field(default_factory=list)
+    track: yuruyus.Track | None = None  # target motion (yuruyus.plan)
+    walk_end: float = 0.0  # sim time when the last step of the path ends
+    behaviour: yuruyus.Behaviour = field(default_factory=yuruyus.Behaviour)
     success: dict[str, float] = field(default_factory=dict)
     source: Path | None = None
-
-    @property
-    def walk_end(self) -> float:
-        """Sim time when the last movement ends (the final stand segment excluded)."""
-        return self.segments[-2].t1 if len(self.segments) > 1 else self.start_time
 
     @property
     def end_time(self) -> float:
@@ -64,23 +50,19 @@ class Scenario:
 
     def truth(self, t: float) -> tuple[float, float, float, float, str]:
         """Target (x, y, yaw, speed, animation) at sim time t."""
-        for s in self.segments:
-            if t < s.t1:
-                f = 0.0 if s.kind == "stand" else max(0.0, (t - s.t0) / (s.t1 - s.t0))
-                x = s.p0[0] + f * (s.p1[0] - s.p0[0])
-                y = s.p0[1] + f * (s.p1[1] - s.p0[1])
-                return x, y, s.yaw, s.speed, s.kind
-        last = self.segments[-1]
-        return last.p1[0], last.p1[1], last.yaw, 0.0, "stand"
+        return self.track.at(t)
 
     def path_length(self) -> float:
-        return sum(math.dist(s.p0, s.p1) for s in self.segments)
+        return self.track.length()
 
     def bounds(self) -> tuple[float, float, float, float]:
         """(x_min, x_max, y_min, y_max) of the path [m]."""
-        xs = [p for s in self.segments for p in (s.p0[0], s.p1[0])]
-        ys = [p for s in self.segments for p in (s.p0[1], s.p1[1])]
-        return min(xs), max(xs), min(ys), max(ys)
+        return (
+            float(self.track.x.min()),
+            float(self.track.x.max()),
+            float(self.track.y.min()),
+            float(self.track.y.max()),
+        )
 
 
 def _point(value: object, where: str) -> tuple[float, float]:
@@ -130,7 +112,7 @@ def load(name_or_path: str) -> Scenario:
         raise ValueError(f"drone.mod: {sorted(DRONE_MODES)} olmalı, gelen: {mode!r}")
 
     target = d.get("hedef") or {}
-    _check_keys(target, {"tur", "baslangic", "yol"}, "hedef")
+    _check_keys(target, {"tur", "baslangic", "yol", "davranis"}, "hedef")
     if target.get("tur", "insan") != "insan":
         raise ValueError(f"hedef.tur: şimdilik sadece 'insan' var, gelen: {target.get('tur')!r}")
 
@@ -153,69 +135,91 @@ def load(name_or_path: str) -> Scenario:
         start=_point(target.get("baslangic"), "hedef.baslangic"),
         start_time=_number(timing, "baslama_s", "zamanlama", 60.0, minimum=20.0),
         end_wait=_number(timing, "son_bekleme_s", "zamanlama", 5.0),
+        behaviour=_behaviour(target.get("davranis") or {}),
         success={k: _number(success, k, "basari") for k in success},
         source=path,
     )
-    sc.segments = _segments(sc, target.get("yol") or [])
+    sc.track, sc.walk_end = yuruyus.plan(sc.start, sc.start_time, _steps(sc.start, target.get("yol")), sc.behaviour)
     return sc
 
 
-def _segments(sc: Scenario, path: list) -> list[Segment]:
+def _behaviour(d: dict) -> yuruyus.Behaviour:
+    _check_keys(d, BEHAVIOUR_KEYS, "hedef.davranis")
+    default = yuruyus.Behaviour()
+    natural = d.get("dogal", default.natural)
+    if not isinstance(natural, bool):
+        raise ValueError(f"hedef.davranis.dogal: true/false olmalı, gelen: {natural!r}")
+    seed = d.get("tohum", default.seed)
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise ValueError(f"hedef.davranis.tohum: tam sayı olmalı, gelen: {seed!r}")
+    variation = _number(d, "hiz_dalgalanma", "hedef.davranis", default.speed_variation)
+    if variation > 0.3:
+        raise ValueError(f"hedef.davranis.hiz_dalgalanma: en fazla 0.3 (oran), gelen: {variation}")
+    return yuruyus.Behaviour(natural, seed, variation, _number(d, "yol_sapmasi_m", "hedef.davranis", default.wander_m))
+
+
+def _steps(start: tuple[float, float], path: object) -> list[tuple]:
+    """hedef.yol -> [("move", (x, y), speed) | ("wait", seconds)], checked step by step."""
     if not isinstance(path, list) or not path:
         raise ValueError("hedef.yol: en az bir adım olmalı (liste)")
-    pos, t, yaw = sc.start, sc.start_time, 0.0
-    segments = [Segment(0.0, t, "stand", pos, pos, yaw)]
+    steps: list[tuple] = []
+    pos = start
     for i, step in enumerate(path):
         where = f"hedef.yol[{i}]"
         if not isinstance(step, dict):
             raise ValueError(f"{where}: {{nokta: [x, y], hiz_mps: v}} veya {{dur_s: s}} olmalı")
         if "dur_s" in step:
             _check_keys(step, {"dur_s"}, where)
-            duration = _number(step, "dur_s", where, minimum=0.1)
-            segments.append(Segment(t, t + duration, "stand", pos, pos, yaw))
-            t += duration
+            steps.append(("wait", _number(step, "dur_s", where, minimum=0.1)))
             continue
         _check_keys(step, {"nokta", "hiz_mps"}, where)
         target = _point(step.get("nokta"), f"{where}.nokta")
         speed = _number(step, "hiz_mps", where, minimum=0.1)
-        if speed > 6.0:
-            raise ValueError(f"{where}.hiz_mps: insan için en fazla 6 m/s, gelen: {speed}")
-        distance = math.dist(pos, target)
-        if distance < 0.05:
+        if speed > MAX_SPEED:
+            raise ValueError(f"{where}.hiz_mps: insan için en fazla {MAX_SPEED:.0f} m/s, gelen: {speed}")
+        if np.hypot(target[0] - pos[0], target[1] - pos[1]) < 0.05:
             raise ValueError(f"{where}.nokta: bir önceki noktayla aynı yer")
-        yaw = math.atan2(target[1] - pos[1], target[0] - pos[0])
-        segments.append(Segment(t, t + distance / speed, "run" if speed > RUN_SPEED else "walk", pos, target, yaw))
-        pos, t = target, segments[-1].t1
-    segments.append(Segment(t, t + FOREVER, "stand", pos, pos, yaw))
-    # The waiting target already faces its first direction
-    first_yaw = next((s.yaw for s in segments if s.kind != "stand"), 0.0)
-    for s in segments:
-        if s.kind != "stand":
-            break
-        s.yaw = first_yaw
-    return segments
+        steps.append(("move", target, speed))
+        pos = target
+    return steps
+
+
+def _runs(kind: np.ndarray) -> list[tuple[int, int]]:
+    """[first, last] sample index of every stretch with one animation; neighbours share their boundary sample."""
+    change = np.flatnonzero(kind[1:] != kind[:-1]) + 1
+    starts = np.concatenate([[0], change])
+    ends = np.concatenate([change, [len(kind) - 1]])
+    return [(int(a), int(b)) for a, b in zip(starts, ends, strict=True) if b > a]
 
 
 def actor_sdf(sc: Scenario) -> str:
-    trajectories = []
+    """The target as a Gazebo actor whose script follows sc.track (one trajectory per animation stretch)."""
+    tr = sc.track
     z = ACTOR_HIP_HEIGHT
-    for i, s in enumerate(sc.segments):
-        # Gazebo fills a trajectory with a Catmull-Rom spline: with only its two end points a 10 m walk runs
-        # slow-fast-slow and is up to 0.5 m off the straight line in time (2026-10-11 test). Evenly spaced points
-        # on a line make the spline linear between them, which leaves a ~1 cm error in the first and last step.
-        n = 1 if s.kind == "stand" else max(1, math.ceil((s.t1 - s.t0) / WAYPOINT_STEP))
-        waypoints = []
-        for k in range(n + 1):
-            f = k / n
-            x = s.p0[0] + f * (s.p1[0] - s.p0[0])
-            y = s.p0[1] + f * (s.p1[1] - s.p0[1])
-            waypoints.append(
-                f"          <waypoint><time>{f * (s.t1 - s.t0):.4f}</time>"
-                f"<pose>{x:.4f} {y:.4f} {z} 0 0 {s.yaw:.6f}</pose></waypoint>"
-            )
+    trajectories = []
+    pieces = [(a, b, str(tr.kind[a])) for a, b in _runs(tr.kind)]
+    for i, (a, b, kind) in enumerate(pieces):
+        span = slice(a, b + 1)
+        still = kind == "stand" and max(np.ptp(tr.x[span]), np.ptp(tr.y[span]), np.ptp(tr.yaw[span])) < 1e-3
+        # Gazebo fills a trajectory with a Catmull-Rom spline through its waypoints: a point every 0.2 s keeps it on
+        # the track (only two end points made a 10 m walk run slow-fast-slow, up to 0.5 m off; 2026-10-11 test).
+        step = max(1, round(WAYPOINT_STEP / yuruyus.DT))
+        idx = [a, b] if still else sorted({*range(a, b, step), b})
+        waypoints = [
+            f"          <waypoint><time>{tr.t[k] - tr.t[a]:.4f}</time>"
+            f"<pose>{tr.x[k]:.4f} {tr.y[k]:.4f} {z} 0 0 {tr.yaw[k]:.6f}</pose></waypoint>"
+            for k in idx
+        ]
         trajectories.append(
-            f'        <trajectory id="{i}" type="{s.kind}">\n' + "\n".join(waypoints) + "\n        </trajectory>"
+            f'        <trajectory id="{i}" type="{kind}">\n' + "\n".join(waypoints) + "\n        </trajectory>"
         )
+    last = len(tr.t) - 1
+    trajectories.append(
+        f'        <trajectory id="{len(pieces)}" type="stand">\n'
+        f"          <waypoint><time>0</time><pose>{tr.x[last]:.4f} {tr.y[last]:.4f} {z} 0 0 {tr.yaw[last]:.6f}</pose>"
+        f"</waypoint>\n          <waypoint><time>{FOREVER:.0f}</time><pose>{tr.x[last]:.4f} {tr.y[last]:.4f} {z} 0 0 "
+        f"{tr.yaw[last]:.6f}</pose></waypoint>\n        </trajectory>"
+    )
     body = "\n".join(trajectories)
     return f"""
     <!-- Target written by tez/sim/araclar/hedef.py from {sc.source.name if sc.source else "scenario"} -->

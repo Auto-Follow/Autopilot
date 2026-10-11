@@ -9,15 +9,13 @@ import pytest
 import dogrulama
 import hedef
 import rapor
+import yuruyus
 
 
 def scenario(success: dict) -> hedef.Scenario:
+    """Walks east 10 m from 60 s (ideal motion: exactly 70 s at the end)."""
     sc = hedef.Scenario("t", "", "duz_alan", 10.0, "tez", (10.0, 0.0), 60.0, 5.0, success=success)
-    sc.segments = [
-        hedef.Segment(0.0, 60.0, "stand", (10.0, 0.0), (10.0, 0.0), 0.0),
-        hedef.Segment(60.0, 70.0, "walk", (10.0, 0.0), (20.0, 0.0), 0.0),
-        hedef.Segment(70.0, 1e5, "stand", (20.0, 0.0), (20.0, 0.0), 0.0),
-    ]
+    sc.track, sc.walk_end = yuruyus.plan(sc.start, 60.0, [("move", (20.0, 0.0), 1.0)], yuruyus.Behaviour(natural=False))
     return sc
 
 

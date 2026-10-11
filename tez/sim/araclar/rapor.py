@@ -152,6 +152,18 @@ def plot_distance(sc: Scenario, df: pd.DataFrame) -> str:
     return _png(fig)
 
 
+def plot_target_speed(sc: Scenario, df: pd.DataFrame) -> str:
+    fig, ax = plt.subplots(figsize=(7.2, 2.6))
+    _style(ax)
+    ax.plot(df.t, df.hedef_hiz, color=TARGET_COLOR, linewidth=2)
+    ax.axvline(sc.start_time, color=TEXT_2, linewidth=0.8, linestyle="--")
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel("Simülasyon zamanı [s]")
+    ax.set_ylabel("Hız [m/s]")
+    ax.set_title("Hedefin hızı (hızlanma, dönüş ve duraklamalar dahil)", color=TEXT, fontsize=11, loc="left")
+    return _png(fig)
+
+
 def plot_image_track(df: pd.DataFrame, camera: dict) -> str:
     fig, ax = plt.subplots(figsize=(7.2, 7.2 * camera["h"] / camera["w"] + 0.6))
     _style(ax)
@@ -263,6 +275,7 @@ def write(
     if not df.empty:
         figures.append(("Üstten görünüm", plot_map(sc, df)))
         figures.append(("Mesafe", plot_distance(sc, df)))
+        figures.append(("Hedefin hızı", plot_target_speed(sc, df)))
         if camera is not None:
             figures.append(("Kamera görüntüsündeki yol", plot_image_track(df, camera)))
     (out / "rapor.html").write_text(_html(sc, summary, success, figures, out), encoding="utf-8")

@@ -19,6 +19,12 @@ drone:
 hedef:
   tur: insan
   baslangic: [10, 0]
+  # İnsan gibi hareket (tez/sim/araclar/yuruyus.py): ~1 s'de hızlanır/yavaşlar, köşeyi yayla döner, 135°'den keskin
+  # dönüşte durup yerinde döner, beklemeden sonra önce yeni yöne döner, hızı ve çizgisi hafifçe dalgalanır.
+  # Hepsi varsayılan; değiştirmek için:
+  # davranis: {dogal: true, tohum: 0, hiz_dalgalanma: 0.05, yol_sapmasi_m: 0.08}
+  #   dogal: false -> eski ideal hareket (düz çizgi, sabit hız, anında dönüş); hata ayıklamak için
+  #   tohum: aynı tohum her koşuda aynı yürüyüşü verir; farklı tohum = aynı yolda biraz farklı bir yürüyüş
   yol:                      # sırayla: {nokta, hiz_mps} yürü (hız > 2 m/s ise koşu animasyonu), {dur_s} bekle
     - {nokta: [22, 0], hiz_mps: 1.4}
     - {dur_s: 3}

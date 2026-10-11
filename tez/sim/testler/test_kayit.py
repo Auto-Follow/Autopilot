@@ -8,6 +8,7 @@ import pytest
 import hedef
 import kamera
 import kayit
+import yuruyus
 
 CM3 = kamera.Camera(2304, 1296, 1773.9, 1773.9, 1152.0, 648.0)
 TILT = math.radians(45)
@@ -18,8 +19,9 @@ LEVEL_EAST = np.array([1.0, 0.0, 0.0, 0.0])  # Gazebo model facing east, level
 
 
 def scenario(start: tuple[float, float]) -> hedef.Scenario:
+    """A target standing at `start` the whole time."""
     sc = hedef.Scenario("t", "", "duz_alan", 10.0, "tez", start, 60.0, 5.0)
-    sc.segments = [hedef.Segment(0.0, 1e5, "stand", start, start, 0.0)]
+    sc.track, sc.walk_end = yuruyus.plan(start, 60.0, [("wait", 1.0)], yuruyus.Behaviour())
     return sc
 
 
