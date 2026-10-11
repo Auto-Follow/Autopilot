@@ -28,7 +28,7 @@ hedef:
     - {nokta: [19, 13], hiz_mps: 0.9}       # yavaş, etrafına bakarak
     - {nokta: [13, 15], hiz_mps: 3.5}       # kısa koşu
     - {nokta: [10, 12], hiz_mps: 1.4}
-    - {nokta: [16, 9], hiz_mps: 1.4}        # sert dönüş: durur, döner, devam eder
+    - {nokta: [16, 9], hiz_mps: 1.4}        # sert dönüş: yavaşlar, dar yayda adım atarak döner, devam eder
 
 zamanlama:
   baslama_s: 60

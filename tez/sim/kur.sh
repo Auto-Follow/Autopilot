@@ -12,10 +12,29 @@ ACTOR_URL="https://fuel.gazebosim.org/1.0/Mingfei/models/actor/1/actor.zip"
 ACTOR_SHA256="edd48c4e609c32e88ab63dc770c1fd0a6c7847d28340a3ce88b65f01ae04e5b4"
 ACTOR_FILES=(walk.dae stand.dae run.dae)
 DEST="$SIM/models/insan/meshes"
+# Walk/run copies that start where the feet pass each other (araclar/animasyon.py; hip travel from the first frame)
+WALK_START_M=0.37
+RUN_START_M=0.24
+INSTALLED="$ACTOR_SHA256 animasyon-1"
 
-if [ -f "$DEST/.tamam" ] && [ "$(cat "$DEST/.tamam")" = "$ACTOR_SHA256" ]; then
-	echo "İnsan modeli zaten kurulu: $DEST"
-	exit 0
+make_copies() {
+	python3 "$SIM/araclar/animasyon.py" "$DEST/walk.dae" "$DEST/walk_tez.dae" "$WALK_START_M"
+	python3 "$SIM/araclar/animasyon.py" "$DEST/run.dae" "$DEST/run_tez.dae" "$RUN_START_M"
+	echo "$INSTALLED" > "$DEST/.tamam"
+}
+
+if [ -f "$DEST/.tamam" ]; then
+	case "$(cat "$DEST/.tamam")" in
+	"$INSTALLED")
+		echo "İnsan modeli zaten kurulu: $DEST"
+		exit 0
+		;;
+	"$ACTOR_SHA256"*)
+		make_copies
+		echo "Animasyon kopyaları güncellendi: $DEST (walk_tez.dae, run_tez.dae)"
+		exit 0
+		;;
+	esac
 fi
 
 TMP="$(mktemp -d)"
@@ -31,5 +50,5 @@ unzip -q "$TMP/actor.zip" -d "$TMP/zip"
 for f in "${ACTOR_FILES[@]}"; do
 	cp "$TMP/zip/meshes/$f" "$DEST/$f"
 done
-echo "$ACTOR_SHA256" > "$DEST/.tamam"
-echo "Kuruldu: $DEST (${ACTOR_FILES[*]})"
+make_copies
+echo "Kuruldu: $DEST (${ACTOR_FILES[*]} + walk_tez.dae, run_tez.dae)"

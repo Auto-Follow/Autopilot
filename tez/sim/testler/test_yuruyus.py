@@ -22,10 +22,10 @@ def test_accelerates_and_stops_within_human_limits() -> None:
     accel = np.diff(m["speed"]) / np.diff(m["t"])
     assert np.abs(accel).max() <= yuruyus.ACCEL["walk"] * 1.05
     assert tr.at(60.0)[3] == 0.0 and tr.at(end)[3] == 0.0
-    assert tr.at(61.0)[3] == pytest.approx(1.0, abs=0.05)  # 1 m/s^2 from rest
+    assert tr.at(60.5)[3] == pytest.approx(1.0, abs=0.05)  # 2 m/s^2 from rest: walking speed within 0.7 s
     assert tr.at(70.0)[3] == pytest.approx(1.4)
-    # 20 m at 1.4 m/s takes 14.3 s; starting and stopping add 1.4 s
-    assert end - 60.0 == pytest.approx(20 / 1.4 + 1.4, abs=0.05)
+    # 20 m at 1.4 m/s takes 14.3 s; starting and stopping add 1.4 / 2 s
+    assert end - 60.0 == pytest.approx(20 / 1.4 + 0.7, abs=0.05)
     assert tr.at(end)[:2] == pytest.approx((30.0, 0.0))
 
 
@@ -40,27 +40,35 @@ def test_corner_is_an_arc_with_radius_from_speed() -> None:
     assert turn_rate.max() == pytest.approx(1.4 / radius, rel=0.1)  # v / r, no instant turn
 
 
-def test_sharp_turn_stops_and_turns_on_the_spot() -> None:
+def tight_arc_speed() -> float:
+    return math.sqrt(yuruyus.LATERAL["walk"] * yuruyus.TURN_RADIUS)
+
+
+def test_sharp_turn_steps_round_on_a_tight_arc() -> None:
     steps = [("move", (20.0, 0.0), 1.4), ("move", (12.0, 0.5), 1.4)]  # almost back
     tr, _ = yuruyus.plan(START, 60.0, steps, yuruyus.Behaviour(wander_m=0, speed_variation=0))
     m = moving(tr)
-    at_corner = np.hypot(m["x"] - 20.0, m["y"]) < 1e-6
-    assert at_corner.any()
-    assert np.all(m["speed"][at_corner] < 1e-6)
-    assert set(m["kind"][at_corner]) == {"stand"}
+    near = np.hypot(m["x"] - 20.0, m["y"]) < 2 * yuruyus.TURN_RADIUS + 0.05
+    assert np.hypot(m["x"] - 20.0, m["y"]).min() < 0.01  # reaches the point, then turns
+    assert m["speed"][near].max() <= 1.4 and m["speed"][near].min() > 0.3  # slows down but keeps stepping
+    assert set(m["kind"][near]) == {"walk"}  # never "stand": no turning on the spot
+    assert m["x"].max() < 20.0 + yuruyus.TURN_RADIUS + 0.01  # overshoots by at most the turning radius
     turn_rate = np.abs(np.diff(m["yaw"]) / np.diff(m["t"]))
-    assert turn_rate.max() <= yuruyus.PIVOT_RATE * 1.05
+    assert turn_rate.max() <= tight_arc_speed() / yuruyus.TURN_RADIUS * 1.1
+    assert tr.at(1e6)[:2] == pytest.approx((12.0, 0.5))
 
 
-def test_turns_towards_the_next_leg_after_a_pause() -> None:
+def test_sets_off_in_a_new_direction_with_small_steps() -> None:
     steps = [("move", (20.0, 0.0), 1.4), ("wait", 3.0), ("move", (20.0, 10.0), 1.4)]
     tr, _ = yuruyus.plan(START, 60.0, steps, yuruyus.Behaviour(wander_m=0, speed_variation=0))
-    arrive = tr.t[(tr.t > 60) & (tr.speed == 0) & (np.hypot(tr.x - 20, tr.y) < 1e-6)][0]
-    assert math.degrees(tr.at(arrive + 2.9)[2]) == pytest.approx(0.0, abs=1)  # still facing east while waiting
-    # turning at 180 deg/s; `arrive` is on the 0.02 s grid, up to 3.6 deg of turn off the true arrival
-    assert math.degrees(tr.at(arrive + 3.0 + 0.25)[2]) == pytest.approx(45.0, abs=4)
-    assert tr.at(arrive + 3.0 + 0.45)[3] == 0.0
-    assert math.degrees(tr.at(arrive + 3.0 + 0.5)[2]) == pytest.approx(90.0, abs=1)
+    waiting = (tr.t > 60) & (tr.kind == "stand")
+    # waits facing east, no rotation on the spot (the last sample is already the first instant of setting off)
+    assert np.degrees(np.abs(tr.yaw[waiting][:-1])).max() < 1e-6
+    leave = tr.t[waiting][-1]
+    turning = (tr.t > leave) & (tr.t < leave + 1.5)
+    assert set(tr.kind[turning]) == {"walk"}
+    assert math.degrees(tr.at(leave + 2.0)[2]) == pytest.approx(90.0, abs=3)  # heading north after the arc
+    assert tr.at(1e6)[:2] == pytest.approx((20.0, 10.0))
 
 
 def test_running_uses_the_run_animation_and_wider_arcs() -> None:

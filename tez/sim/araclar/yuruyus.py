@@ -1,8 +1,9 @@
 """Human motion model: the scenario's waypoints and speeds -> a time track the actor follows and the referee uses.
 
-A person does not move like the waypoint list: they speed up and slow down over about a second, take corners on an
-arc (wider when faster), stop and turn on the spot for sharp turns, turn towards the next direction before setting
-off after a pause, and neither keep an exact speed nor an exact straight line. With `natural=False` the old ideal
+A person does not move like the waypoint list: they reach walking speed within the first step, take corners on an
+arc (wider when faster), turn sharply and after a pause with a few small steps on a tight arc (never by rotating on
+the spot, which the actor would show as gliding: it has no turning animation), and neither keep an exact speed nor an
+exact straight line. With `natural=False` the old ideal
 motion is kept (straight lines, constant speed, instant turns) for debugging.
 
 The limits below are typical values for adults (assumptions until measured with real targets); the random parts are
@@ -17,10 +18,10 @@ import numpy as np
 DT = 0.02  # [s] track resolution
 DS = 0.02  # [m] planning resolution along the path
 RUN_SPEED = 2.0  # [m/s] faster legs use the run animation
-ACCEL = {"walk": 1.0, "run": 2.5}  # [m/s^2] speeding up and slowing down (steady gait after ~2 steps)
+ACCEL = {"walk": 2.0, "run": 2.5}  # [m/s^2] speeding up and slowing down (walking speed by the end of step one)
 LATERAL = {"walk": 1.5, "run": 3.0}  # [m/s^2] centripetal acceleration in turns: radius = v^2 / a
-PIVOT_RATE = math.radians(180)  # [rad/s] turning on the spot
-SHARP_TURN = math.radians(135)  # sharper corners: stop, turn on the spot, go on
+TURN_RADIUS = 0.3  # [m] stepping round on the spot: sharp corners and setting off in a new direction
+SHARP_TURN = math.radians(135)  # sharper corners are taken on the tight arc after reaching the point
 MIN_ARC_TURN = math.radians(2)  # smaller direction changes need no arc
 TAPER = 2.0  # [m] the path wander fades out this close to every scenario point
 SPEED_WAVELENGTH = (4.0, 12.0)  # [m] speed fluctuation: ~3-8 s at walking speed
@@ -80,61 +81,106 @@ def _kind(speed: float) -> str:
     return "run" if speed > RUN_SPEED else "walk"
 
 
-def _leg_geometry(points: list[tuple[float, float]], speeds: list[float], natural: bool) -> dict:
-    """Path through `points` sampled every ~DS: corners become arcs (natural). Per sample: x, y, heading, the speed
-    limit, the animation, and the distance to the nearest scenario point (for the wander taper)."""
-    xs, ys, hs, vmax, kinds = [], [], [], [], []
+def _tight_turn(p: np.ndarray, heading: float, q: np.ndarray) -> tuple | None:
+    """Arc of TURN_RADIUS from p (facing `heading`) turning towards q, ending on the tangent that leads to q.
+
+    Returns (centre, start angle, signed sweep, turn sign) or None if no turn is needed or q is inside the circle.
+    """
+    diff = _wrap(math.atan2(q[1] - p[1], q[0] - p[0]) - heading)
+    if abs(diff) < MIN_ARC_TURN:
+        return None
+    turn = math.copysign(1.0, diff)
+    centre = p + turn * TURN_RADIUS * np.array([-math.sin(heading), math.cos(heading)])
+    dist = math.dist(centre, q)
+    if dist <= 1.05 * TURN_RADIUS:
+        return None
+    alpha = math.atan2(q[1] - centre[1], q[0] - centre[0])
+    beta = math.acos(TURN_RADIUS / dist)
+    phi0 = heading - turn * math.pi / 2
+    phi1 = alpha - turn * beta
+    sweep = (phi1 - phi0) % (2 * math.pi) if turn > 0 else -((phi0 - phi1) % (2 * math.pi))
+    return centre, phi0, sweep, turn
+
+
+def _leg_geometry(points: list[tuple[float, float]], speeds: list[float], natural: bool, heading: float) -> dict:
+    """Path through `points`, starting at points[0] facing `heading`, sampled every ~DS (natural: corners become
+    arcs). Per sample: x, y, heading, the speed limit, the animation, and the distance to the nearest scenario point
+    (for the wander taper)."""
     p = np.array(points, dtype=float)
-    d = np.diff(p, axis=0)
-    seg_len = np.hypot(d[:, 0], d[:, 1])
-    u = d / seg_len[:, None]
-    # Tangent length cut from both sides of every interior corner, and the arc there
-    cut = np.zeros(len(points))
-    arcs = {}
-    for k in range(1, len(points) - 1):
-        cross = u[k - 1, 0] * u[k, 1] - u[k - 1, 1] * u[k, 0]
-        theta = math.acos(max(-1.0, min(1.0, float(u[k - 1] @ u[k]))))
-        if not natural or theta < MIN_ARC_TURN:
+    # 1) Straight lines between the points; a tight stepping arc where the person sets off in a new direction or
+    #    meets a sharp corner (the line after it starts where the arc ends)
+    pieces: list[list] = []  # ["line", a, b, speed, cut_a, cut_b] | ["tight", centre, phi0, sweep, turn, speed]
+    cur, head = p[0], heading
+    for k in range(1, len(p)):
+        direction = math.atan2(p[k, 1] - cur[1], p[k, 0] - cur[0])
+        sharp = abs(_wrap(direction - head)) > (MIN_ARC_TURN if k == 1 else SHARP_TURN)
+        arc = _tight_turn(cur, head, p[k]) if natural and sharp else None
+        if arc is not None:
+            centre, phi0, sweep, turn = arc
+            v_arc = min(speeds[k - 1], math.sqrt(LATERAL["walk"] * TURN_RADIUS))
+            pieces.append(["tight", centre, phi0, sweep, turn, v_arc])
+            cur = centre + TURN_RADIUS * np.array([math.cos(phi0 + sweep), math.sin(phi0 + sweep)])
+        pieces.append(["line", cur, p[k], speeds[k - 1], 0.0, 0.0])
+        head = math.atan2(p[k, 1] - cur[1], p[k, 0] - cur[0])
+        cur = p[k]
+    # 2) Ordinary corners between two lines: an arc of radius v^2 / a_lat, cut from both lines
+    fillets = {}
+    for i in range(len(pieces) - 1):
+        a, b = pieces[i], pieces[i + 1]
+        if not natural or a[0] != "line" or b[0] != "line":
             continue
-        v_c = min(speeds[k - 1], speeds[k])
+        ua, ub = (a[2] - a[1]) / math.dist(a[1], a[2]), (b[2] - b[1]) / math.dist(b[1], b[2])
+        theta = math.acos(max(-1.0, min(1.0, float(ua @ ub))))
+        if theta < MIN_ARC_TURN:
+            continue
+        v_c = min(a[3], b[3])
         kind = _kind(v_c)
         radius = v_c**2 / LATERAL[kind]
         length = radius * math.tan(theta / 2)
-        limit = 0.45 * min(seg_len[k - 1], seg_len[k])
-        if length > limit:  # the legs are too short for a comfortable arc: tighter and slower
+        limit = 0.45 * min(math.dist(a[1], a[2]), math.dist(b[1], b[2]))
+        if length > limit:  # the lines are too short for a comfortable arc: tighter and slower
             length = limit
             radius = length / math.tan(theta / 2)
-        cut[k] = length
-        arcs[k] = (radius, theta, math.copysign(1.0, cross), min(v_c, math.sqrt(LATERAL[kind] * radius)), kind)
+        a[5] = b[4] = length
+        turn = math.copysign(1.0, ua[0] * ub[1] - ua[1] * ub[0])
+        fillets[i] = (radius, theta, turn, min(v_c, math.sqrt(LATERAL[kind] * radius)), kind)
 
-    def add(x: float, y: float, h: float, v: float, kind: str) -> None:
-        xs.append(x)
-        ys.append(y)
+    xs, ys, hs, vmax, kinds = [], [], [], [], []
+
+    def add(q: np.ndarray, h: float, v: float, kind: str) -> None:
+        xs.append(q[0])
+        ys.append(q[1])
         hs.append(h)
         vmax.append(v)
         kinds.append(kind)
 
-    for k in range(len(points) - 1):
-        a = p[k] + u[k] * cut[k]
-        b = p[k + 1] - u[k] * cut[k + 1]
-        h = math.atan2(u[k, 1], u[k, 0])
-        for f in np.linspace(0, 1, max(1, math.ceil(math.dist(a, b) / DS)), endpoint=False):
-            q = a + f * (b - a)
-            add(q[0], q[1], h, speeds[k], _kind(speeds[k]))
-        if k + 1 in arcs:
-            radius, theta, turn, v_arc, kind = arcs[k + 1]
-            center = b + turn * radius * np.array([-math.sin(h), math.cos(h)])
-            for f in np.linspace(0, 1, max(2, math.ceil(radius * theta / DS)), endpoint=False):
-                hh = h + turn * theta * f
-                q = center + turn * radius * np.array([math.sin(hh), -math.cos(hh)])
-                add(q[0], q[1], hh, v_arc, kind)
-    add(p[-1, 0], p[-1, 1], h, speeds[-1], _kind(speeds[-1]))
+    def add_arc(centre: np.ndarray, radius: float, phi0: float, sweep: float, turn: float, v: float, kind: str) -> None:
+        for f in np.linspace(0, 1, max(2, math.ceil(radius * abs(sweep) / DS)), endpoint=False):
+            phi = phi0 + sweep * f
+            add(centre + radius * np.array([math.cos(phi), math.sin(phi)]), phi + turn * math.pi / 2, v, kind)
+
+    h = heading
+    for i, piece in enumerate(pieces):
+        if piece[0] == "tight":
+            _, centre, phi0, sweep, turn, v_arc = piece
+            add_arc(centre, TURN_RADIUS, phi0, sweep, turn, v_arc, "walk")
+            continue
+        _, a, b, v, cut_a, cut_b = piece
+        u = (b - a) / math.dist(a, b)
+        h = math.atan2(u[1], u[0])
+        start, end = a + u * cut_a, b - u * cut_b
+        for f in np.linspace(0, 1, max(1, math.ceil(math.dist(start, end) / DS)), endpoint=False):
+            add(start + f * (end - start), h, v, _kind(v))
+        if i in fillets:
+            radius, theta, turn, v_arc, kind = fillets[i]
+            centre = end + turn * radius * np.array([-math.sin(h), math.cos(h)])
+            add_arc(centre, radius, h - turn * math.pi / 2, turn * theta, turn, v_arc, kind)
+    add(p[-1], h, speeds[-1], _kind(speeds[-1]))
     x, y = np.array(xs), np.array(ys)
     s = np.concatenate([[0.0], np.cumsum(np.hypot(np.diff(x), np.diff(y)))])
     # Distance along the path to the nearest scenario point (corners at the middle of their arcs)
-    corner_s = [0.0, s[-1]]
-    corner_s += [s[int(np.argmin(np.hypot(x - p[k, 0], y - p[k, 1])))] for k in range(1, len(points) - 1)]
-    to_point = np.min(np.abs(s[:, None] - np.array(corner_s)[None, :]), axis=1)
+    point_s = [0.0, s[-1]] + [s[int(np.argmin(np.hypot(x - q[0], y - q[1])))] for q in p[1:-1]]
+    to_point = np.min(np.abs(s[:, None] - np.array(point_s)[None, :]), axis=1)
     return {
         "s": s,
         "x": x,
@@ -146,9 +192,11 @@ def _leg_geometry(points: list[tuple[float, float]], speeds: list[float], natura
     }
 
 
-def _leg(points: list[tuple[float, float]], speeds: list[float], beh: Behaviour, rng: np.random.Generator) -> dict:
-    """Motion along one leg that starts and ends at rest (natural) -> arrays over time from 0."""
-    g = _leg_geometry(points, speeds, beh.natural)
+def _leg(
+    points: list[tuple[float, float]], speeds: list[float], heading: float, beh: Behaviour, rng: np.random.Generator
+) -> dict:
+    """Motion along one leg that starts (facing `heading`) and ends at rest (natural) -> arrays over time from 0."""
+    g = _leg_geometry(points, speeds, beh.natural, heading)
     s, x, y = g["s"], g["x"], g["y"]
     vmax = g["vmax"].copy()
     if beh.natural:
@@ -176,15 +224,13 @@ def _leg(points: list[tuple[float, float]], speeds: list[float], beh: Behaviour,
     return {"t": t, "x": x, "y": y, "yaw": heading, "speed": v, "kind": g["kind"]}
 
 
-def _stand(duration: float, pos: tuple[float, float], yaw0: float, yaw1: float | None = None) -> dict:
-    """Standing, optionally turning on the spot from yaw0 to yaw1 (shortest way) over `duration`."""
+def _stand(duration: float, pos: tuple[float, float], yaw: float) -> dict:
     n = max(2, math.ceil(duration / DT) + 1)
-    yaw1 = yaw0 if yaw1 is None else yaw0 + _wrap(yaw1 - yaw0)
     return {
         "t": np.linspace(0, duration, n),
         "x": np.full(n, pos[0]),
         "y": np.full(n, pos[1]),
-        "yaw": np.linspace(yaw0, yaw1, n),
+        "yaw": np.full(n, yaw),
         "speed": np.zeros(n),
         "kind": ["stand"] * n,
     }
@@ -201,26 +247,15 @@ def plan(start: tuple[float, float], start_time: float, steps: list[tuple], beh:
     pieces = [(0.0, _stand(start_time, start, yaw))]
     t, pos = start_time, start
 
-    # Group consecutive moves into legs; a sharp corner splits a leg (stop, turn, go on)
+    # Consecutive moves form a leg that starts and ends at rest; waits separate the legs
     items: list[tuple] = []
-    leg: list[tuple[tuple[float, float], float]] = []
-    here, prev_dir = start, None
     for step in steps:
-        if step[0] == "wait":
-            if leg:
-                items.append(("leg", leg))
-                leg = []
+        if step[0] == "move" and items and items[-1][0] == "leg":
+            items[-1][1].append((step[1], step[2]))
+        elif step[0] == "move":
+            items.append(("leg", [(step[1], step[2])]))
+        else:
             items.append(step)
-            prev_dir = None
-            continue
-        direction = math.atan2(step[1][1] - here[1], step[1][0] - here[0])
-        if leg and beh.natural and prev_dir is not None and abs(_wrap(direction - prev_dir)) > SHARP_TURN:
-            items.append(("leg", leg))
-            leg = []
-        leg.append((step[1], step[2]))
-        here, prev_dir = step[1], direction
-    if leg:
-        items.append(("leg", leg))
 
     for item in items:
         if item[0] == "wait":
@@ -228,13 +263,7 @@ def plan(start: tuple[float, float], start_time: float, steps: list[tuple], beh:
             t += item[1]
             continue
         points = [pos] + [p for p, _ in item[1]]
-        direction = math.atan2(points[1][1] - pos[1], points[1][0] - pos[0])
-        turn = abs(_wrap(direction - yaw))
-        if beh.natural and turn > math.radians(1):
-            duration = turn / PIVOT_RATE
-            pieces.append((t, _stand(duration, pos, yaw, direction)))
-            t += duration
-        motion = _leg(points, [v for _, v in item[1]], beh, rng)
+        motion = _leg(points, [v for _, v in item[1]], yaw, beh, rng)
         pieces.append((t, motion))
         t += motion["t"][-1]
         pos, yaw = points[-1], float(motion["yaw"][-1])

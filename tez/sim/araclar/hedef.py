@@ -226,8 +226,9 @@ def actor_sdf(sc: Scenario) -> str:
     <actor name="hedef">
       <skin><filename>model://insan/meshes/walk.dae</filename></skin>
       <animation name="stand"><filename>model://insan/meshes/stand.dae</filename></animation>
-      <animation name="walk"><filename>model://insan/meshes/walk.dae</filename><interpolate_x>true</interpolate_x></animation>
-      <animation name="run"><filename>model://insan/meshes/run.dae</filename><interpolate_x>true</interpolate_x></animation>
+      <!-- *_tez.dae: the same cycles starting with the feet together (kur.sh, araclar/animasyon.py) -->
+      <animation name="walk"><filename>model://insan/meshes/walk_tez.dae</filename><interpolate_x>true</interpolate_x></animation>
+      <animation name="run"><filename>model://insan/meshes/run_tez.dae</filename><interpolate_x>true</interpolate_x></animation>
       <script>
         <!-- loop=false freezes Gazebo while a camera renders the actor; the last segment lasts {FOREVER:.0f} s -->
         <loop>true</loop>

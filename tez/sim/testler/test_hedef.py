@@ -39,7 +39,8 @@ def test_scenario_times_follow_the_motion(sc: hedef.Scenario) -> None:
     assert sc.walk_end > 60.0 + 2 + 10 / 1.0 + 3 + 9 / 3.0
     assert sc.end_time == sc.walk_end + 5.0
     assert sc.path_length() == pytest.approx(19.0, abs=0.3)
-    assert sc.bounds() == pytest.approx((10.0, 20.0, 0.0, 9.0), abs=0.3)
+    # setting off north after the wait steps round on the tight arc: up to its radius (+ wander) east of the point
+    assert sc.bounds() == pytest.approx((10.0, 20.0, 0.0, 9.0), abs=0.5)
 
 
 def test_truth_at_the_scenario_points(sc: hedef.Scenario) -> None:
