@@ -143,7 +143,7 @@ def main() -> int:
     except (ValueError, FileNotFoundError) as e:
         print(f"Senaryo hatası: {e}", file=sys.stderr)
         return 2
-    if not (SIM_DIR / "models" / "insan" / "meshes" / "walk_tez.dae").is_file():
+    if not (SIM_DIR / "models" / "insan" / "meshes" / ".tamam").is_file():
         print("İnsan modeli kurulu değil veya eski. Önce: tez/sim/kur.sh", file=sys.stderr)
         return 2
     if not (BUILD / "bin" / "px4").is_file():

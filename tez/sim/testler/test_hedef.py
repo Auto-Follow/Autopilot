@@ -57,6 +57,16 @@ def test_behaviour_block(tmp_path: Path) -> None:
     assert sc.walk_end == pytest.approx(60.0 + 2 + 10 + 3 + 3, abs=0.05)
 
 
+HEIGHTS = {"walk": 1.06, "run": 1.07, "stand": 1.08}
+
+
+@pytest.fixture(autouse=True)
+def human(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No built model needed: the hip heights insan.json would give."""
+    info = {"animasyonlar": {k: {"kalca_yukseklik_m": v} for k, v in HEIGHTS.items()}}
+    monkeypatch.setattr(hedef, "human_info", lambda: info)
+
+
 def test_actor_follows_the_track(sc: hedef.Scenario) -> None:
     sdf = hedef.actor_sdf(sc)
     assert "<loop>true</loop>" in sdf
@@ -65,8 +75,24 @@ def test_actor_follows_the_track(sc: hedef.Scenario) -> None:
     for part in sdf.split("<trajectory ")[1:]:
         stamps = [float(t) for t in re.findall(r"<time>([\d.]+)</time>", part)]
         assert stamps[0] == 0.0  # every trajectory restarts its clock
-        if 'type="walk"' in part or 'type="run"' in part:
+        kind = re.search(r'type="([a-z]+)', part).group(1)
+        assert {float(z) for z in re.findall(r"<pose>\S+ \S+ (\S+) ", part)} == {HEIGHTS[kind]}
+        if kind != "stand":
             assert max(np.diff(stamps)) <= hedef.WAYPOINT_STEP + 1e-6
+
+
+def test_every_moving_trajectory_has_its_own_animation_file_spelling(sc: hedef.Scenario) -> None:
+    """gz-sim 8 applies <interpolate_x> only to the first trajectory per animation file path."""
+    sdf = hedef.actor_sdf(sc)
+    moving = re.findall(r'<trajectory id="\d+" type="((?:walk|run)_\d+)">', sdf)
+    assert len(moving) >= 2
+    paths = {}
+    for name in moving:
+        m = re.search(rf'<animation name="{name}"><filename>([^<]+)</filename><interpolate_x>true', sdf)
+        assert m, name
+        paths[name] = m.group(1)
+        assert re.fullmatch(r"model://insan/meshes/(\./)*(walk|run)\.dae", m.group(1))
+    assert len(set(paths.values())) == len(paths)
 
 
 @pytest.mark.parametrize(

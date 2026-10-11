@@ -17,12 +17,13 @@ import numpy as np  # noqa: E402
 from gz.msgs10.image_pb2 import Image  # noqa: E402
 from gz.transport13 import Node  # noqa: E402
 
-from hedef import ACTOR_HIP_HEIGHT, Scenario  # noqa: E402
+from hedef import Scenario  # noqa: E402
 
 HFOV = 1.2  # [rad]
 SIZE = (1600, 1200)  # [px]
 TOPIC = "/dogrulama/image"
 MARGIN = 4.0  # [m] around the path
+BODY_CENTRE = 0.9  # [m] mean height of the target pixels seen from above
 LIMIT = 0.3  # [m] walking body centroid is 0.05-0.19 m ahead of the path (2026-10-11 test)
 
 
@@ -78,7 +79,7 @@ def locate(img: np.ndarray, cam: tuple[float, float, float], drone: tuple[float,
         xs, ys = xs[keep], ys[keep]
     if len(xs) < 15:
         return None
-    scale = (cz - ACTOR_HIP_HEIGHT * 0.9) / f  # metres per pixel at the body's mean height
+    scale = (cz - BODY_CENTRE) / f  # metres per pixel at the body's mean height
     return float(cx + (h_px / 2 - ys.mean()) * scale), float(cy - (xs.mean() - w_px / 2) * scale)
 
 

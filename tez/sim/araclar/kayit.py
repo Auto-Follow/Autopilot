@@ -25,8 +25,8 @@ from kamera import ENU_TO_NED, FLU_TO_FRD, GZ_CAMERA_TO_OPTICAL, Camera, deviati
 DRONE_MODEL = "x500_tez_0"
 CAMERA_LINK = "camera_link"
 CAMERA_TOPIC = "/x500_tez/kamera"
-# Mingfei actor; the "in view" point and the LOS use the body centre
-TARGET_POINTS = (("ayak", 0.0), ("merkez", 0.9), ("bas", 1.75))  # [m] above ground
+# MakeHuman target, 1.71 m (models/insan/meshes/insan.json); the "in view" point and the LOS use the body centre
+TARGET_POINTS = (("ayak", 0.0), ("merkez", 0.9), ("bas", 1.71))  # [m] above ground
 POSE_HISTORY = 100  # poses kept for interpolation (2 s at 50 Hz)
 
 

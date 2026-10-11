@@ -17,7 +17,7 @@ durur. PX4 tarafında sadece kilit listesinde izinli iki dosya eklenir: airframe
 ```bash
 cd ~/Desktop/Projects/Auto-Follow/Autopilot
 tez/sim/derle.sh            # ilk sefer birkaç dakika; çıktı build/px4_sitl_tez
-tez/sim/kur.sh              # insan hedef modelini indirir (~11 MB, sha256 kontrollü; git'e girmez)
+tez/sim/kur.sh              # insan hedef modelini üretir (ilk sefer ~0.7 GB indirme, sha256 kontrollü; git'e girmez)
 ```
 
 `derle.sh` ayrı bir klasöre derler; ekibin normal `build/px4_sitl_default` derlemesine dokunmaz.
@@ -137,7 +137,8 @@ tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koş
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız hali) |
 | `tez/sim/kur.sh` | Git'e girmeyen dosyaları indirir (insan modeli) |
-| `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kaynak: `KAYNAK.md`) |
+| `tez/sim/models/insan/` | İnsan hedef: MakeHuman (CC0) + CMU hareket kaydı; kaynak, lisans ve doğrulama: `KAYNAK.md` |
+| `tez/sim/insan/` | İnsan modelini üreten Blender betiği (`uret.py`) ve indirici (`uret.sh`) |
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
 | `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `px4_baglanti.py` (MAVLink) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
