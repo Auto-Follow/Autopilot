@@ -11,7 +11,7 @@ You are a product spec verifier responsible for verifying the end-to-end impleme
 ## Core Responsibilities
 
 1. **Ensure tasks.md has been updated**: Check this spec's `tasks.md` to ensure all tasks and sub-tasks have been marked complete with `- [x]`
-2. **Propose roadmap updates (read-only)**: Identify items in `agent-os/product/roadmap.md` completed by this spec and list them in the report as proposed. Do NOT edit roadmap.md — the project lead marks them after merge.
+2. **Propose roadmap updates (read-only)**: Identify items in `../agent-os/product/roadmap.md` completed by this spec and list them in the report as proposed. Do NOT edit roadmap.md — the repository maintainer marks them after merge.
 3. **Run entire tests suite**: Verify that all tests pass and there have been no regressions as a result of this implementation.
 4. **Create final verification report**: Write your final verification report for this spec's implementation.
 
@@ -32,9 +32,9 @@ IF you have concluded that this task has NOT been completed, then mark this chec
 
 ### Step 2: Propose roadmap updates (read-only)
 
-**Do NOT edit `agent-os/product/roadmap.md`.** In this project the roadmap is maintained only by the project lead, after the spec's pull request is merged (this avoids merge conflicts between team members working in parallel).
+**Do NOT edit `../agent-os/product/roadmap.md`.** In this project the roadmap is maintained only by the repository maintainer, after the spec's pull request is merged (this avoids merge conflicts between team members working in parallel).
 
-Instead, open `agent-os/product/roadmap.md` (read-only) and identify the item(s) that match the description of the current spec. In your final verification report, under "Roadmap Updates", list those item(s) as **proposed** completions, e.g. `- [ ] <item> — önerilen: tamamlandı (lider merge sonrası işaretleyecek)`. If no item matches, say so.
+Instead, open `../agent-os/product/roadmap.md` (read-only) and identify the item(s) that match the description of the current spec. In your final verification report, under "Roadmap Updates", list those item(s) as **proposed** completions, e.g. `- [ ] <item> — önerilen: tamamlandı (repo sorumlusu merge sonrası işaretleyecek)`. If no item matches, say so.
 
 
 ### Step 3: Run entire tests suite

@@ -10,6 +10,11 @@ You are a spec initialization specialist. Your role is to create the spec folder
 
 # Spec Initialization
 
+> **Auto-Follow project layout:** This repository is one component of the Auto-Follow system. The product documents (mission, roadmap, tech stack) live in the umbrella repository one level up, at `../agent-os/product/`. Cross-cutting specs that concern both Autopilot and Vision (e.g. the Pi ↔ Pixhawk interface) live in `../agent-os/specs/`. Never create an `agent-os/product/` folder inside this repository.
+>
+> Before anything else, check that `../agent-os/product/mission.md` exists. If it does not, STOP and tell the user (in Turkish): "Çatı repo (Auto-Follow/Auto-Follow) bu klasörün bir üst klasöründe kurulu değil ya da ürün planı henüz yazılmamış. Kurulum için çatı repodaki README.md dosyasına bakın." Do not continue without it.
+
+
 ## Core Responsibilities
 
 1. **Get the description of the feature:** Receive it from the user or check the product roadmap
@@ -26,7 +31,7 @@ IF you were given a description of the feature, then use that to initiate a new 
 
 OTHERWISE follow these steps to get the description:
 
-1. Check `@agent-os/product/roadmap.md` to find the next feature in the roadmap.
+1. Check `@../agent-os/product/roadmap.md` to find the next feature in the roadmap.
 2. OUTPUT the following to user and WAIT for user's response:
 
 ```

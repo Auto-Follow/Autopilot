@@ -6,9 +6,9 @@
 - Abonelikte `update()` dönüş değeri kontrol edilir; veri tazeliği zaman damgasıyla doğrulanır.
 
 ### Parametreler
-- Tez parametreleri `TEZ_` ön ekiyle adlandırılır (ör. `TEZ_FOL_KP`); PX4 parametre adları en fazla 16 karakterdir.
+- Yeni parametrelerin ön eki/adlandırması **henüz karara bağlanmadı**; varsayma, repo sorumlusuna sor. PX4 parametre adları en fazla 16 karakterdir.
 - `module.yaml`'da tanımlanır: `description`, `type`, `default`, `min`, `max`, `unit`, `decimal`.
-- Kodda `DEFINE_PARAMETERS((ParamFloat<px4::params::TEZ_FOL_KP>) _param_tez_fol_kp)`; `parameter_update` aboneliğiyle güncellenir.
+- Kodda `DEFINE_PARAMETERS((ParamFloat<px4::params::<PARAM_ADI>>) _param_<param_adi>)`; `parameter_update` aboneliğiyle güncellenir.
 - Kazanç ve eşik değerleri koda gömülmez, parametre olur.
 
 ### MAVLink
