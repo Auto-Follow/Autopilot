@@ -18,7 +18,7 @@ Bir özellik iki repoyu birden etkiliyorsa (ör. ICD), her repoda ayrı PR açı
 ### Nereye ne konur
 | İçerik | Yer |
 |---|---|
-| Yeni PX4 modülü, parametre, SITL airframe'i, Gazebo modeli | **Yeri ve adı henüz karara bağlanmadı.** Varsayma, repo sorumlusuna sor; karar ilk ilgili spec'te verilir ve `allowed-paths.txt`'ye ayrı PR ile eklenir |
+| Yeni PX4 modülü, parametre, SITL airframe'i, Gazebo modeli | **Adını işi yapan kişi kendi spec'inde belirler**; önceden belirlenmiş bir ad veya ön ek yoktur (PX4 isimlendirme kurallarına uyulur). **Yeri:** PX4 ağacına yeni dosya eklemek kilit listesine (`allowed-paths.txt`) yol eklemeyi gerektirir; gereken yol spec'te yazılır ve PR'da açıkça gösterilir |
 | Ortam, kilit, script'ler | `tez/` |
 | Pi / görüntü işleme kodu | **`Vision` reposu** (PX4 reposuna Pi kodu konmaz) |
 | Spec ve ürün dokümanları | `agent-os/` |

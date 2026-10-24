@@ -1,6 +1,6 @@
 ## PX4 modül yazımı
 
-- Yeni modülün yeri ve adı **henüz karara bağlanmadı** (kilit listesinde de yok); varsayma, repo sorumlusuna sor. Yazım deseni `src/examples/work_item`'dır:
+- Yeni modülün **adını işi yapan kişi kendi spec'inde belirler**; önceden belirlenmiş bir ad veya ön ek yoktur. PX4 ağacına yeni modül eklemek kilit listesine (`allowed-paths.txt`) yol eklemeyi gerektirir: gereken yol spec'te yazılır ve PR'da açıkça gösterilir. Yazım deseni `src/examples/work_item`'dır:
   - `ModuleBase<T>` + `ModuleParams` + `px4::ScheduledWorkItem`
   - Uygun iş kuyruğu (`px4::wq_configurations::...`); yoğun hesaplama yüksek öncelikli kuyruklara konmaz
   - Veri geldikçe çalışacaksa `uORB::SubscriptionCallbackWorkItem`, sabit hızda çalışacaksa `ScheduleOnInterval()`
