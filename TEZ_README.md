@@ -21,18 +21,18 @@ tez/pin/verify_pin.sh --worktree
 
 **Klasör yapısı (herkeste aynı olmalı):**
 ```
-~/Desktop/Projects/Auto-Follow/
+~/Desktop/Projects/Auto-Follow/   ← çatı repo (Auto-Follow/Auto-Follow): ürün planı, ortak spec'ler, Agent OS
 ├── Autopilot/     ← bu repo (PX4)
 ├── Vision/        ← Pi / görüntü işleme reposu
-└── .venv-tez/     ← laptop log analizi Python ortamı
+└── .venv-tez/     ← laptop log analizi Python ortamı (repoya girmez)
 ```
 
 ```bash
-# 1) Klonla
-mkdir -p ~/Desktop/Projects/Auto-Follow && cd ~/Desktop/Projects/Auto-Follow
+# 1) Klonla: çatı repo + Autopilot (submodule'lerle) + Vision + Agent OS
+mkdir -p ~/Desktop/Projects && cd ~/Desktop/Projects
 sudo apt install -y git
-git clone --recurse-submodules https://github.com/Auto-Follow/Autopilot.git
-git clone https://github.com/Auto-Follow/Vision.git
+git clone https://github.com/Auto-Follow/Auto-Follow.git
+cd Auto-Follow && ./kurulum.sh
 cd Autopilot
 
 # 2) PX4 bağımlılıkları + Gazebo Harmonic (15-30 dk)
@@ -45,7 +45,7 @@ make px4_sitl && make px4_fmu-v6c_default
 ```
 4) **Oturumu kapatıp açın** (Pixhawk USB seri port izni — `dialout` grubu).
 5) `tez/env/VERSIONS.md`'deki adımlar: Gazebo paketlerini dondurma, QGroundControl 5.1.4, geliştirme araçları, VS Code eklentileri, (hibrit GPU'lu laptopta) NVIDIA ayarı, analiz Python ortamı.
-6) Agent OS: `tez/env/install-agent-os.sh`
+6) Agent OS: 1. adımdaki `kurulum.sh` ile kuruldu (çatı repo).
 7) Vision reposu: `../Vision/README.md`
 
 ## Sorun giderme
@@ -68,31 +68,32 @@ make px4_sitl && make px4_fmu-v6c_default
 Simülatör **Gazebo Harmonic**'tir (`gz_*` hedefleri). `gazebo-classic_*` hedefleri Ubuntu 24.04'te desteklenmez, kullanmayın.
 
 ## Agent OS v2.1.1 (Claude Code ile spec odaklı geliştirme)
-Repoda kurulu: `agent-os/` (standartlar, ürün ve spec dokümanları) ve `.claude/` (komutlar + alt ajanlar).
-Sürüm **v2.1.1**'de sabittir; v3'e geçilmeyecek.
+Repoda kurulu: `agent-os/` (standartlar, bu repoya ait spec'ler) ve `.claude/` (komutlar + alt ajanlar).
+Sürüm **v2.1.1**'de sabittir; v3'e geçilmeyecek. Komutlar Claude Code'da `/agent-os:` önekiyle görünür.
 
 | Claude Code komutu | Ne yapar |
 |---|---|
-| `/plan-product` | Ürün misyonu, yol haritası, teknoloji yığını → `agent-os/product/` |
-| `/shape-spec` | Bir özelliği soru-cevapla şekillendirir |
-| `/write-spec` | Şekillenen özellikten spec yazar → `agent-os/specs/` |
-| `/create-tasks` | Spec'ten görev listesi çıkarır |
-| `/implement-tasks` | Görevleri uygular |
-| `/orchestrate-tasks` | Görevleri alt ajanlara dağıtarak uygular |
+| `/agent-os:shape-spec` | Bir özelliği soru-cevapla şekillendirir |
+| `/agent-os:write-spec` | Şekillenen özellikten spec yazar → `agent-os/specs/` |
+| `/agent-os:create-tasks` | Spec'ten görev listesi çıkarır |
+| `/agent-os:implement-tasks` | Görevleri uygular |
+| `/agent-os:orchestrate-tasks` | Görevleri alt ajanlara dağıtarak uygular |
+
+**Ürün planı ve ortak spec'ler çatı repodadır** (`../agent-os/product/`, `../agent-os/specs/`).
+Bu repodaki komutlar ürün planını oradan okur; `/agent-os:plan-product` burada çalışmaz.
+Çatı repo yoksa spec komutları durur ve kurulumu ister. Ayrıntılar: `../README.md`, `../CLAUDE.md`.
 
 ### Ekip kuralı: yol haritası
-`agent-os/product/roadmap.md`'yi **sadece proje lideri** günceller (PR merge edildikten sonra).
+`../agent-os/product/roadmap.md`'yi **sadece repo sorumlusu** günceller (PR merge edildikten sonra).
 Doğrulama ajanı roadmap'i düzenlemez; tamamlanan maddeleri doğrulama raporunda "önerilen" olarak listeler.
 
-### Standartlar: `auto-follow` profili
-Ajanlara verilen standartlar web şablonları değil, projeye özel **`auto-follow`** profilinden gelir:
-`tez/agent-os/profiles/auto-follow/` (PX4 C++ stili, modül yazımı, uORB/parametre, hata yönetimi, SITL testleri, Gazebo Harmonic, Pi Python kodu).
-`default` profilinden miras alır; `frontend/` ve `backend/` standartları hariç tutulur.
-Ayrıca iki ajan ezilir (orijinal Agent OS dosyaları değişmez): `implementer` rolü PX4/robotik geliştirici olarak tanımlanır, `implementation-verifier` roadmap'i düzenlemez.
+### Standartlar: `auto-follow-repo` profili
+Ajanlara verilen standartlar projeye özel profillerden gelir. Profiller **çatı repodadır**: `../agent-os-profilleri/`
+(`auto-follow`: PX4 C++ stili, modül yazımı, uORB/parametre, hata yönetimi, SITL testleri, Gazebo Harmonic, Pi Python kodu;
+`auto-follow-repo`: bu repo, ürün planını `../agent-os/product/`'tan okur).
 
-**Standart değiştirmek:** `agent-os/standards/` altındakileri değil, `tez/agent-os/profiles/auto-follow/standards/` altındakileri düzenleyin, sonra yeniden derleyin:
+**Standart değiştirmek:** bu repodaki `agent-os/standards/` veya `.claude/` dosyalarını değil, çatıdaki profilleri düzenleyin, sonra (çatı klasöründe):
 ```bash
-tez/env/install-agent-os.sh   # ~/agent-os'a v2.1.1 + profil bağlantısı (resmi base-install.sh KULLANMAYIN: main=v3)
-echo y | ~/agent-os/scripts/project-install.sh --re-install --profile auto-follow
+kurulum/install-agent-os.sh && kurulum/agent-os-derle.sh
 ```
-> `--re-install` `agent-os/` klasörünü siler. `agent-os/product/` veya `agent-os/specs/` oluştuktan sonra önce onları yedekleyin.
+> `project-install.sh --re-install` kullanmayın: `agent-os/specs/` klasörünü siler.

@@ -10,6 +10,11 @@ You are a software product requirements research specialist. Your role is to gat
 
 # Spec Research
 
+> **Auto-Follow project layout:** This repository is one component of the Auto-Follow system. The product documents (mission, roadmap, tech stack) live in the umbrella repository one level up, at `../agent-os/product/`. Cross-cutting specs that concern both Autopilot and Vision (e.g. the Pi ↔ Pixhawk interface) live in `../agent-os/specs/`. Never create an `agent-os/product/` folder inside this repository.
+>
+> Before anything else, check that `../agent-os/product/mission.md` exists. If it does not, STOP and tell the user (in Turkish): "Çatı repo (Auto-Follow/Auto-Follow) bu klasörün bir üst klasöründe kurulu değil ya da ürün planı henüz yazılmamış. Kurulum için çatı repodaki README.md dosyasına bakın." Do not continue without it.
+
+
 ## Core Responsibilities
 
 1. **Read Initial Idea**: Load the raw idea from initialization.md
@@ -29,22 +34,26 @@ Read the raw idea from `[spec-path]/planning/initialization.md` to understand wh
 
 Before generating questions, understand the broader product context:
 
-1. **Read Product Mission**: Load `agent-os/product/mission.md` to understand:
+1. **Read Product Mission**: Load `../agent-os/product/mission.md` to understand:
    - The product's overall mission and purpose
    - Target users and their primary use cases
    - Core problems the product aims to solve
    - How users are expected to benefit
 
-2. **Read Product Roadmap**: Load `agent-os/product/roadmap.md` to understand:
+2. **Read Product Roadmap**: Load `../agent-os/product/roadmap.md` to understand:
    - Features and capabilities already completed
    - The current state of the product
    - Where this new feature fits in the broader roadmap
    - Related features that might inform or constrain this work
 
-3. **Read Product Tech Stack**: Load `agent-os/product/tech-stack.md` to understand:
+3. **Read Product Tech Stack**: Load `../agent-os/product/tech-stack.md` to understand:
    - Technologies and frameworks in use
    - Technical constraints and capabilities
    - Libraries and tools available
+
+4. **Check Cross-Cutting Specs**: List `../agent-os/specs/` and read any spec this feature depends on (e.g. the Pi ↔ Pixhawk interface, log format, simulation camera interface):
+   - Reference those specs instead of redefining their interfaces in this repository
+   - If this feature needs to change a cross-cutting interface, say so to the user: that change must be made in the umbrella repository first, not here
 
 This context will help you:
 - Ask more relevant and contextual questions

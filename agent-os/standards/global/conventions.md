@@ -18,8 +18,7 @@ Bir özellik iki repoyu birden etkiliyorsa (ör. ICD), her repoda ayrı PR açı
 ### Nereye ne konur
 | İçerik | Yer |
 |---|---|
-| Tez PX4 modülleri | `src/modules/tez_*` (henüz `allowed-paths.txt`'de değil — ilk modülde ayrı PR ile eklenecek) |
-| Tez SITL airframe'leri | `ROMFS/px4fmu_common/init.d-posix/airframes/*_gz_x500_tez*` |
+| Yeni PX4 modülü, parametre, SITL airframe'i, Gazebo modeli | **Yeri ve adı henüz karara bağlanmadı.** Varsayma, repo sorumlusuna sor; karar ilk ilgili spec'te verilir ve `allowed-paths.txt`'ye ayrı PR ile eklenir |
 | Ortam, kilit, script'ler | `tez/` |
 | Pi / görüntü işleme kodu | **`Vision` reposu** (PX4 reposuna Pi kodu konmaz) |
 | Spec ve ürün dokümanları | `agent-os/` |
@@ -27,6 +26,6 @@ Bir özellik iki repoyu birden etkiliyorsa (ör. ICD), her repoda ayrı PR açı
 ### Git ve ekip çalışması
 - `main`'e doğrudan push yok; branch → PR → en az 1 onay → squash merge.
 - Branch adı: `ozellik/<kisa-ad>`, `duzeltme/<kisa-ad>`, `deney/<kisa-ad>`
-- Commit mesajı: ilk satır kısa ve emir kipinde ("tez_follow: hedef zaman aşımı ekle"), gerekirse boş satırdan sonra gerekçe.
+- Commit mesajı: ilk satır kısa ve emir kipinde ("kamera: Gazebo görüntüsünü okuyan fonksiyon ekle"), gerekirse boş satırdan sonra gerekçe.
 - Büyük dosya (log, video, veri seti, model ağırlığı) repoya girmez.
 - Sürümü değişebilecek her yeni araç/kütüphane `tez/env/VERSIONS.md`'ye sabit sürümüyle yazılır.

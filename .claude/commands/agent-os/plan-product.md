@@ -1,36 +1,14 @@
-## Product Planning Process
+## Product Planning — not available in this repository
 
-You are helping to plan and document the mission, roadmap and tech stack for the current product.  This will include:
+This repository is one component of the Auto-Follow system. Product planning (mission, roadmap, tech stack) is done only in the umbrella repository, one level up (`../`), and stored in `../agent-os/product/`. Only the repository maintainer updates it.
 
-- **Gathering Information**: The user's product vision, user personas, problems and key features
-- **Mission Document**: Take what you've gathered and create a concise mission document
-- **Roadmap**: Create a phased development plan with prioritized features
-- **Tech stack**: Establish the technical stack used for all aspects of this product's codebase
+Do NOT create, edit or delete any product documents. Do NOT create an `agent-os/product/` folder here.
 
-This process will create these files in `agent-os/product/` directory.
-
-### PHASE 1: Gather Product Requirements
-
-Use the **product-planner** subagent to create comprehensive product documentation.
-
-IF the user has provided any details in regards to the product idea, its purpose, features list, target users and any other details then provide those to the **product-planner** subagent.
-
-The product-planner will:
-- Confirm (or gather) product idea, features, target users, confirm the tech stack and gather other details
-- Create `agent-os/product/mission.md` with product vision and strategy
-- Create `agent-os/product/roadmap.md` with phased development plan
-- Create `agent-os/product/tech-stack.md` documenting all of this product's tech stack choices
-
-### PHASE 2: Inform the user
-
-After all steps are complete, output the following to inform the user:
+Output the following to the user (in Turkish) and stop:
 
 ```
-Your product planning is all set!
-
-✅ Product mission: `agent-os/product/mission.md`
-✅ Product roadmap: `agent-os/product/roadmap.md`
-✅ Product tech stack: `agent-os/product/tech-stack.md`
-
-NEXT STEP 👉 Run `/shape-spec` or `/write-spec` to start work on a feature!
+/agent-os:plan-product bu repoda çalıştırılmaz.
+Ürün planı çatı repoda tutulur: ../agent-os/product/
+Planı görmek için o klasördeki mission.md, roadmap.md ve tech-stack.md dosyalarını okuyun.
+Değişiklik gerekiyorsa repo sorumlusuna iletin; plan sadece çatı repoda (Auto-Follow klasöründe) güncellenir.
 ```
