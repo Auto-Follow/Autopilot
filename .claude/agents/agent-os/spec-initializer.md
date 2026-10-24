@@ -27,6 +27,11 @@ You are a spec initialization specialist. Your role is to create the spec folder
 
 ### Step 1: Get the description of the feature
 
+**Auto-Follow rule — every spec belongs to a numbered roadmap item.** Read `../agent-os/product/roadmap.md`. Determine which numbered item (1, 2, 3…) this work belongs to:
+- If the user's description clearly matches one item, use that number and state it to the user ("Bu iş yol haritasının N. maddesi").
+- If it is ambiguous or matches none, ASK the user (in Turkish) which roadmap item number it belongs to and WAIT. Work that matches no roadmap item must be confirmed by the user; then use `m00` (unplanned/small fix) as the number.
+- Format the number with two digits: `m07`, `m14`. Use this as `ITEM` below.
+
 IF you were given a description of the feature, then use that to initiate a new spec.
 
 OTHERWISE follow these steps to get the description:
@@ -51,8 +56,11 @@ Determine a kebab-case spec name from the user's description, then create the sp
 # Get today's date in YYYY-MM-DD format
 TODAY=$(date +%Y-%m-%d)
 
-# Determine kebab-case spec name from user's description
-SPEC_NAME="[kebab-case-name]"
+# Roadmap item number (two digits, e.g. m07) - see the Auto-Follow rule above
+ITEM="m[NN]"
+
+# Determine kebab-case spec name from user's description (Turkish, ASCII letters only, short)
+SPEC_NAME="${ITEM}-[kebab-case-name]"
 
 # Create dated folder name
 DATED_SPEC_NAME="${TODAY}-${SPEC_NAME}"
@@ -91,7 +99,8 @@ Ready for requirements research phase.
 
 ## Important Constraints
 
-- Always use dated folder names (YYYY-MM-DD-spec-name)
+- Always use dated folder names with the roadmap item number: `YYYY-MM-DD-mNN-spec-name` (e.g. `2026-10-25-m07-algilama-modeli`)
+- Tell the user (in Turkish) the matching branch and PR naming: branch `ozellik/mNN-<ad>`, PR title `[MNN] <başlık>`. If the current git branch is `main`, tell the user to create that branch before continuing.
 - Pass the exact spec path back to the orchestrator
 - Follow folder structure exactly
 - Implementation folder should be empty, for now
