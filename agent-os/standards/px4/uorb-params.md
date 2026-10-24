@@ -6,7 +6,7 @@
 - Abonelikte `update()` dönüş değeri kontrol edilir; veri tazeliği zaman damgasıyla doğrulanır.
 
 ### Parametreler
-- Yeni parametrelerin ön eki/adlandırması **henüz karara bağlanmadı**; varsayma, repo sorumlusuna sor. PX4 parametre adları en fazla 16 karakterdir.
+- Parametre adlarını **işi yapan kişi kendi spec'inde belirler**; önceden belirlenmiş bir ön ek yoktur. PX4 kuralları: büyük harf ve alt çizgi, en fazla 16 karakter, mevcut PX4 parametreleriyle çakışmamalı. Aynı modülün parametrelerinde ortak bir ön ek kullanmak okunabilirliği artırır; ön eki modülü yazan kişi seçer.
 - `module.yaml`'da tanımlanır: `description`, `type`, `default`, `min`, `max`, `unit`, `decimal`.
 - Kodda `DEFINE_PARAMETERS((ParamFloat<px4::params::<PARAM_ADI>>) _param_<param_adi>)`; `parameter_update` aboneliğiyle güncellenir.
 - Kazanç ve eşik değerleri koda gömülmez, parametre olur.
