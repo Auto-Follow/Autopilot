@@ -1,0 +1,29 @@
+task_groups:
+  - name: px4-v1170-ad-envanteri-ve-dogrulama
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-1-ust-seviye-akis
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-iskelet-ve-a-baslatma-mod-kaydi-arming-check
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-b-cevrim-veri-akisi-ve-kontrolcu-zinciri
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-c-mod-secimi-cikis-hedef-kaybi-failsafe
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-d-dogrulama-akisi
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: capraz-tutarlilik-sozdizimi-kapsam-kontrolu
+    claude_code_subagent: implementer
+    standards:
+      - all
