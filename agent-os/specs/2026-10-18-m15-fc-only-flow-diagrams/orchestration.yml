@@ -1,0 +1,29 @@
+task_groups:
+  - name: baseline-ve-pwm-zinciri-kaynak-dogrulamasi
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-ortak-bolumler-ve-b-giris-tarafi
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-b-main-pwm-zinciri
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-2-d-sahte-pi-silme-ve-notrleme
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: sema-1-fc-detayli-ve-b-esleme-tablosu
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: capraz-tutarlilik-kapsam-sozdizimi-kontrolu
+    claude_code_subagent: implementer
+    standards:
+      - all
+  - name: masaustu-kopyalari-ve-pdf
+    claude_code_subagent: orchestrator
+    standards:
+      - none
