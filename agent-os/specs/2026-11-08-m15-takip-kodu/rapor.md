@@ -1,7 +1,9 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
 > **Sürüm:** 1 (shape-spec sonu), 2026-11-09
+>
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
+>
 > **Durum:** Henüz **kod yazılmadı**. Bu rapor, iki günlük planlama (shape-spec) sonunda kararlaştırılan sistemi anlatır. Uygulama ve test sonuçları geldikçe yeni sürümler eklenecek (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
