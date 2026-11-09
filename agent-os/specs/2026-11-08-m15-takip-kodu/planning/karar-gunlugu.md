@@ -317,12 +317,36 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
   - Ham `debug_array` logda `data[0]`… olarak yalnızca debug biti açıksa görünür; buna ihtiyaç yok.
   - Koşul: Kendi mesajımız için gereken kilitli yolları (`msg/`, `logged_topics.cpp`) Hüseyin'in onaylaması. Onaylamazsa geri dönüş yolunda adlar logda görünmez.
 
-## Açık konular (shape-spec sonunda, 2026-11-09)
+- **Zaman bilgisinin kullanımı — Karar (kullanıcı: "bunlar tamam"):**
+  - Pi zamanı **yaş (ms)** olarak gönderir; yanında sıra numarası ve hedef var/yok bayrağı.
+  - FC eskiliği gerçek yaşa göre kontrol eder ve gecikmeyi loga yazar.
+  - "Hedef yok" bayrağı gelince kayıp durumu hemen başlar.
+  - Gecikme telafisi m15'te yok; loglardaki gerçek gecikmeye göre gerekirse m13/m16'da eklenir.
+  - Gerekçe: Pi ve Pixhawk saatleri farklı, "yaş" saat eşitlemesi gerektirmiyor; eskilik kontrolü güvenliği doğrudan artırıyor; ihtiyaç tahminle değil veriyle belirlenecek.
+- **Diğer adlar — Karar (kullanıcı: "bunlar tamam"):**
+  - modül `auto_follow`
+  - log mesajı `AutoFollowStatus.msg` → `auto_follow_status`
+  - Pi mesajı `AF_LOS`
+  - kaynak dosyalar `AutoFollow.cpp/.hpp`, `AutoFollowGuidance.cpp/.hpp`, `AlphaBetaFilter.hpp`
+  - birim test `AutoFollowGuidanceTest.cpp`
+  - script'ler `tez/sitl/af_los_gonder.py`, `tez/analiz/af_log_analiz.py`
+  - spec dosyaları `log-sozlugu.md`, `rapor.md`
 
-- **9. Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu): Ayrıca sorulmadı. Diğer kararlardan çıkan öneriler `requirements.md`'de "öneri, write-spec'te teyit" olarak yazılır:
-  - `can_arm_and_run` hedef yokken de `true` kalır; aksi hâlde PX4 RTL'e düşer, bu da D kararıyla çelişir.
-  - Moda hem QGC'den hem RC anahtarından geçilir.
-- **9. Masa testi:** GPS yokken neyin görüleceği.
-- **11. Kalıcı gönderici:** Vision ve m06 ile konuşulacak. Geçici test göndericisini biz yazıyoruz.
-- **Adlar:** Modül, mod, parametreler, log mesajı ve alanları, sözlük ve rapor dosyaları, test script'leri. Her biri gerektiğinde sorulacak.
-- **Kilit listesi talebi:** Hüseyin'e iletilecek.
+  Log alanlarının adları write-spec'te sorulacak.
+- **Kullanıcının talimatı:** "Şimdi write-spec'e geçme. Bu soruları, konuşmaları, her şeyi kaydet: şu zamana kadar ne yaptık, nasıl yaptık, seçimler neydi, neden seçtik ve şu ana kadar yaptıklarımızla nasıl bir sistem oluşuyor; her şeyi en ince detayına kadar kaydet."
+  - Bunun üzerine:
+    - `requirements.md` bugünkü bütün kararlarla güncellendi;
+    - spec klasörünün köküne bütün süreci ve oluşan sistemi anlatan `rapor.md` yazıldı.
+  - Write-spec kullanıcı onayı bekliyor.
+
+## Açık konular (güncel, 2026-11-09 gece)
+
+Güncel liste `../rapor.md` Bölüm 11'de ve `requirements.md` Bölüm 10'da. Kısaca:
+- mod kaydının teknik ayrıntıları,
+- masa testinde GPS yokken ne görüleceği,
+- log alan adları,
+- RC override,
+- şema kopyalarının güncellenmesi (onaylandı, write-spec'te),
+- Vision ile girdi biçimi,
+- m06'dan kamera eğimi,
+- Hüseyin'den kilit listesi onayı.

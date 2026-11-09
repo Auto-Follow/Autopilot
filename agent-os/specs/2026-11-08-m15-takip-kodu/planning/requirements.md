@@ -2,7 +2,8 @@
 
 - **Görev:** https://github.com/Auto-Follow/Auto-Follow/issues/6 (yol haritası madde 15; devamı 13 ve 16). Son teslim **2026-11-15**.
 - **Repo / dal:** Autopilot, `ozellik/m15-takip-kodu`. Spec klasörü: `agent-os/specs/2026-11-08-m15-takip-kodu/`.
-- **Durum:** Shape-spec tamamlandı (2026-11-09). Sonraki aşama: `write-spec`.
+- **Durum:** Shape-spec tamamlandı (2026-11-09). Aynı gün shape-spec sonrası konuşmada açık kalan maddeler karara bağlandı ve bu dosyaya işlendi (KG "Shape-spec sonrası, write-spec öncesi"). Sonraki aşama: `write-spec`; **kullanıcı onay vermeden başlamaz.**
+- **Bütün sistemi anlatan rapor:** `../rapor.md`.
 - **Kaynaklar (bu dosya bunlardan derlendi, yeni karar içermez):**
   - `planning/raw-idea.md`: görevin ilk tanımı ve issue #6 kabul kriterleri.
   - `planning/tur1-cevaplar.md`: kısa karar tablosu.
@@ -104,17 +105,27 @@ Bu spec'in kararlarından gelen ek koşullar:
 - **Guidance hesabı ayrı bir sınıfta**, uçuş donanımından bağımsız tutulur. Böylece bilgisayarda otomatik birim testleriyle sınanabilir (`../agent-os/standards/testing/test-writing.md:6`).
 - Kaynak: KG Soru 4.
 
-### 3.4 Girdi mesajı: `DEBUG_VECT` → `debug_vect` (Soru 5, **Karar: 5-a, Varsayım olarak**)
+### 3.4 Girdi mesajı: `DEBUG_FLOAT_ARRAY` → `debug_array` (**Karar**, 2026-11-09; ilk karar 5-a `DEBUG_VECT`'in yerine geçer; **Varsayım**)
 
-- Pi'den gelen yön, MAVLink `DEBUG_VECT` mesajıyla gelir ve PX4'te uORB `debug_vect` topic'ine dönüşür. Mesajda üç sayı (x, y, z) ve kısa bir ad (`name`) vardır.
-- **Bu bir varsayımdır.** Hangi mesajın kullanılacağı ortak ICD'de (yol haritası madde 3–5) belirlenecek; ICD yazılınca bu karar güncellenir. Yeni MAVLink mesajı eklemek yasaktır (`../agent-os/standards/px4/uorb-params.md:15-16`).
-- Değerlendirilen diğer seçenekler: `DEBUG_FLOAT_ARRAY` (daha çok alan, sıra no konabilir), `LANDING_TARGET` (hassas iniş için, çakışma riski), `NAMED_VALUE_FLOAT` (mesaj başına tek sayı).
-- **Bilinen sınırlamalar** (spec'e ve rapora yazılır):
-  - Mesajda **sıra numarası yok**; aynı ölçümün tekrar gelmesi ya da eski ölçüm yakalanamaz. Bu, standarttaki "sıra numarası/zaman damgası ile tekrar veya eski mesaj kontrolü" maddesinin (`../agent-os/standards/global/validation.md:6`) **bilinen eksiği** olarak yazılır.
-  - `timestamp` ölçüm anını değil, mesajın Pixhawk'a **varış anını** gösterir (`src/modules/mavlink/mavlink_receiver.cpp:2804`).
-  - Topic ortaktır; başka yazılımlar da aynı mesajı kullanabilir. Bu yüzden `name` alanına göre süzülür. `debug_vect` tek instance olduğundan ikinci bir kaynak doğru örnekleri de ezebilir (`visuals/02-px4-detayli-akis.md`, S5 notu).
-  - Bu mesajın işleyicisi `CONSTRAINED_FLASH` ayarı açılırsa derlemeden çıkar. m14 (flash'ta yer açma) yapılırken bu bilinmelidir.
-- Kaynak: KG Soru 5.
+- **Kullanıcı:** "Vision'daki arkadaşım bana body frame verisi ve timestamp gönderecek; girdimiz bu."
+- **Neden `DEBUG_VECT` değil:** PX4 v1.17.0, MAVLink debug mesajlarının kendi zaman alanını atıp yerine varış anını yazıyor (`src/modules/mavlink/mavlink_receiver.cpp:2804`, `:2822`). `DEBUG_VECT`'in veri kısmı yalnızca x, y, z olduğu için Pi'nin zaman bilgisi FC'ye taşınamaz. `DEBUG_FLOAT_ARRAY`'in veri kısmı 58 sayı (`msg/DebugArray.msg`), zaman bilgisi bu kısımda taşınır.
+- Pi'den gelen veri MAVLink `DEBUG_FLOAT_ARRAY` ile gelir ve PX4'te uORB `debug_array`'e dönüşür (`mavlink_receiver.cpp:2814-2832`). Mesaj adı (`name`): **`AF_LOS`**.
+- **Kutu yerleşimi (Varsayım; ICD m3–5 yazılınca güncellenir):**
+
+| Kutu | İçerik | Birim | Ne işe yarar |
+|---|---|---|---|
+| `data[0..2]` | LOS x, y, z (body FRD birim vektör) | — | Asıl girdi |
+| `data[3]` | Yaş: görüntünün çekildiği andan gönderime kadar geçen süre | ms | Verinin gerçek eskiliği |
+| `data[4]` | Sıra numarası (her mesajda 1 artar) | — | Tekrar eden ya da sırası karışmış mesajı yakalamak |
+| `data[5]` | Hedef var (1) / yok (0) | — | Pi "hedefi kaybettim" dediği anda bilmek |
+
+- **Neden "yaş":** Pi'nin saati ile Pixhawk'ın saati aynı değil. Pi "X ms önce çekildi" derse Pixhawk kendi saatiyle hesaplar: çekim anı ≈ varış anı − X. Seri hat gecikmesi birkaç ms olduğu için ihmal edilir. Bu biçim Vision tarafıyla (Yusuf Ortatepe) konuşulacak (Bölüm 10).
+- **Zaman bilgisiyle yapılanlar (m15):** Bkz. 3.13.
+- **Kalan sınırlamalar:**
+  - `debug_array` ortak bir topic; başka yazılımlar da yayınlayabilir. Bu yüzden `name` = `AF_LOS` olanlar alınır.
+  - İşleyici, `CONSTRAINED_FLASH` açılırsa derleme dışı kalır (`mavlink_receiver.cpp:284-305`, `:2748-2833`). m14 yapılırken bu bilinmelidir.
+- Yeni MAVLink mesajı eklenmez (`../agent-os/standards/px4/uorb-params.md:15-16`).
+- Kaynak: KG Soru 5; KG "Shape-spec sonrası" → "Girdi mesajı — Karar".
 
 ### 3.5 PX4'e verilen istek: `trajectory_setpoint` (Soru 7, **Karar: 7-a, mutlak yaw**)
 
@@ -178,8 +189,16 @@ Bu spec'in kararlarından gelen ek koşullar:
   - Hesaplanan mesafe makul mü (en büyük menzil)?
   - Drone'un kendi konum bilgisi (yerel konum) geçerli mi?
 - Geçersiz mesaj **atılır**, `perf_counter` ile **sayılır** ve **hız sınırlı** olarak loglanır; guidance hesabına asla girmez (`../agent-os/standards/global/validation.md:7`).
-- **Zaman aşımı (8.3)** bir parametredir; önerilen aralık 0.5–1.0 s. Varsayılan değeri ve `T_kayip` ile ilişkisi Açık (bkz. Bölüm 10).
-- `DEBUG_VECT`'te sıra no olmadığından "tekrar/eski ölçüm" yakalanamaz; **bilinen eksik** olarak yazılır.
+- **Eşik değerleri (Karar, 2026-11-09):** Hepsi parametredir ve testlerden sonra QGC'den değiştirilir:
+  - Vektör uzunluk toleransı `AF_NORM_TOL` = 0.1. İnce ayar değil, bozuk veri yakalayıcı.
+  - En küçük aşağı bakış açısı `AF_MIN_DEP` = 10°, en büyük menzil `AF_MAX_RNG` = 40 m. Gerekçe: Açı küçüldükçe açıdaki hata mesafeye büyüyerek yansır. 5 m irtifada 1° hata, 30°'de ~0.5 m, 10°'de ~3 m, 5°'de ~10 m mesafe hatası demek.
+  - Çevrim hızı parametre değildir; kodda sabit 50 Hz.
+- **Ek kontroller (girdi `DEBUG_FLOAT_ARRAY` olduğu için):**
+  - Sıra numarası öncekinden büyük mü (tekrar ya da geri giden mesaj atılır)?
+  - Yaş, veri zaman aşımından küçük mü?
+  - "Hedef var" bayrağı 1 mi?
+  - Bu kontrollerle standarttaki tekrar/eski mesaj maddesi (`../agent-os/standards/global/validation.md:6`) karşılanır.
+- **Süreler (Karar, 2026-11-09):** Veri zaman aşımı `AF_DATA_TOUT` = 0.5 s; dolunca "kayıp" başlar ve drone yerinde bekler. "Kayıp" başladıktan `AF_LOST_T` = 1.0 s sonra Hold'a geçilir (3.8). Toplamda son geçerli mesajdan 1.5 s sonra drone Hold'dadır. Gerekçe: Pi 10–30 Hz gönderecek, 0.5 s 5–15 kayıp mesaj demek; PX4 offboard kaybı da 1 s bekler (`COM_OF_LOSS_T`, `src/modules/commander/commander_params.c:340`). Pi "hedef yok" derse kayıp zaman aşımını beklemeden hemen başlar.
 - Kaynak: KG Soru 8, `tur1-cevaplar.md` madde 8.
 
 ### 3.8 Hedef kaybı davranışı: D (kademeli) (**Karar**; kullanıcı "önemli" olarak işaretledi)
@@ -189,7 +208,8 @@ Bu karar `tur1-cevaplar.md`'deki ilk 8.2 kaydının ("hover yayınla, Hold iste�
 - **Kısa kayıp** (`T_kayip` dolmadan): Mod açık kalır. Modül **hover** yayınlar: mevcut konum + hız 0 + son yaw. Hedef yeniden görülürse takip **kendiliğinden sürer**.
 - **Uzun kayıp** (`T_kayip` aşıldı): Modül `VEHICLE_CMD_SET_NAV_STATE` komutuyla **Hold** (`AUTO_LOITER`) ister (`src/modules/commander/Commander.cpp:936-944`). Hedef geri gelse de drone takibe **kendiliğinden dönmez**.
   - Pilot modu yeniden açar: QGC'den tek tıkla ya da RC anahtarını başka konuma alıp geri getirerek. Anahtarı yerinde bırakmak yetmez, çünkü RC mod isteği yalnızca anahtar konumu değişince gönderilir (`ManualControl.cpp:176-177`).
-- **`T_kayip`** bir parametredir. Başlangıç 1 s.
+- **`T_kayip`** = `AF_LOST_T`, başlangıç 1.0 s. "Kayıp" durumu veri zaman aşımıyla (`AF_DATA_TOUT` = 0.5 s) ya da Pi'nin "hedef yok" bayrağıyla başlar; `AF_LOST_T` o andan itibaren sayılır.
+- **Hedef görünmezken moda girilirse (Karar 5-a, 2026-11-09):** D aynen uygulanır; 1.5 s içinde geçerli hedef gelmezse Hold. Pratikte mod, hedef görünürken açılır. `can_arm_and_run` hedef yokken de `true` kalır; `false` olursa PX4 RTL'e düşer.
 - **İlk test uçuşları:** `T_kayip` kısa tutulur (ör. 0.5–1 s); davranış pratikte B olur ("kayıpta hemen Hold, kendiliğinden dönüş yok"). Gerekçeler:
   - Model yanlış bir şeyi hedef sanırsa drone pilot onayı olmadan harekete geçmez.
   - Denenmemiş kodumuz yerine PX4'ün denenmiş Hold modu devreye girer.
@@ -218,7 +238,13 @@ Bu karar `tur1-cevaplar.md`'deki ilk 8.2 kaydının ("hover yayınla, Hold iste�
 - **Hedef yüksekliği** (hedefin bakılan noktası, ör. ayak mı gövde ortası mı; V5) ve **zemin ofseti**, ikisi de parametredir.
 - Flash'a sığmazsa geri dönüş: (i), yalnızca hedef yüksekliği parametresi. Bir parametre flash'ta çok az yer kapladığı için büyük olasılıkla sığar; kesin durum 6C derlemesinde görülecek.
 - Kullanıcı: "Flash'a sığdırabilirsek 3. seçenek en iyisi."
-- Bu iki parametrenin mesafe formülüne tam olarak nasıl girdiği write-spec'te yazılır (doğrulanacak).
+- **Formül (Karar, 2026-11-09):**
+  ```
+  yükseklik farkı  = drone yüksekliği (−z) − AF_GND_OFS − AF_TGT_HGT
+  mesafe           = yükseklik farkı / tan(aşağı bakış açısı)
+  istenen mesafe   = yükseklik farkı / tan(AF_TRK_ANG)
+  ```
+  Varsayılanlar: `AF_TGT_HGT` = 1.0 m, `AF_GND_OFS` = 0 m. Örnek: drone 10 m, açı 30°. Düzeltmesiz mesafe 17.3 m; hedef yüksekliği 1.2 m girilince 15.2 m. Düzeltme olmasa ~2 m hata olurdu. Zemin ofseti, hedefin yürüdüğü zemin kalkış yerinden farklı yükseklikteyse kullanılır (ör. 2 m yüksek tepe → 2).
 - Kaynak: KG Oturum 2 Soru 13, `tur1-cevaplar.md` madde 13.
 
 ### 3.11 Loglama (L1–L4)
@@ -234,9 +260,20 @@ Bu karar `tur1-cevaplar.md`'deki ilk 8.2 kaydının ("hover yayınla, Hold iste�
   - **Geri dönüş:** Hüseyin reddederse (a) PX4'ün hazır `debug_array` mesajı (`msg/DebugArray.msg`, ad + 58 sayılık dizi) + sözlük. Bu durumda alanlar logda `data[0]`, `data[1]`… görünür; adlar ancak sözlükten ya da sözlüğü kullanan analiz script'inden gelir.
   - Reddedilen: (c) `debug_key_value` (alan başına bir mesaj; her döngüde çok mesaj gerekir, logger hepsini yakalamayabilir (doğrulanacak)).
   - Önceki ara karar "(a) şimdi, (b) sonra" bu kararla geçersizdir.
-- **Logda olması istenen içerik:** filtrenin girdisi (ölçülen hedef konumu) ve çıktısı (kestirilen konum ve hız), kayıp durumu, atılan mesaj sayısı gibi modülün iç durumu. Bunlar PX4'ün varsayılan topic'lerinde yok (KG Soru 10, 10.4). Kesin alan listesi write-spec'te, adları kullanıcıya sorularak yazılır.
+- **Log mesajı:** `msg/AutoFollowStatus.msg` → topic **`auto_follow_status`** (Karar, adlar 2026-11-09).
+- **Her zaman kaydedilir (Karar 4, 2026-11-09):** `logged_topics.cpp`'deki varsayılan listeye eklenir. Kullanıcı ayrıca bir ayar açmaz: "Her zaman kaydedilsin, ekstra bir şey açmama gerek kalmasın."
+- **Logda olması istenen içerik:**
+  - Pi'den gelen ham girdi (LOS x/y/z, yaş, sıra no, hedef var), bu mesaja kopyalanır;
+  - doğrulama sonucu ve atılan mesaj sayaçları;
+  - filtrenin girdisi (ölçülen hedef konumu) ve çıktısı (kestirilen konum ve hız);
+  - hesaplanan mesafe, istenen mesafe ve hız isteği;
+  - durum (takip / kayıp-bekle / Hold istendi);
+  - AUTO FOLLOW'un **mod numarası** (`nav_state` 23–30).
+
+  Kesin alan listesi ve adları write-spec'te log sözlüğüyle birlikte kullanıcıya sorulur.
+- **Kullanıcının sorusu:** "Logda her şeyi kendi isimleriyle göreceğiz değil mi?" Evet; `DEBUG_FLOAT_ARRAY` yalnızca taşıyıcıdır, logda bakılan `auto_follow_status`'un adlı alanlarıdır.
 - **Varsayılan olarak zaten loga girenler** (kod gerekmez): `trajectory_setpoint` (bizim isteğimiz), `vehicle_status` (mod değişimleri, Hold), `vehicle_command` (Hold isteği), `vehicle_local_position`, `vehicle_attitude`, `vehicle_control_mode`, `actuator_motors` (`src/modules/logger/logged_topics.cpp:131-150, 214`).
-- **L1:** Log ayarındaki (`SDLOG_PROFILE`) **debug biti açılır** (bit 5). Girdimiz `debug_vect` yalnızca bu bit açıksa kaydedilir (`logged_topics.cpp:290-294`).
+- **L1 — Güncellendi (2026-11-09):** Debug bitini açmaya **gerek yok**. Ham girdi zaten `auto_follow_status`'a kopyalanıyor ve bu mesaj her zaman kaydediliyor. Ham `debug_array` yalnızca debug biti açıksa kaydedilir (`logged_topics.cpp:290-294`); ihtiyaç yok.
 - **L3 — Karar:** `SDLOG_MODE` varsayılan kalır (0 = yalnızca arm iken log, `src/modules/logger/module.yaml:16-30`). Kullanıcı: "Masa testi yapacağımda parametreden 0/1 ayarlarım; bu zaten normal PX4 parametresi." Not: Bu parametre değiştikten sonra kart **yeniden başlatılmalı** (`logger/module.yaml:31`, `reboot_required: true`). SITL'de varsayılan 1'dir (`ROMFS/px4fmu_common/init.d-posix/rcS:180`).
 - **Logların yeri** (kullanıcının gereksinimi: gerçek uçuşta 6C'nin SD kartı, simülasyonda laptop). PX4 bunu kendisi yapıyor, kod gerekmez:
   - Gerçek uçuş: `/fs/microsd/log/<tarih>/<saat>.ulg` (`src/modules/logger/logger.cpp:1296`).
@@ -265,9 +302,20 @@ Kullanıcının çerçevesi: "Arkadaşım gerçek uçuş ortamına yakın bir si
   - Her senaryo için yazılacaklar: **ne verildi, drone ne yaptı, ULog adı** (kabul kriteri).
   - Standart gereği: mümkünse `HEADLESS=1`; her testten sonra SITL parametre dosyası sıfırlanır (`../agent-os/standards/testing/test-writing.md:13-15`).
 - **10.3 — Değerlendirme:** ULog + pyulog script'iyle ölçülür; göz kararı "iyi uçtu" test sayılmaz (`../agent-os/standards/testing/test-writing.md:14`). pyulog sabit sürümü 1.2.4 (`tez/env/VERSIONS.md:28`, analiz venv'i).
-- **Geçici test göndericisi (11 için geçici çözüm):** m06 hazır olana kadar sahte yönü gönderen test script'i **bu işin parçasıdır ve biz yazarız.** Açık ve kapalı çevrim kiplerini kapsar. Script'in yeri ve adı write-spec'te kullanıcıya sorulur. (Not: `tez/*` kilit listesinde, `tez/pin/allowed-paths.txt:4`; pymavlink 2.4.50 laptop kilit dosyasında, `tez/env/VERSIONS.md:17`.)
+- **Geçici test göndericisi (11 için geçici çözüm):** m06 hazır olana kadar sahte yönü gönderen test script'i **bu işin parçasıdır ve biz yazarız.** Açık ve kapalı çevrim kiplerini kapsar. Script: `tez/sitl/af_los_gonder.py`; Pi'nin göndereceği `DEBUG_FLOAT_ARRAY` (`AF_LOS`) mesajını 3.4'teki yerleşimle taklit eder. Değerlendirme script'i: `tez/analiz/af_log_analiz.py`. (Not: `tez/*` kilit listesinde, `tez/pin/allowed-paths.txt:4`; pymavlink 2.4.50 laptop kilit dosyasında, `tez/env/VERSIONS.md:17`.)
 - **m06'ya taşıma notu:** Gerçekçi simülasyon Ahmet Kazalcı'nın m06 işidir. O hazır olunca testler oraya taşınır.
 - Kaynak: KG Soru 10 (iki anlatım) ve "L2 ve test kararları (kesin)".
+
+### 3.13 Zaman bilgisinin kullanımı (**Karar**, 2026-11-09)
+
+- Kullanıcı: "Geldikten sonra ne yapacağımız bize kalmış; isteklerime göre uygun olanı söyle, kafama yatarsa yaparız." Öneri sunuldu, kullanıcı "bunlar tamam" dedi.
+- **m15'te yapılanlar:**
+  - **Eskilik kontrolü gerçek yaşa göre:** Çekim anı ≈ varış anı − yaş. Görüntü `AF_DATA_TOUT`'tan eskiyse reddedilir. Pi'de işlem takılırsa eski bir görüntü "taze" görünmez.
+  - **Gecikme loga yazılır:** Her mesajın yaşı ve hesaplanan toplam gecikmesi `auto_follow_status`'a girer. Gerçek gecikme testlerde sayıyla görülür.
+  - **"Hedef yok" bayrağı:** Pi 0 gönderirse "kayıp" durumu, veri zaman aşımını beklemeden hemen başlar.
+  - **Sıra numarası:** Tekrar eden ya da geri giden mesaj atılır ve sayılır.
+- **m15'te yapılmayan:** Gecikme telafisi, yani LOS'u NED'e çevirirken görüntünün çekildiği andaki tutumu kullanmak (son ~0.5 s'lik tutum geçmişi gerekir). Önce loglardaki gerçek gecikmeye bakılır; büyükse m13/m16'da eklenir. İhtiyaç tahminle değil veriyle belirlenir. V3 bu yüzden "varış anındaki tutum" olarak kalır.
+- Pi tarafı biçimi farklı gönderirse (ör. yaş yerine mutlak saat), yalnızca girdiyi okuyan kısım değişir.
 
 ---
 
@@ -278,14 +326,14 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler kes
 | # | Varsayım | Kaynak / durum |
 |---|---|---|
 | V1 | **Girdi:** Body FRD frame'de hedef yönünü gösteren **LOS birim vektörü** (x ileri, y sağ, z aşağı). Kamera montaj açısı Pi tarafında uygulanmıştır; FC montaj açısını bilmez. | 1. tur soru 13 (kullanıcıya sunulan metin). İtiraz gelmedi. |
-| V2 | **Taşıma:** 5. soruda seçilen mesaj, MAVLink `DEBUG_VECT` → `debug_vect`. Frekans, zaman damgası ve "hedef yok" sinyali ICD'de (m3–5) belirlenecek. | 1. tur soru 13; Karar 5-a (3.4). İtiraz gelmedi. |
+| V2 | **Taşıma:** MAVLink `DEBUG_FLOAT_ARRAY` (`name` = `AF_LOS`) → `debug_array`; kutu yerleşimi 3.4'te (LOS x/y/z, yaş ms, sıra no, hedef var/yok). Pi body frame LOS ve zaman damgası gönderecek (kullanıcı). Kesin biçim ve frekans ICD'de (m3–5). | Karar 2026-11-09 (3.4). |
 | V3 | **Tutum:** LOS → NED dönüşümünde verinin FC'ye **varış anındaki** `vehicle_attitude` kullanılır; gecikme telafisi yok. | 1. tur soru 13. İtiraz gelmedi. |
 | V4 | **Yükseklik:** Drone yüksekliği `-vehicle_local_position.z`. Zemin düz ve kalkış düzlemi kabul edilir; mesafe düz dünya kabulüyle irtifadan hesaplanır. | **Karar 13-(iii)** (3.10). |
 | V5 | **Hedef noktası:** Hedefin bakılan noktasının yüksekliği (ayak / gövde ortası) ve zemin ofseti parametredir. | **Karar 13-(iii)** (3.10). |
 | V6 | **Eksenler:** LOS vektörünün eksen yönleri ve işaretleri Yusuf Ortatepe'nin m10 çalışmasıyla eşlenecek. **Açık.** | 1. tur soru 13; issue #6 "Dikkat". |
 
 - **Not (ana ajan düzeltmesi):** Spec-shaper V1–V6 metinlerini kaynak dosyalarda bulamamıştı. Metinler, 1. turda kullanıcıya sunulan soru listesinin 13. maddesinden alınarak tamamlandı. O listenin tam metni yalnızca konuşma kaydında duruyordu.
-- **`DEBUG_VECT` sınırlamaları:** bkz. 3.4.
+- **Girdi mesajının sınırlamaları:** bkz. 3.4.
 - **Eksenler:** LOS vektörünün eksen yönleri ve işaretleri **Yusuf Ortatepe'nin m10** (piksel → body frame) çalışmasıyla eşlenecek. **Açık.**
 - **Takip açısı / kamera eğimi:** **Ahmet Kazalcı'nın m06** kamera montaj dokümanıyla eşlenecek. SITL için o zamana kadar bir değer seçilecek. **Açık.**
 
@@ -293,39 +341,51 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler kes
 
 ## 5. Parametreler: başlangıç değerleri ve adlar
 
-### 5.1 Başlangıç değerleri (öneri kabul; KG Soru 6 tablosu)
+### 5.1 Parametreler ve başlangıç değerleri (adlar **Karar**, 2026-11-09; değerler öneri kabul)
 
-Hepsi parametredir (`../agent-os/standards/px4/uorb-params.md:12`: kazanç ve eşikler koda gömülmez). Adlar henüz verilmedi; aşağıdaki köşeli parantezli adlar yalnızca **yer tutucudur**.
+Hepsi parametredir (`../agent-os/standards/px4/uorb-params.md:12`: kazanç ve eşikler koda gömülmez). Testlerden sonra QGC'den değiştirilir, kod yeniden derlenmez. Ön ek `AF_` (kullanıcı); PX4 v1.17.0'da `AF_` önekli parametre yok. Hepsi en fazla 16 karakter.
 
-| Yer tutucu | Sade anlamı | Başlangıç |
+| Parametre | Sade anlamı | Başlangıç |
 |---|---|---|
-| `<takip açısı parametresi>` | Hedefin kadraj ortasında durduğu aşağı bakış açısı | Kamera eğimi (m06'dan); SITL için seçilecek |
-| `<K kazancı parametresi>` | Mesafe hatası ne hızla düzeltilsin (2 m hata → 1 m/s) | 0.5 1/s |
-| `<v_max parametresi>` | Takipte en fazla yatay hız | 2 m/s |
-| `<ivme sınırı parametresi>` | Hız isteği ne kadar sert değişebilir | 3 m/s² (PX4'ün otomatik modlardaki `MPC_ACC_HOR` varsayılanı, `src/modules/mc_pos_control/multicopter_autonomous_params.c:88`) |
-| `<alpha parametresi>`, `<beta parametresi>` | Filtre yeni ölçüme ne kadar güvensin | SITL'de denenerek seçilecek |
-| `<hedef hızı katsayısı c parametresi>` | Kestirilen hedef hızı yasaya ne kadar eklensin | 0 (ilk testler); kapalı çevrim testle açılacak |
-| `<T_kayip parametresi>` | Kaç saniye kayıptan sonra Hold'a geçilsin | 1 s (ilk uçuşlarda 0.5–1 s) |
-| `<yaw koruma mesafesi parametresi>` | Bu yatay mesafenin altında yaw değişmez | ~1 m |
-| `<hedef yüksekliği parametresi>`, `<zemin ofseti parametresi>` | Mesafe hesabını düzeltir | Seçilecek |
-| `<zaman aşımı parametresi>` (8.3) | Bir mesaj kaç saniyeden eskiyse geçersiz | Aralık 0.5–1.0 s; varsayılan **Açık** |
+| `AF_TRK_ANG` | Takip açısı: hedefin kadraj ortasında durduğu aşağı bakış açısı | Kamera eğimi (m06'dan); SITL için 30° |
+| `AF_K_DIST` | Mesafe kazancı K (2 m hata → 1 m/s) | 0.5 1/s |
+| `AF_K_FF` | Hedef hızı katsayısı c (0 = kapalı) | 0 (ilk testler); kapalı çevrim testle açılır |
+| `AF_VEL_MAX` | Takipte en fazla yatay hız | 2 m/s |
+| `AF_ACC_MAX` | İvme sınırı: hız isteği ne kadar sert değişebilir | 3 m/s² (PX4 `MPC_ACC_HOR` varsayılanı, `src/modules/mc_pos_control/multicopter_autonomous_params.c:88`) |
+| `AF_ALPHA`, `AF_BETA` | Alpha-beta filtre katsayıları | SITL'de denenerek seçilecek |
+| `AF_DATA_TOUT` | Veri zaman aşımı: bu süre veri gelmezse "kayıp" | 0.5 s |
+| `AF_LOST_T` | "Kayıp"tan Hold'a kadar süre (T_kayip) | 1.0 s |
+| `AF_YAW_MIN_D` | Bu yatay mesafenin altında yaw değişmez | 1 m |
+| `AF_TGT_HGT` | Hedefin bakılan noktasının yüksekliği | 1.0 m |
+| `AF_GND_OFS` | Hedefin zemininin kalkış yerine göre yüksekliği | 0 m |
+| `AF_NORM_TOL` | LOS vektör uzunluk toleransı | 0.1 |
+| `AF_MIN_DEP` | En küçük aşağı bakış açısı | 10° |
+| `AF_MAX_RNG` | En büyük menzil | 40 m |
 
-- 8.1'deki diğer eşikler (birim norm toleransı, en küçük aşağı açı, en büyük menzil) ve çevrim hızı (~50 Hz) için başlangıç değeri kaynaklarda verilmemiştir; parametre mi sabit mi olacakları write-spec'te belirlenir (Bölüm 10).
+- Çevrim hızı parametre değildir; kodda sabit 50 Hz.
 
-### 5.2 Adlar (Soru 12, **Karar (süreç)**)
+### 5.2 Adlar (Soru 12 süreç kararı; adlar **Karar**, 2026-11-09)
 
-- Kullanıcı: "Süreçte karar verelim; her ad gerektiğinde sor."
-- Aşağıdakilerin **her biri gerektiği anda tek tek** kullanıcıya sorulur; önceden toplu ad verilmez, Claude ön ek dayatmaz:
-  - modül adı (klasör ve komut, `snake_case`) ve `CONFIG_MODULES_<AD>`,
-  - modun QGC/RC'de görünen adı,
-  - parametre adları (PX4 kuralları: **büyük harf, en fazla 16 karakter, mevcut parametrelerle çakışma yok**; `../agent-os/standards/px4/uorb-params.md:9`),
-  - log mesajı (`msg/<Ad>.msg`) ve alan adları (ve varsa önekleri, Betaflight'taki `trk…` gibi),
-  - `DEBUG_VECT` `name` değeri,
-  - log sözlüğü ve rapor dosyalarının adları,
-  - test script'lerinin adları.
-- **Eski taslak adlar geçersizdir:** `tez_follow`, `TEZ_FOL_*`, `TEZ_LOS`, `CONFIG_MODULES_TEZ_FOLLOW`. Bu adlar `planning/visuals/` şemalarında hâlâ geçiyor (bkz. Bölüm 11).
+| Ne | Ad |
+|---|---|
+| QGC/RC'de görünen mod adı | **`AUTO FOLLOW`** |
+| Modül klasörü ve shell komutu | `auto_follow` (`src/modules/auto_follow/`), `CONFIG_MODULES_AUTO_FOLLOW` |
+| Parametre ön eki ve adları | `AF_` (5.1) |
+| Log mesajı | `msg/AutoFollowStatus.msg` → topic `auto_follow_status` |
+| Pi'den gelen mesajın adı | `AF_LOS` (`DEBUG_FLOAT_ARRAY` `name`) |
+| Kaynak dosyalar | `AutoFollow.cpp/.hpp`, `AutoFollowGuidance.cpp/.hpp`, `AlphaBetaFilter.hpp` |
+| Birim test dosyası | `AutoFollowGuidanceTest.cpp` |
+| SITL test göndericisi | `tez/sitl/af_los_gonder.py` |
+| Log değerlendirme script'i | `tez/analiz/af_log_analiz.py` |
+| Log sözlüğü | `log-sozlugu.md` (spec klasörü) |
+| Rapor | `rapor.md` (spec klasörü) |
 
----
+- Log mesajının alan adları henüz verilmedi; write-spec'te sözlükle birlikte sorulur. Bundan sonra gereken yeni her ad da aynı şekilde sorulur.
+- **Eski taslak adlar geçersizdir:** `tez_follow`, `TEZ_FOL_*`, `TEZ_LOS`, `CONFIG_MODULES_TEZ_FOLLOW`.
+- **⚠️ `AUTO_FOLLOW_TARGET` uyarısı (Karar):** PX4'ün kendi Follow Me modu (`NAVIGATION_STATE_AUTO_FOLLOW_TARGET` = 19, `msg/versioned/VehicleStatus.msg:55`; kod `FlightTaskAutoFollowTarget`, parametreler `FLW_TGT_*`) bizim AUTO FOLLOW ile **ilgili değildir**.
+  - Çalışma anında çakışma yok: PX4 modları numarayla ayırıyor (bizimki 23–30), kod, parametre ve topic adları da ayrı.
+  - Karışıklık yalnızca insan tarafında olabilir: QGC'de iki benzer ad görünür ve bazı log araçları 19'u "Auto Follow" diye gösterebilir.
+  - Önlemler: uyarı **log sözlüğüne ve rapora** yazılır; log mesajına mod numarası eklenir; kodda hiçbir şeye `AutoFollowTarget` / `follow_target` adı verilmez; RC anahtarı (`COM_FLTMODEx`) bizim mod numarasıyla ayarlanır.
 
 ## 6. Kilitli yollar, onay ve flash
 
@@ -372,7 +432,7 @@ Bu yolların hiçbiri şu an `tez/pin/allowed-paths.txt`'te yok. Hepsi **tek bir
 
 ### 7.3 Sıra numarası kontrolü
 
-- `../agent-os/standards/global/validation.md:6` tekrar/eski mesaj kontrolünü sıra numarası veya zaman damgasıyla istiyor. `DEBUG_VECT`'te sıra no yok ve zaman damgası varış anı (3.4). Bilinen eksik olarak yazılır; ICD'de çözülmesi beklenir.
+- `../agent-os/standards/global/validation.md:6` tekrar/eski mesaj kontrolünü sıra numarası veya zaman damgasıyla istiyor. **Çözüldü (2026-11-09):** Girdi `DEBUG_FLOAT_ARRAY` olduğu için sıra numarası ve yaş mesajın içinde taşınıyor (3.4, 3.7). Kesin biçim ICD'ye bağlı.
 
 ---
 
@@ -430,19 +490,19 @@ Yetişmeyenler "m16'ya kalanlar" listesine (1.3) yazılır.
 
 ## 10. Açık konular
 
-| # | Konu | Durum / öneri |
+Shape-spec sonrası konuşmada kapananlar (2026-11-09): süreler, doğrulama eşikleri, yükseklik formülü, log mesajının kaydı, hedef yokken moda giriş, girdi mesajı ve zaman damgası, bütün adlar (log alanları hariç). Kalanlar:
+
+| # | Konu | Durum |
 |---|---|---|
-| 9.x | **Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi `mode_req_*`, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu) | Ayrıca sorulmadı. Diğer kararlardan çıkan **öneriler, write-spec'te teyit edilecek:** (1) `can_arm_and_run` hedef yokken de **`true`** kalır; `false` olursa PX4 RTL'e düşer (`failsafe/failsafe.cpp:698-702`), bu da D kararıyla çelişir. (2) Moda **hem QGC'den hem RC anahtarından** geçilir. |
-| 9 | **Masa testi (GPS yokken)** | Kapalı ortamda GPS yoksa yerel konum geçersizdir; "yerel konum geçerli" kontrolü yüzünden modül hover/bekleme durumunda kalır ve hedef konumunu hesaplamaz. Masada ne görülmek isteniyor: mesajın alınıp doğrulanması mı, LOS → NED dönüşümü mü, setpoint hesabı mı? Masa testinde log için `SDLOG_MODE` 1 ya da 2 + yeniden başlatma (3.11). |
-| 11 | **Kalıcı yön göndericisi** | Hiçbir repoda `DEBUG_VECT`/LOS gönderen kod yok (KG Soru 11 tarama sonucu). Kim ve nerede yazacağı Yusuf Ortatepe (Vision, m10/m12) ve Ahmet Kazalcı (m06; issue #7 "Model → PX4" oku) ile konuşulacak. Geçici test göndericisini biz yazıyoruz (3.12). |
-| 12 | **Adlar** | Bölüm 5.2'deki her ad gerektiğinde sorulacak. |
-| 6 | **Kilit listesi talebi** | Bölüm 6.1'deki yollar Hüseyin'e tek talep olarak iletilecek. |
-| 8.3 | **Zaman aşımı ile `T_kayip` ilişkisi** | 8.3'teki mesaj zaman aşımı (0.5–1.0 s, varsayılan Açık) ile `T_kayip` (1 s) iki ayrı parametre mi, hover hangi süreyle başlar? Kaynaklarda net değil; write-spec'te teyit edilecek (bkz. Bölüm 13). |
-| 8.1 | **Doğrulama eşikleri** | Birim norm toleransı, en küçük aşağı açı, en büyük menzil ve çevrim hızı için değer verilmedi; standart kazanç/eşiklerin parametre olmasını istiyor (`../agent-os/standards/px4/uorb-params.md:12`), flash ise kısıtlı. Write-spec'te belirlenecek. |
-| 3.10 | **Hedef yüksekliği ve zemin ofsetinin formüle girişi** | Write-spec'te yazılacak. |
-| V | **Eksenler (m10), kamera eğimi (m06)** | Bölüm 4. |
-| RC | **RC override** | Çubuğa dokununca external moddan çıkılıp çıkılmadığı (doğrulanacak; S3). |
-| 3.11 | **`add_topic` satırının yeri** | Kendi mesajımızın varsayılan listeye mi, debug profiline mi ekleneceği (doğrulanacak; write-spec). |
+| 9.x | **Mod kaydının teknik ayrıntıları** (9.1 `mode_req_*` listesi, 9.4 kontrol bayrakları) | Öneri: `angular_velocity`, `attitude`, `local_alt`, `local_position` gerekli; pozisyon/hız/irtifa/tutum/rate/allocation bayrakları açık, manual/offboard kapalı (doğrulanacak). Write-spec'te teyit. Moda geçiş: hem QGC hem RC (Karar). `can_arm_and_run` = `true` (Karar 5-a). |
+| 9 | **Masa testi (GPS yokken)** | Kapalı ortamda yerel konum geçersiz olur ve modül hedef konumunu hesaplamaz. Masada ne görülmek isteniyor? Write-spec'te konuşulacak. Masa testinde log: kullanıcı `SDLOG_MODE`'u kendisi değiştirir, kart yeniden başlatılır. |
+| ICD | **Vision ile girdi biçimi** | Pi'nin `AF_LOS` mesajını 3.4'teki yerleşimle (LOS x/y/z, yaş ms, sıra no, hedef var/yok) göndermesi Yusuf Ortatepe ile konuşulacak. Eksenler m10 ile eşlenecek. |
+| 11 | **Kalıcı gönderici** | Vision (m12) ve m06 ile konuşulacak. Geçici test göndericisini biz yazıyoruz (3.12). |
+| LOG | **Log mesajının alan adları** | Write-spec'te log sözlüğüyle birlikte sorulacak. |
+| 6 | **Kilit listesi talebi** | 6.1'deki yollar Hüseyin'e tek talep olarak iletilecek. |
+| m06 | **Kamera eğimi / takip açısı** | Ahmet'in m06 kamera montaj dokümanından gelecek; SITL için 30°. |
+| RC | **RC override** | Çubuğa dokununca external moddan çıkılıp çıkılmadığı (doğrulanacak). |
+| GECIKME | **Gecikme telafisi** | m15'te yok. Loglardaki gerçek gecikmeye bakılır; gerekirse m13/m16'da eklenir (3.13). |
 
 ---
 
@@ -452,7 +512,8 @@ Yetişmeyenler "m16'ya kalanlar" listesine (1.3) yazılır.
   - `planning/visuals/01-ust-seviye-akis.md`: Üst seviye akış. FC'ye MAVLink ile gelen body FRD LOS → mod aktif mi → mesaj geçerli mi → LOS'u NED'e çevir → aşağı açı ve mesafe → hedefin NED konumu → hedef kestirimi → guidance (istenen mesafe, hız, yaw, sınırlar) → PX4 kontrolcüleri → PWM → ESC → motorlar. Hedef görünmezse "yerinde bekle", süre dolunca "Hold". Referans görselin şekil dilini kullanan sade, siyah-beyaz bir akış (paralelkenar girdi, kutu işlem, eşkenar dörtgen karar, kesik çizgi TBD).
   - `planning/visuals/02-px4-detayli-akis.md`: PX4 v1.17.0'a özel detaylı akış. Bloklar: (A) başlatma, mod kaydı ve arming check; (B) çevrim başına veri akışı (run loop); (C) mod seçimi, çıkış, hedef kaybı ve failsafe; (D) doğrulama akışı (GoogleTest → Gazebo SITL → ULog/pyulog → gerçek uçuş, S1–S7). Her kutu `dosya:satır` kanıtlı.
 - **Durum:** Şemalar eski taslak spec'ten kopyalanmıştır; eski klasördeki dosyalar değişmedi (KG Oturum 1).
-- **Bilinen farklar (şimdi düzeltilmez):** Şemalarda eski taslak adlar (`tez_follow`, `TEZ_FOL_*`) ve bu spec'te karara bağlanmış konular hâlâ "TBD" olarak geçiyor (ör. yükseklik kaynağı, setpoint tipi); masaüstü `guidance-yasalari.md` atfı iki dosyada da var (`01-ust-seviye-akis.md:9`, `02-px4-detayli-akis.md:8`). Şemaların güncellenmesi write-spec/uygulama aşamasında, kullanıcıya sorularak yapılır.
+- **Güncelleme onayı (2026-11-09):** Kullanıcı TBD'lerin güncellenmesini onayladı. Kararlaşanlar kararla değişecek (ICD → `DEBUG_FLOAT_ARRAY` varsayımı, yükseklik, guidance, setpoint, süreler → `AF_` adları, SITL girdisi → geçici gönderici). Açık kalanlar TBD olarak kalacak (kilit listesi onayı, ICD zaman biçimi, insan modeli/m06). Eski adlar AUTO FOLLOW / `AF_` olacak, masaüstü bağlantısı rapora çevrilecek. Değişiklik yalnızca bu spec'teki kopyalara uygulanır; write-spec aşamasında yapılır.
+- **Bilinen farklar (henüz düzeltilmedi):** Şemalarda eski taslak adlar (`tez_follow`, `TEZ_FOL_*`) ve bu spec'te karara bağlanmış konular hâlâ "TBD" olarak geçiyor (ör. yükseklik kaynağı, setpoint tipi); masaüstü `guidance-yasalari.md` atfı iki dosyada da var (`01-ust-seviye-akis.md:9`, `02-px4-detayli-akis.md:8`). Şemaların güncellenmesi write-spec/uygulama aşamasında, kullanıcıya sorularak yapılır.
 - **PNG dönüşümü ertelendi:** `mmdc` ve Node.js kurulu değil. Yeni araç kurmak sabit sürümüyle `tez/env/VERSIONS.md`'ye yazılmayı gerektirir (çatı kural 4). **Kurmadan önce kullanıcıya sorulur.**
 
 ---
@@ -475,5 +536,6 @@ Kodu kopyalamak için değil, kalıp ve kanıt olarak (spec-writer bunlara bakar
 ## 13. Kaynaklar arasındaki farklar (bilgi notu)
 
 - `tur1-cevaplar.md`'deki bazı kayıtlar sonradan güncellendi; geçerli olan karar günlüğündeki son kayıttır: 8.2 → D (Hold m15'te); madde 6'daki ilk formül → hedef hızı katsayılı yasa; madde 13 "Teyit bekliyor" → (iii); L2 "(a) şimdi, (b) sonra" → (b). `tur1-cevaplar.md`'nin "Sonraki adım" bölümündeki açık maddeler karar günlüğünün sonunda kapanmıştır.
-- Mesaj zaman aşımı (8.3) ve `T_kayip`: `tur1-cevaplar.md` madde 8 ayrı bir zaman aşımı parametresinden söz ediyor; karar günlüğünün başlangıç tablosunda yalnızca `T_kayip` var. Taslak şema 02'nin S4'ünde de iki ayrı süre geçiyor (eski adlarla). İlişki write-spec'te teyit edilecek (Bölüm 10).
+- Mesaj zaman aşımı ile `T_kayip` ilişkisi **çözüldü (2026-11-09):** `AF_DATA_TOUT` 0.5 s sonra kayıp başlar, `AF_LOST_T` 1.0 s sonra Hold (3.7, 3.8).
+- 5-a (`DEBUG_VECT`) kararı, 2026-11-09'da `DEBUG_FLOAT_ARRAY` ile değiştirildi (3.4). `tur1-cevaplar.md`'deki 5. satır tarihsel kayıttır.
 - V1–V6 metinleri dosyalarda yoktu; ana ajan 1. tur soru listesinden tamamladı (Bölüm 4).
