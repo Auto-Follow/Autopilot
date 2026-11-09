@@ -276,10 +276,12 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
 
 ---
 
-## Açık konular (henüz karar yok)
+## Açık konular (shape-spec sonunda, 2026-11-09)
 
-- **10. Test:** Birim testi kapsamda mı, SITL senaryoları neler, loglar nerede saklanacak?
-- **14. Kapsam ve ürün planı:** Kapsam dışı listesi, `tech-stack.md` güncellemesi, masaüstündeki `guidance-yasalari.md`, eski taslak spec'ler.
-- **9. Masa testi ayrıntıları:** GPS yokken ne görülecek, `SDLOG_MODE`, modun ihtiyaç listesi.
-- **11. Sahte yönü kim gönderecek?** Vision tarafıyla ve m06 ile konuşulacak.
-- **Adlar:** Gerektikçe sorulacak.
+- **9. Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu): Ayrıca sorulmadı. Diğer kararlardan çıkan öneriler `requirements.md`'de "öneri, write-spec'te teyit" olarak yazılır:
+  - `can_arm_and_run` hedef yokken de `true` kalır; aksi hâlde PX4 RTL'e düşer, bu da D kararıyla çelişir.
+  - Moda hem QGC'den hem RC anahtarından geçilir.
+- **9. Masa testi:** GPS yokken neyin görüleceği.
+- **11. Kalıcı gönderici:** Vision ve m06 ile konuşulacak. Geçici test göndericisini biz yazıyoruz.
+- **Adlar:** Modül, mod, parametreler, log mesajı ve alanları, sözlük ve rapor dosyaları, test script'leri. Her biri gerektiğinde sorulacak.
+- **Kilit listesi talebi:** Hüseyin'e iletilecek.
