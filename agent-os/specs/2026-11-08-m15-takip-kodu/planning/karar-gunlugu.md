@@ -241,6 +241,10 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
     - `src/modules/logger/logged_topics.cpp`'ye bir satır.
 
     Bunlar Hüseyin'den istenecek kilit listesi genişletmesine eklenir.
+- **L2 — Güncel kesin karar (önceki "(a) şimdi, (b) sonra" kararının yerine geçer):** **(b) kendi mesaj tipimiz.** Alanlar logda kendi adlarıyla görünür. Kullanıcı: "Kilitli dosyalara böyle durumlarda dokunuruz, sıkıntı yok."
+  - Gereken kilitli yollar, Hüseyin'den istenecek tek kilit listesi talebine eklenir: `src/modules/<ad>/`, iki `.px4board`, `msg/<Ad>.msg`, `msg/CMakeLists.txt`, `src/modules/logger/logged_topics.cpp`.
+  - Çatı kuralı gereği listeyi Claude kendisi genişletmez; ekleme ayrı ve açık bir PR ile, repo sorumlusunun onayıyla yapılır.
+  - Hüseyin reddederse geri dönüş: (a) `debug_array` + sözlük.
 - **10.1 — Karar:** Birim testi yapılır ama **kısa tutulur**. Yalnızca temel hesaplar sınanır: mesafe/yön hesabı, hız yasası ve sınırları, bozuk veri, zaman aşımı. Süre kısıtlı olduğu için hemen SITL'e geçilir.
 - **10.2 — Karar:** SITL senaryoları S1–S7 (en basitten başlayarak).
 
