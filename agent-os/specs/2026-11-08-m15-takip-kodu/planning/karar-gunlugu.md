@@ -287,6 +287,20 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
   - (5) "hedef yokken çalışırsa ne olur ki?";
   - (6) TBD yerler tek tek sorulacak.
 
+- **Cevaplar (2026-11-09):**
+  - **1 — Karar:** Veri zaman aşımı `AF_DATA_TOUT` = 0.5 s; bu süre dolunca "kayıp" başlar ve drone yerinde bekler. `AF_LOST_T` = 1.0 s; "kayıp" başladıktan 1 s sonra Hold. Toplamda son geçerli mesajdan 1.5 s sonra Hold. Gerekçe: Pi 10–30 Hz gönderecek, 0.5 s 5–15 kayıp mesaj demek; PX4 offboard kaybı da 1 s bekler (`COM_OF_LOSS_T`).
+  - **2 — Karar:** Bütün eşikler parametre olur, testlerden sonra QGC'den değiştirilir.
+    - `AF_NORM_TOL` = 0.1. İnce ayar değil, bozuk veri yakalayıcı.
+    - `AF_MIN_DEP` = 10°, `AF_MAX_RNG` = 40 m. Gerekçe: Açı küçüldükçe açı hatası mesafe hatasına büyüyerek yansıyor. 5 m irtifada 1° hata, 30°'de ~0.5 m, 10°'de ~3 m, 5°'de ~10 m mesafe hatası yapıyor.
+    - Çevrim hızı parametre değil, kodda sabit 50 Hz.
+  - **3 — Karar:** yükseklik farkı = drone yüksekliği − `AF_GND_OFS` − `AF_TGT_HGT`; mesafe = yükseklik farkı / tan(aşağı bakış açısı); istenen mesafe = yükseklik farkı / tan(`AF_TRK_ANG`). Varsayılanlar: `AF_TGT_HGT` = 1.0 m, `AF_GND_OFS` = 0 m. Örnek: 10 m, 30°; düzeltmesiz 17.3 m, hedef yüksekliği 1.2 m ile 15.2 m.
+  - **4 — Karar:** AUTO FOLLOW log mesajı **her logda her zaman** kaydedilir (varsayılan topic listesi); kullanıcı ayrıca bir ayar açmaz. Pi'den gelen ham yön de bu mesajın içine kopyalanır. Böylece L1'deki "debug bitini aç" gereği kalkar.
+  - **5 — Karar: (a).** `can_arm_and_run` hedef yokken de `true` kalır; `false` olursa PX4 RTL'e düşer. Hedef görünmezken moda girilirse D aynen uygulanır (1.5 s içinde hedef yoksa Hold). Pratikte mod, hedef görünürken açılır.
+  - **6 — Kullanıcı:** "ICD'de bana body frame (LOS) ve timestamp gelecek." Kalan TBD'ler daha önce cevaplandı.
+    - **Bulgu:** PX4 v1.17.0'da MAVLink `DEBUG_VECT` ve `DEBUG_FLOAT_ARRAY` mesajlarının kendi zaman damgası alanı FC'de **atılıyor**; uORB'a varış zamanı yazılıyor (`mavlink_receiver.cpp:2804` ve `:2822`). Yani Pi'nin zaman damgası ancak mesajın **veri kısmında** taşınırsa FC'ye ulaşır. `DEBUG_VECT`'in veri kısmı yalnızca x, y, z (3 sayı); `DEBUG_FLOAT_ARRAY`'in veri kısmı 58 sayı (`msg/DebugArray.msg`). Karar bekliyor.
+  - **Parametre adları — Karar:** `AF_TRK_ANG`, `AF_K_DIST`, `AF_K_FF`, `AF_VEL_MAX`, `AF_ACC_MAX`, `AF_ALPHA`, `AF_BETA`, `AF_DATA_TOUT`, `AF_LOST_T`, `AF_YAW_MIN_D`, `AF_TGT_HGT`, `AF_GND_OFS`, `AF_NORM_TOL`, `AF_MIN_DEP`, `AF_MAX_RNG`. Kullanıcı "okey" dedi. Diğer adlar (modül, log mesajı, dosyalar) henüz onaylanmadı.
+  - **Kullanıcının sorusu:** AUTO FOLLOW, PX4'ün `AUTO_FOLLOW_TARGET`'ı ile karışır mı? Yalnızca logda mı, yoksa çalışırken de mi? Cevap bir sonraki girişte.
+
 ## Açık konular (shape-spec sonunda, 2026-11-09)
 
 - **9. Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu): Ayrıca sorulmadı. Diğer kararlardan çıkan öneriler `requirements.md`'de "öneri, write-spec'te teyit" olarak yazılır:
