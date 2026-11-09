@@ -307,6 +307,16 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
   - Kodda hiçbir şeye `AutoFollowTarget` / `follow_target` adı verilmez.
 - **Zaman damgası — kullanıcı:** "Vision'daki arkadaşım bana body frame verisi ve timestamp gönderecek; girdimiz bu. Geldikten sonra ne yapacağımız bize kalmış. İsteklerime göre uygun olan neyse onu söyle, kafama yatarsa yaparız." Öneri bir sonraki mesajda sunuldu, karar bekliyor.
 
+- **Girdi mesajı — Karar (5-a'nın yerine geçer):** MAVLink **`DEBUG_FLOAT_ARRAY`** → uORB `debug_array` (`mavlink_receiver.cpp:2814-2832`). Ad `AF_LOS`. Varsayılan kutu yerleşimi (ICD gelene kadar varsayım):
+  - [0..2] LOS x, y, z
+  - [3] yaş (ms)
+  - [4] sıra numarası
+  - [5] hedef var (1) / yok (0)
+- **Kullanıcının sorusu:** "Yine de logda her şeyi kendi isimleriyle göreceğiz değil mi?"
+  - **Cevap:** Evet. Gelen değerler modülde AUTO FOLLOW'un kendi log mesajına adlı alanlar olarak kopyalanır (karar 4 + L2-b), ör. LOS x/y/z, yaş, sıra no, hedef var. Bu mesaj her logda her zaman kaydedilir.
+  - Ham `debug_array` logda `data[0]`… olarak yalnızca debug biti açıksa görünür; buna ihtiyaç yok.
+  - Koşul: Kendi mesajımız için gereken kilitli yolları (`msg/`, `logged_topics.cpp`) Hüseyin'in onaylaması. Onaylamazsa geri dönüş yolunda adlar logda görünmez.
+
 ## Açık konular (shape-spec sonunda, 2026-11-09)
 
 - **9. Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu): Ayrıca sorulmadı. Diğer kararlardan çıkan öneriler `requirements.md`'de "öneri, write-spec'te teyit" olarak yazılır:
