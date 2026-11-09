@@ -1,5 +1,7 @@
 # M15 shape-spec: 1. tur soruların cevapları (çalışma notu)
 
+> **Güncel durum (2026-11-09):** Bu tablo ilk cevapları tarihsel olarak tutar; bazı satırlar sonradan güncellendi (ör. 8.2 → D, L2 → kendi mesaj tipi, 6'nın formülü). **Geçerli kararlar `requirements.md`'de, gerekçeleri `karar-gunlugu.md`'de.** İkisi çelişirse son kayıt geçerlidir.
+
 - Tarih: 2026-11-08
 - Durum: **Shape-spec sürüyor.** `requirements.md` henüz yazılmadı. Kullanıcı, `write-spec` aşamasına geçilmeden önce bazı maddelerin ayrıntılı konuşulmasını istedi.
 - Etiketler:
