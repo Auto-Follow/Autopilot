@@ -232,6 +232,15 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
 ### L2 ve test kararları (kesin)
 - **L2 — Kesin karar:** Şimdi PX4'ün hazır `debug_array` mesajı kullanılır ve log sözlüğü yazılır. Hüseyin'e kendi mesaj tipimiz (b) sorulur; onaylarsa sonradan ona geçilir ve sözlük aynen kullanılır. Alan adları ve önekleri (Betaflight'taki `trk…` gibi) yazılırken kullanıcıya sorulur.
 - **Ekip kuralı önerisi:** "PX4'te yapılan her özelleştirme loga girer ve bir log sözlüğü olur" kuralı ve masa testinde `SDLOG_MODE` notu kullanıcının istediği durum. Kullanıcı bunu ekibin WhatsApp grubuna atacak. Kuralı herkes için bağlayıcı yapmak, çatı repoda standart değişikliği demek (`agent-os-profilleri/` → derleme script'leri → üç repoda PR); bu ayrı bir iştir (m00, kullanıcı ve repo sorumlusu onayıyla).
+- **Kullanıcının netleştirmesi (aynı gün):** "Sözlük kesin olacak. Yazılan durumları logda **kendi adlarıyla** göreceğim. Bunun için ek kod yazılacak mı?"
+  - **Cevap:** Her iki seçenekte de ek kod var: modül her döngüde bir log mesajı doldurur ve yayınlar. Ama alanları logda **kendi adlarıyla** görmek yalnızca (b) kendi mesaj tipimizle mümkün. (a) `debug_array`'de alanlar `data[0]`, `data[1]`… olarak görünür; adlar ancak sözlükten ya da sözlüğü kullanan analiz script'inden gelir.
+  - **⚠️ Düzeltme (önceki bilgi eksikti):** "SD karttaki `logger_topics.txt` ile kilitli dosyaya dokunmadan ek topic loglanır" bilgisi eksikti. Bu dosya varsa PX4 **yalnızca dosyadaki topic'leri** loglar ve varsayılan listeyi tamamen devre dışı bırakır (`logged_topics.cpp:531-540`). Bu yüzden (b) için doğru yol, `src/modules/logger/logged_topics.cpp`'ye bir `add_topic` satırı eklemektir. Bu dosya da kilitli.
+  - **(b) için gereken kilitli PX4 değişiklikleri:**
+    - yeni `msg/<Ad>.msg`,
+    - `msg/CMakeLists.txt`'e bir satır (mesaj listesi `msg/CMakeLists.txt:39`),
+    - `src/modules/logger/logged_topics.cpp`'ye bir satır.
+
+    Bunlar Hüseyin'den istenecek kilit listesi genişletmesine eklenir.
 - **10.1 — Karar:** Birim testi yapılır ama **kısa tutulur**. Yalnızca temel hesaplar sınanır: mesafe/yön hesabı, hız yasası ve sınırları, bozuk veri, zaman aşımı. Süre kısıtlı olduğu için hemen SITL'e geçilir.
 - **10.2 — Karar:** SITL senaryoları S1–S7 (en basitten başlayarak).
 
