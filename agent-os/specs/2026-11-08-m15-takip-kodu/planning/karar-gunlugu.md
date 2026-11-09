@@ -229,6 +229,12 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
 - **L3 — Karar:** Varsayılan kalır (`SDLOG_MODE` = 0, yalnızca arm iken log). Kullanıcı: "Masa testi yapacağımda parametreden 0/1 ayarlarım; bu zaten normal PX4 parametresi." Not: Bu parametre değiştikten sonra kartın **yeniden başlatılması** gerekir (`logger/module.yaml:31`, `reboot_required: true`).
 - **L4 — Karar:** SITL logları silinebildiği için (`make clean`, 7 klasör sınırı) her testten sonra masaüstündeki **`~/Desktop/AUTO-FOLLOW LOG/`** klasörüne kopyalanır. Klasör kullanıcının isteğiyle 2026-11-09'da açıldı. Repo dışında olduğu için kural 9 ile çelişmez. Spec'e log dosyasının adı yazılır.
 
+### L2 ve test kararları (kesin)
+- **L2 — Kesin karar:** Şimdi PX4'ün hazır `debug_array` mesajı kullanılır ve log sözlüğü yazılır. Hüseyin'e kendi mesaj tipimiz (b) sorulur; onaylarsa sonradan ona geçilir ve sözlük aynen kullanılır. Alan adları ve önekleri (Betaflight'taki `trk…` gibi) yazılırken kullanıcıya sorulur.
+- **Ekip kuralı önerisi:** "PX4'te yapılan her özelleştirme loga girer ve bir log sözlüğü olur" kuralı ve masa testinde `SDLOG_MODE` notu kullanıcının istediği durum. Kullanıcı bunu ekibin WhatsApp grubuna atacak. Kuralı herkes için bağlayıcı yapmak, çatı repoda standart değişikliği demek (`agent-os-profilleri/` → derleme script'leri → üç repoda PR); bu ayrı bir iştir (m00, kullanıcı ve repo sorumlusu onayıyla).
+- **10.1 — Karar:** Birim testi yapılır ama **kısa tutulur**. Yalnızca temel hesaplar sınanır: mesafe/yön hesabı, hız yasası ve sınırları, bozuk veri, zaman aşımı. Süre kısıtlı olduğu için hemen SITL'e geçilir.
+- **10.2 — Karar:** SITL senaryoları S1–S7 (en basitten başlayarak).
+
 ---
 
 ## Açık konular (henüz karar yok)
