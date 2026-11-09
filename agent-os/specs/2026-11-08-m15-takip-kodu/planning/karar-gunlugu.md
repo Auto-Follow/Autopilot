@@ -276,6 +276,17 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
 
 ---
 
+### Shape-spec sonrası, write-spec öncesi (2026-11-09)
+- **Adlar (kullanıcı):** Mod adı **"AUTO FOLLOW"**. Parametreler buna paralel olarak **`AF_XXX`**.
+  - Çakışma kontrolü: PX4 v1.17.0 kaynağında `AF_` önekli parametre yok; `auto_follow` adlı modül, topic veya mesaj da yok.
+  - Benzer adlı bir PX4 modu var: PX4'ün kendi Follow Me modu kodda `NAVIGATION_STATE_AUTO_FOLLOW_TARGET` / `AutoFollowTarget` adlarını kullanıyor (`commander/ModeUtil/control_mode.cpp:166`). Çakışma yok, ama log ve QGC'de karıştırılmaması için not edildi.
+- Spec-shaper'ın bulduğu açıklar kullanıcıya sunuldu. Kullanıcının cevapları:
+  - (1) süreler parametre olsun, varsayılanlar güvenli seçilsin;
+  - (2) eşikler tahmin olacağı için parametre olsun, konuşulacak;
+  - (3) ve (4) anlaşılmadı, sade anlatılacak;
+  - (5) "hedef yokken çalışırsa ne olur ki?";
+  - (6) TBD yerler tek tek sorulacak.
+
 ## Açık konular (shape-spec sonunda, 2026-11-09)
 
 - **9. Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu): Ayrıca sorulmadı. Diğer kararlardan çıkan öneriler `requirements.md`'de "öneri, write-spec'te teyit" olarak yazılır:
