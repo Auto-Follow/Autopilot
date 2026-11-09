@@ -248,6 +248,32 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
 - **10.1 — Karar:** Birim testi yapılır ama **kısa tutulur**. Yalnızca temel hesaplar sınanır: mesafe/yön hesabı, hız yasası ve sınırları, bozuk veri, zaman aşımı. Süre kısıtlı olduğu için hemen SITL'e geçilir.
 - **10.2 — Karar:** SITL senaryoları S1–S7 (en basitten başlayarak).
 
+### Soru 14 — Kapsam ve toparlama
+- **Cevap:** "14 öneri gibi olsun" (**öneri kabul**). Tek değişiklik 14.3'te.
+- **14.1 Kapsam dışı:**
+  - C seçeneği ve ayrıntılı failsafe → m16
+  - Nihai yasa ve ince ayar → m13
+  - Pi tarafı, ICD ve kalıcı gönderici → Vision (m3–5, m12)
+  - Gerçekçi simülasyon ve insan modeli → m06
+  - Gerçek uçuş → m22, m25
+  - Flash'ta yer açma → m14
+  - Ekip için "log sözlüğü" standardı → ayrı m00
+- **14.2:** `tech-stack.md`'deki "entegrasyon yaklaşımı: Karar bekliyor" satırı için spec'e ve PR açıklamasına "karar: external mode, güncellenmeli" notu düşülür. Güncellemeyi repo sorumlusu yapar.
+- **14.3 — Değişti:** Kullanıcı: "`guidance-yasalari.md` benim çalışmam içindi. Onun yerine benim ne yaptığımı anlatan bir rapor `.md` daha iyi olur."
+  - Masaüstündeki dosya spec'e alınmaz ve ona dokunulmaz.
+  - Spec klasörüne, işin ne olduğunu, hangi kararların neden alındığını, nasıl test edildiğini ve sonuçlarını sade dille anlatan bir **rapor** yazılır. Rapor karar günlüğünden ve uygulama notlarından derlenir. Dosyanın adı oluşturulurken kullanıcıya sorulur.
+  - `planning/visuals/01-ust-seviye-akis.md` kopyasındaki masaüstü dosyası bağlantısı, ileride bu rapora işaret edecek şekilde değiştirilir. Eski klasördeki asıl şema değişmez.
+- **14.4:** Eski iki taslak spec'e dokunulmaz; bu spec'te "taslaktı, yerini bu spec aldı" atfı yapılır.
+- **14.5 — İş sırası:**
+  1. İskelet (SITL + 6C derlemesi)
+  2. Guidance + alpha-beta
+  3. Kısa birim testi
+  4. SITL S1–S5
+  5. Hold geçişi
+  6. S6–S7 + log mesajı ve sözlüğü
+
+  Yetişmeyenler "m16'ya kalanlar" listesine yazılır.
+
 ---
 
 ## Açık konular (henüz karar yok)
