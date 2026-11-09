@@ -192,6 +192,43 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
 | Yaw koruma mesafesi | Bunun altında yaw değişmez | ~1 m |
 | Hedef yüksekliği, zemin ofseti | Mesafe hesabını düzeltir | Seçilecek |
 
+### Soru 10 — Test (ikinci anlatım ve ilk cevap)
+- **Anlatılan:**
+  - 10.1 birim testi (bilgisayarda drone'suz, saniyeler içinde biten otomatik testler).
+  - 10.2 SITL senaryoları S1–S7. **Açık çevrim** = sabit yön gönderilir; **kapalı çevrim** = script yerde hayali bir hedef tutar ve drone'un konumuna göre gerçek yönü hesaplar.
+  - 10.3 log'dan pyulog ile ölçüm.
+  - 10.4 logların yeri.
+- **Kullanıcının cevabı:** "Arkadaşım gerçek uçuş ortamına yakın bir simülasyon hazırlıyor; o bitince tamamen oraya geçeceğiz. O bitene kadar her şey bizde: kod yazımı bitince Gazebo'da en basit testten başlayıp oluşabilecek tüm durumları test edeceğiz."
+- **Kayıt:**
+  - **10.2: Tüm senaryolar (S1–S7)** bu spec'te, en basitten karmaşığa doğru test edilir.
+  - Gerçekçi simülasyon, Ahmet'in m06 işidir. O hazır olunca testler oraya taşınır; bu spec'e "m06 hazır olunca testler oraya taşınacak" notu düşülür.
+  - **11 için geçici çözüm:** m06 hazır olana kadar sahte yönü gönderen test script'i bu işin parçasıdır ve biz yazarız. Kalıcı göndericinin kim ve nerede olacağı yine Vision ve m06 ile konuşulacak.
+- **Logların yeri (kullanıcının gereksinimi):** "Ek bir uçuş modu yazdığımız için loglar gerçek uçuşta 6C'ye takılı SD karta, simülasyonda ULog olarak benim bilgisayarıma kaydedilmeli."
+  - **Bulgu:** PX4 bunu zaten kendisi yapıyor, kod gerekmiyor:
+    - Gerçek uçuşta loglar SD karta yazılır: `/fs/microsd/log/<tarih>/<saat>.ulg` (`src/modules/logger/logger.cpp:1296`).
+    - SITL'de loglar laptoptaki `build/px4_sitl_default/rootfs/log/<tarih>/<saat>.ulg` klasörüne yazılır (laptopta görüldü, ör. `2026-09-29/18_45_10.ulg`).
+    - Varsayılan olarak loga giren konular: `trajectory_setpoint` (bizim isteğimiz), `vehicle_status` (mod değişimleri, Hold), `vehicle_command` (Hold isteği), `vehicle_local_position`, `vehicle_attitude`, `vehicle_control_mode`, `actuator_motors` (`logged_topics.cpp:131-150, 214`).
+  - **Dikkat edilecekler (karar bekliyor):**
+    - Bizim girdimiz `debug_vect`, yalnızca `SDLOG_PROFILE`'da "debug" biti açıksa kaydedilir (`logged_topics.cpp:290-294`, bit 5).
+    - Gerçek kartta log varsayılan olarak yalnızca arm iken alınır (`SDLOG_MODE`=0); masa testinde kayıt olmaz.
+    - SITL log klasörü `build/` içinde. `make clean` ile ya da en eski klasörler silinirken kaybolur (`SDLOG_DIRS_MAX`=7, `ROMFS/px4fmu_common/init.d-posix/rcS:183`). Testten sonra repo dışına kopyalanmalı.
+    - Modülün iç durumu (filtre kestirimi, kayıp durumu, atılan mesaj sayısı) varsayılan topic'lerde yok; yeni mesaj eklemek ise yasak (`msg/` kilitli).
+
+### Log kararları (L1–L4)
+- **L2 — Kullanıcının gereksinimi (önemli):** "Her durumu log kaydına almamız gerek. Bunun için ek kod yazmak gerekirse de yazalım. Alpha-beta filtresinin girdisi ve çıktısı ve bunların analizi çok önemli."
+  - Kullanıcının örneği: Bir projede özelleştirilmiş Betaflight'ta "track hold" modu vardı. OSD'de hedef kutusu (bbox) görünüyor, mod açılınca drone burnunu yaw ekseninde hedefe çeviriyordu. Bu modu log'da incelemek için `trk` önekli bir alan sözlüğü yapılmıştı, ör. `trkAzErr` = azimut hatası.
+  - **Kural (bu spec ve sonraki her özelleştirme için):**
+    - Yapılan her özelleştirmenin iç durumu loga yazılır.
+    - Her log alanı için bir **log sözlüğü** yazılır: alan adı, anlamı, birimi, frame'i, hangi durumda ne değer aldığı. Log incelenirken bu sözlüğe bakılır.
+    - Sözlük spec klasöründe tutulur ve kodla birlikte güncellenir.
+  - **Teknik seçenekler (karar bekliyor):**
+    - (a) PX4'ün hazır `debug_array` mesajı (`msg/DebugArray.msg`): ad + 58 sayılık dizi, tek mesajda. Sayıların sırası ve anlamı sözlükte tanımlanır.
+    - (b) Yeni bir uORB mesajı: alan adları logda doğrudan görünür. Ama `msg/` kilitli; Hüseyin'in onayı ve kilit listesine yol eklenmesi gerekir. Yeni mesajı loglamak için kilitli `logged_topics.cpp`'yi değiştirmek gerekmez: PX4 SD karttaki `etc/logging/logger_topics.txt` dosyasından ek topic okuyabiliyor (`logged_topics.cpp:533`).
+    - (c) `debug_key_value`: alan başına bir mesaj, `trkAzErr` gibi en fazla 10 karakterlik adlarla. Her döngüde çok sayıda mesaj gerekir; logger hepsini yakalamayabilir (doğrulanacak).
+- **L1:** Kullanıcı "her durum kaydedilsin" dediği için log ayarındaki debug biti açılır. Debug biti açık değilse (a) ve (c) loga girmez.
+- **L3 — Karar:** Varsayılan kalır (`SDLOG_MODE` = 0, yalnızca arm iken log). Kullanıcı: "Masa testi yapacağımda parametreden 0/1 ayarlarım; bu zaten normal PX4 parametresi." Not: Bu parametre değiştikten sonra kartın **yeniden başlatılması** gerekir (`logger/module.yaml:31`, `reboot_required: true`).
+- **L4 — Karar:** SITL logları silinebildiği için (`make clean`, 7 klasör sınırı) her testten sonra masaüstündeki **`~/Desktop/AUTO-FOLLOW LOG/`** klasörüne kopyalanır. Klasör kullanıcının isteğiyle 2026-11-09'da açıldı. Repo dışında olduğu için kural 9 ile çelişmez. Spec'e log dosyasının adı yazılır.
+
 ---
 
 ## Açık konular (henüz karar yok)
