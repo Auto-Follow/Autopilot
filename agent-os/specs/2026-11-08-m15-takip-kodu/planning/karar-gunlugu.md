@@ -301,6 +301,12 @@ PX4 geri kalanı kendisi yapar: hız → eğilme → açısal hız → motor kar
   - **Parametre adları — Karar:** `AF_TRK_ANG`, `AF_K_DIST`, `AF_K_FF`, `AF_VEL_MAX`, `AF_ACC_MAX`, `AF_ALPHA`, `AF_BETA`, `AF_DATA_TOUT`, `AF_LOST_T`, `AF_YAW_MIN_D`, `AF_TGT_HGT`, `AF_GND_OFS`, `AF_NORM_TOL`, `AF_MIN_DEP`, `AF_MAX_RNG`. Kullanıcı "okey" dedi. Diğer adlar (modül, log mesajı, dosyalar) henüz onaylanmadı.
   - **Kullanıcının sorusu:** AUTO FOLLOW, PX4'ün `AUTO_FOLLOW_TARGET`'ı ile karışır mı? Yalnızca logda mı, yoksa çalışırken de mi? Cevap bir sonraki girişte.
 
+- **AUTO_FOLLOW_TARGET sorusunun cevabı:** Çalışma anında çakışma yok. PX4 modları numarayla ayırıyor (Follow Me = 19, `VehicleStatus.msg:55`; AUTO FOLLOW = 23–30, `:59-66`). Kod, parametre ve topic adları da ayrı. Karışıklık yalnızca insan tarafında olabilir: QGC mod listesinde iki benzer ad görünür ve log araçları 19'u "Auto Follow" diye gösterebilir.
+  - **Karar:** Adlar kalır. Log mesajına AUTO FOLLOW'un mod numarası yazılır.
+  - **Log sözlüğüne ve rapora bir uyarı yazılır:** "PX4'ün kendi `AUTO_FOLLOW_TARGET` (Follow Me, `nav_state` 19) modu bizim AUTO FOLLOW ile ilgili değildir."
+  - Kodda hiçbir şeye `AutoFollowTarget` / `follow_target` adı verilmez.
+- **Zaman damgası — kullanıcı:** "Vision'daki arkadaşım bana body frame verisi ve timestamp gönderecek; girdimiz bu. Geldikten sonra ne yapacağımız bize kalmış. İsteklerime göre uygun olan neyse onu söyle, kafama yatarsa yaparız." Öneri bir sonraki mesajda sunuldu, karar bekliyor.
+
 ## Açık konular (shape-spec sonunda, 2026-11-09)
 
 - **9. Mod kaydı ayrıntıları** (9.1 ihtiyaç listesi, 9.3 `can_arm_and_run`, 9.4 kontrol bayrakları, 9.5 geçiş yolu): Ayrıca sorulmadı. Diğer kararlardan çıkan öneriler `requirements.md`'de "öneri, write-spec'te teyit" olarak yazılır:
