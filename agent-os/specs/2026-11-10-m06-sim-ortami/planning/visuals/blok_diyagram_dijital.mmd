@@ -1,0 +1,86 @@
+%% m06 simülasyon ortamı: ayrıntılı blok diyagram (el çiziminin dijital hâli: planning/visuals/blok_diyagram_elle.jpeg)
+%% Aynı kaynak spec.md "Görsel Tasarım" bölümünde de vardır. Kesikli oklar: döngünün kapanışı ve yardımcı akışlar.
+flowchart LR
+  subgraph SG_GZ["Gazebo Harmonic, gz-sim 8.15.0 (tez/sim/worlds, tez/sim/models)"]
+    direction TB
+    DUNYA["Dünya: duz_alan / cayir<br/>insan actor'ları: hedef + diğer insanlar<br/>(yol: senaryo YAML + yuruyus.py)"]
+    DRON["x500_tez_0<br/>PX4 x500 + Camera Module 3<br/>gövde altı ön, sabit 45° aşağı"]
+    CAM["Kamera (imager)<br/>/x500_tez/kamera/image + camera_info<br/>2304×1296 RGB, 30 Hz, sim zamanı damgalı"]
+    SEG["Segmentasyon kamerası (yalnız hakem)<br/>/x500_tez/kamera_seg, 1152×648"]
+    POZ["/world/DUNYA/dynamic_pose/info<br/>/world/DUNYA/clock"]
+  end
+
+  subgraph SG_PY["Laptop: tez/sim/araclar (senaryo.py yönetir)"]
+    direction TB
+    OKU["goruntu.py: kare okuyucu<br/>subscribe_raw, yalnız en yeni kare<br/>model yetişemezse kare atlanır ve sayılır"]
+    KUS["kusurlar.py: kamera kusurları<br/>Faz A: hepsi KAPALI, kare değişmeden geçer"]
+    MOD["algilama.py: model, kare → kutu listesi<br/>Ultralytics .pt, laptop CPU, ayrı süreç<br/>~/auto-follow-modeller/"]
+    SEC["takip.py: hedef seçimi (geçici)<br/>ilk kilit hakemden, sonra en yakın kutu"]
+    HAK["kayit.py: hakem / doğru cevap<br/>los_govde, görünürlük, kutular"]
+    LOSK{"LOS kaynağı<br/>senaryo: takip.los"}
+    LOSI["(i) model: kutu merkezi<br/>kamera.py: piksel → optik → gövde FRD"]
+    LOSII["(ii) hakem: los_govde"]
+    KON["konumlama.py: düz zemin geolocation<br/>kutu alt ortası + kare anındaki EKF pozu"]
+    GEC["gecikme.py: ek gecikme + titreşim<br/>saat ofseti / kayması, varsayılan 0"]
+    PB["px4_baglanti.py: MAVLink<br/>udpin 127.0.0.1:14540, GCS gibi<br/>kalkış, modu adıyla seçer (AVAILABLE_MODES)"]
+    TKK{"Takip kaynağı<br/>takip.kaynak / --takip"}
+    YAY["goruntu_yayini.py<br/>1280×720, 15 fps, kutular çizilir"]
+    RAP["rapor.py / olcum.py / video.py<br/>rapor.html, ozet.json, dogru_cevap.csv,<br/>algilama.csv, kosu.mp4 (H.264, yuv420p)"]
+  end
+
+  subgraph SG_PX4["PX4 SITL v1.17.0, build/px4_sitl_tez (PX4 dosyası değişmez)"]
+    direction TB
+    BAS["Başlangıç: stok rcS<br/>PX4_SYS_AUTOSTART=4001 (gz_x500)<br/>PX4_SIM_MODEL=x500_tez, PX4_GZ_MODEL_NAME=x500_tez_0<br/>PX4_PARAM_*: 4019 kazançları + 22.08 ayarları"]
+    ALI["mavlink alıcısı, onboard 14580<br/>DEBUG_VECT → debug_vect<br/>FOLLOW_TARGET → follow_target"]
+    FM["Follow Target<br/>stok Follow Me"]
+    EXT["Harici mod, adıyla seçilir<br/>ör. m15 takip modu"]
+    HOLD["Hold<br/>yok: açık döngü"]
+    KTR["Konum / duruş / açısal hız kontrolcüleri"]
+    GZB["gz_bridge"]
+    GCSL["mavlink GCS bağlantısı 18570"]
+    ULG["ULog<br/>SDLOG_PROFILE 163: debug_vect dahil"]
+  end
+
+  QGC["QGroundControl 5.1.4<br/>telemetri UDP 14550, video UDP 5600"]
+
+  DUNYA --> CAM
+  DUNYA --> SEG
+  DRON --> CAM
+  CAM --> OKU --> KUS --> MOD --> SEC
+  SEG --> HAK
+  POZ --> HAK
+  HAK -.->|"ilk kilit"| SEC
+  SEC --> LOSK
+  LOSK -->|"model"| LOSI
+  LOSK -->|"hakem"| LOSII
+  HAK --> LOSII
+  SEC --> KON
+  LOSI -->|"TEZ_LOS, işlenen kare başına, en çok 30 Hz"| GEC
+  LOSII -->|"TEZ_LOS, en çok 30 Hz"| GEC
+  KON -->|"FOLLOW_TARGET, en çok 10 Hz, yalnız follow_me"| GEC
+  GEC --> PB
+  PB -->|"UDP 14540 ↔ 14580"| ALI
+  PB -.->|"mod komutu"| TKK
+  TKK -->|"follow_me"| FM
+  TKK -->|"tez_los + mod adı"| EXT
+  TKK -->|"yok"| HOLD
+  ALI --> FM
+  ALI --> EXT
+  ALI --> ULG
+  BAS -.->|"başlangıç parametreleri"| KTR
+  FM --> KTR
+  EXT --> KTR
+  HOLD --> KTR
+  KTR --> GZB
+  GZB -->|"motor komutları"| DRON
+  DRON -->|"IMU, GPS, baro, mag, saat"| GZB
+  DRON -.->|"dron hareket eder → kamera görüntüsü değişir (döngü)"| CAM
+  CAM --> YAY
+  SEC -->|"kutular, UDP 5610"| YAY
+  HAK -->|"hakem kutusu"| YAY
+  YAY -->|"H.264 RTP UDP 5600, --qgc"| QGC
+  GCSL -->|"UDP 14550"| QGC
+  YAY -->|"15 fps kareler"| RAP
+  HAK --> RAP
+  SEC --> RAP
+  ULG --> RAP
