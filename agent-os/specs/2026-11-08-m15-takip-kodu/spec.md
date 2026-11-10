@@ -312,10 +312,10 @@ Bu spec'in kararlarından:
 ## Uygulama sırası (Karar 14.5, öneri kabul)
 
 1. **İskelet:** mod kaydı, arming check (yerde arm'lıyken geçiş engeli dahil, A14), açılışta başlatma satırı (`rc.mc_apps`), 50 Hz çevrim, parametreler; SITL ve 6C derlemesi, flash kullanımı kaydı. (Kilit listesi onayı gelmeden `verify-pin` kırmızı kalır.)
-2. **Guidance + alpha-beta:** doğrulama, geometri, filtre, yasa, sınırlar, yaw/irtifa, setpoint.
+2. **Guidance + alpha-beta:** doğrulama, geometri, filtre, yasa, sınırlar, yaw/irtifa, setpoint. **Log mesajı da burada** (`auto_follow_status`, `log-sozlugu.md` aynı commit; Karar 2026-11-10, kullanıcı "1-a": S1–S5 ilk seferde tam ölçülsün).
 3. **Kısa birim testi** (`AutoFollowGuidanceTest.cpp`).
 4. **SITL ön kontroller + S1–S5** (S4'ün yalnız KAYIP_BEKLE kısmı; Hold kısmı 5. adımdan sonra — Karar A4).
 5. **Hold geçişi** (`VEHICLE_CMD_SET_NAV_STATE`), S4'ün tamamı.
-6. **S6–S7 + log mesajı ve sözlük** (`auto_follow_status`, `log-sozlugu.md` güncellemesi, `af_log_analiz.py`).
+6. **S6–S7 + analiz script'i** (`af_log_analiz.py`), sözlüğün son eşitlemesi.
 
 Her adımdan sonra kontroller geçince commit, görev grubu notu ve `rapor.md` güncellemesi. Yetişmeyenler "m16'ya kalanlar" listesine yazılır.

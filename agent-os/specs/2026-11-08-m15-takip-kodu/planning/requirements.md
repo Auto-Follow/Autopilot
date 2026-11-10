@@ -344,6 +344,9 @@ Ayrıntı, kullanıcının sözleri ve kanıtlar: KG "Write-spec turu (2026-11-1
 | A2 | RC çubuğu | Çubuk oynayınca Position'a geçilir (`flag_control_auto_enabled = true`) |
 | İç düzen | Kod yapısı | Hesaplar `AutoFollowGuidance` kütüphanesinde saf fonksiyonlar (öneri kabul) |
 | A3 | Masa testi | Liste yeterli; dışarıda arm'sız GPS fix'li testler sonra eklenebilir (geliştirmeye açık) |
+| T1 | Log mesajının yeri (create-tasks) | Grup 2'de, guidance ile birlikte; S1–S5 ilk seferde tam ölçülür |
+| T2 | Grup notları | `implementation/` altında, içeriği anlatan adlarla (`tasks.md` "Bütün gruplar için geçerli kurallar") |
+| T3 | Hold 3 kez reddedilirse | Hover sürer, QGC'ye uyarı + log, pilot RC ile devralır; modül kendi başına RTL/iniş istemez |
 | C3 | Adlar | Log alan adları spec tablosundaki gibi, önek yok; durum adları PASIF / TAKIP / KAYIP_BEKLE / HOLD_ISTENDI. Bizim verdiğimiz **bütün adlar** için ayrıntılı sözlük: `../log-sozlugu.md` |
 
 ---

@@ -466,3 +466,11 @@ Spec-writer ajanı `spec.md`'yi yazdı ve iki şema kopyasını güncelledi (com
 - **İç düzen — Kullanıcı: "okey".** **Karar (öneri kabul):** hesaplar `AutoFollowGuidance` kütüphanesinde, zamanı argüman alan saf fonksiyonlar.
 - **A3 — Kullanıcı:** "Masa testlerine şimdilik bunlar yeter, ama mesela dışarıda arm etmeden GPS fix olduğunda yapılacak testler eklenebilir; burası geliştirmeye açık, bunu not al, burayı düşüneceğim." **Karar:** liste yeterli. **Not (geliştirmeye açık):** dışarıda, arm'sız, GPS fix'li masa/yer testleri (geometri ve guidance çıktısı görülebilir) sonra eklenebilir; kullanıcı düşünecek.
 - Kullanıcı create-tasks'a geçişi onayladı. Son cevaplar `spec.md`, `requirements.md` §3.14, `log-sozlugu.md` ve rapor (sürüm 2.1) dosyalarına işlendi.
+
+### create-tasks turu (2026-11-10)
+
+Görev listesi ajanı `tasks.md`'yi yazdı (commit `f6394fc7b3`). Yeni karar gerektiren üç konu kullanıcıya soruldu:
+- **Log mesajı geç geliyordu** (Grup 6), ama S1–S5 ölçümleri onun alanlarına dayanıyor. Seçenekler: (a) Grup 2'ye taşı · (b) sırayı koru, S1–S5'i sonra yeniden koş. Öneri (a). Kullanıcı: **"1-a"**. Log yolları yine Hüseyin'in onayına bağlı.
+- **Grup notlarının yeri.** Öneri `implementation/grup-<N>-notu.md`. Kullanıcı: "Kayıt yeri okey, ama dosya adları o grupta ne var anlatan isimler olsun." **Karar:** `implementation/` altında `grup-0-on-kosullar.md`, `grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`, `grup-5-hold-gecisi.md`, `grup-6-kapali-cevrim-analiz.md` (kullanıcının ilkesine göre Claude'un önerdiği adlar; kullanıcı değiştirebilir). SITL sonuç kayıtları da bu notlara girer.
+- **Hold 3 denemede de reddedilirse.** Öneri: hover sürer, QGC'ye uyarı ve log, pilot RC ile devralır; modül kendi başına RTL/iniş istemez. Kullanıcı: **"tamam"**.
+- Kullanıcı implement adımı için onay verdi ("güncellemeni yap, implement için onayım var").

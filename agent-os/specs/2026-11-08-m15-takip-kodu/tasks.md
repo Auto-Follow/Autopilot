@@ -8,17 +8,17 @@
 
 ## Genel bakış
 
-Toplam: 7 görev grubu (0–6), 86 alt görev (0: 6 · 1: 14 · 2: 16 · 3: 6 · 4: 14 · 5: 11 · 6: 19, geri dönüş 6.F dahil).
+Toplam: 7 görev grubu (0–6), 86 alt görev (0: 6 · 1: 14 · 2: 23, geri dönüş 2.LF dahil · 3: 6 · 4: 14 · 5: 11 · 6: 12). 2026-11-10: log mesajı Grup 6'dan Grup 2'ye taşındı (kullanıcı "1-a").
 
 | Grup | Ne | Kim | Bağımlılık |
 |---|---|---|---|
 | 0 | Ön koşullar: Hüseyin onayı (7 kilitli yol), Vision ile `AF_LOS` anlaşması, açık adlar | Kullanıcı / ekip (kod yok) | Yok |
 | 1 | İskelet: mod kaydı, arming check, açılışta başlatma, 50 Hz çevrim, parametreler, iki derleme ve flash kaydı | PX4 C++ | 0 (onay gelmeden `verify-pin` kırmızı kalır) |
-| 2 | Guidance + alpha-beta: doğrulama, geometri, filtre, yasa ve sınırlar, yaw/irtifa, setpoint | PX4 C++ | 1 |
+| 2 | Guidance + alpha-beta + log mesajı: doğrulama, geometri, filtre, yasa ve sınırlar, yaw/irtifa, setpoint, `auto_follow_status` | PX4 C++ | 1 (log yolları Grup 0 onayına bağlı) |
 | 3 | Kısa birim testi `AutoFollowGuidanceTest.cpp` | PX4 C++ (GoogleTest) | 2 |
 | 4 | SITL: test göndericisi, ön kontroller, S1a, S1b, S2, S3, S4 (yalnız KAYIP_BEKLE), S5 | Python + SITL | 3 |
 | 5 | Hold geçişi ve S4'ün tamamı | PX4 C++ + SITL | 4 |
-| 6 | Log mesajı, sözlük, analiz script'i, S6–S7 (kapalı çevrim), kapanış | PX4 C++ + Python + SITL | 5 ve Grup 0'daki log yolu onayı |
+| 6 | Analiz script'i, S6–S7 (kapalı çevrim), kapanış | Python + SITL | 5 |
 
 ## Bütün gruplar için geçerli kurallar
 
@@ -30,7 +30,7 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 - **Commit:** Her grup sonunda, kontroller geçince, yalnızca o grubun dosyaları **adıyla** eklenir (`git add -A` / `git add .` yok). Mesaj: `2026-11-08-m15-takip-kodu: Görev grubu <N> — <ne yapıldı>`. **Push, amend, rebase, `reset --hard` yok.** Commit'ten önce dal kontrol edilir (`ozellik/m15-takip-kodu` olmalı, `main` değil) ve `git rev-parse --show-toplevel` ile Autopilot reposunda olunduğu doğrulanır.
 - **Doküman koddan geri kalmaz** (spec Bölüm 12): her grup sonunda
   - `rapor.md` güncellenir ("Belge geçmişi"ne yeni sürüm satırı),
-  - spec klasörüne kod okumadan anlaşılacak bir **görev grubu notu** yazılır: ne yapıldı, neden (spec bölümü / karar numarası), nasıl test edildi, hangi sorunlar çıktı ve nasıl çözüldü. Notun dosya adı ve yeri **(ad kullanıcıya sorulacak)**; spec klasöründe şu an boş bir `implementation/` klasörü var.
+  - spec klasörüne kod okumadan anlaşılacak bir **görev grubu notu** yazılır: ne yapıldı, neden (spec bölümü / karar numarası), nasıl test edildi, hangi sorunlar çıktı ve nasıl çözüldü. Notlar **`implementation/`** klasörüne, grubun içeriğini anlatan adlarla yazılır (Karar 2026-11-10; SITL sonuç kayıtları da aynı notlara girer): `grup-0-on-kosullar.md`, `grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`, `grup-5-hold-gecisi.md`, `grup-6-kapali-cevrim-analiz.md`.
   - Yeni bir ad (değişken dışında, kullanıcının göreceği her şey) gerekiyorsa `log-sozlugu.md` **kodla aynı commit'te** güncellenir (Karar C3).
   - İş sırasında yeni bir karar gerekirse kullanıcıya seçenek + kanıt + öneri olarak sunulur; cevap `planning/karar-gunlugu.md` ve `planning/requirements.md`'ye yazılır.
 - **Kod biçimi:** PX4 stili (`../agent-os/standards/global/coding-style.md`): tab girinti, 140 karakter, `make check_format` / `make format`. Python script'leri: `ruff format` + `ruff check` (ruff 0.16.9, `tez/env/analiz-requirements.txt:18`), tip ipuçları, herkese açık fonksiyonlarda docstring. Not: makinede astyle 3.1 kurulu ama `tez/env/VERSIONS.md`'de yazılı değil; `make check_format` kullanmadan önce kullanıcıya sorulur (çatı kural 4) **(doğrulanacak)**.
@@ -68,7 +68,7 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
   - [ ] 0.3 Vision (Yusuf Ortatepe) ile `AF_LOS` anlaşması (A5, V2, V6): yerleşim `data[0..2]` LOS x/y/z (body FRD), `data[3]` yaş [ms], `data[4]` sıra no, `data[5]` hedef var (1) / yok (0); `name = "AF_LOS"`; sıra no float geldiği için 2²⁴ sınırı (spec:136); eksen yönleri ve işaretleri m10 ile (V6, **Açık**). MAVLink 2 Vision tarafından doğrulandı (B1), yeniden sorulmaz.
   - [ ] 0.4 Ahmet Kazalcı'dan kamera eğimi (A6): gelene kadar SITL'de `AF_TRK_ANG` = 30°. Gelmezse iş durmaz.
   - [ ] 0.5 Uygulamada gerekecek, kaynaklarda olmayan şu adlar ve değerler kullanıcıya **tek tek** sorulur ve karar günlüğüne yazılır:
-    - görev grubu notlarının ve SITL sonuç kayıtlarının dosya adı / yeri **(ad kullanıcıya sorulacak)**,
+    - ~~görev grubu notlarının yeri~~ → karar verildi (yukarıdaki "Bütün gruplar için geçerli kurallar"),
     - `tez/sitl/af_los_gonder.py` ve `tez/analiz/af_log_analiz.py`'nin komut satırı seçeneklerinin adları **(ad kullanıcıya sorulacak)** (ilgili grupta da sorulabilir),
     - açık çevrim testlerde script'in gönderim hızı (Pi 10–30 Hz bekleniyor, V2) ve gönderilecek yaş değeri **(değer kullanıcıya sorulacak)**.
   - [ ] 0.6 Cevaplar `planning/karar-gunlugu.md`'ye (ve karar niteliğindeyse `planning/requirements.md`'ye) yazılır; değişen dosyalar adıyla commit edilir: `2026-11-08-m15-takip-kodu: Görev grubu 0 — ön koşul cevapları`.
@@ -117,9 +117,9 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 - Kodda `double` ve dinamik bellek yok.
 - `verify_pin` yalnızca onay bekleyen yolları gösteriyor.
 
-#### Görev grubu 2: Guidance + alpha-beta (doğrulama, geometri, filtre, yasa, yaw/irtifa, setpoint)
+#### Görev grubu 2: Guidance + alpha-beta + log mesajı (doğrulama, geometri, filtre, yasa, yaw/irtifa, setpoint, `auto_follow_status`)
 
-**Bağımlılık:** Grup 1.
+**Bağımlılık:** Grup 1. Log mesajı yolları Grup 0.2'deki onaya bağlı (onay beklenirken kod yazılır, `verify-pin` kırmızı kalır).
 
 - **Ne:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane, adı `AutoFollowGuidance`) ve `AlphaBetaFilter.hpp`; modülün her çevrimde `debug_array`'i okuyup doğrulaması, hedefin yerini bulması, filtrelemesi, hız/yaw/irtifa isteğini hesaplaması ve mod aktifken `trajectory_setpoint` yayınlaması. Durum makinesi (PASIF / TAKIP / KAYIP_BEKLE / HOLD_ISTENDI) de burada yazılır; **Hold komutunun gönderilmesi Grup 5'tedir.**
 - **Neden:** Spec Bölüm 2–8; Karar 6-a, 6.1, 6.3, 6.4, 7-a, C2, A3; "İç düzen" kararı (öneri kabul, 2026-11-10): doğrulama ve durum makinesi **zamanı argüman alan saf fonksiyonlar** olarak `AutoFollowGuidance` içinde, ki birim testiyle sınanabilsin.
@@ -127,7 +127,7 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 
 - [ ] 2.0 Guidance ve filtreyi tamamla
   - [ ] 2.1 Kütüphane düzeni `mc_pos_control/PositionControl/` deseniyle: `px4_add_library` ile `AutoFollowGuidance` kütüphanesi, modül ona bağlanır (`PositionControl/CMakeLists.txt`). Kütüphane uORB ve parametre okumaz; değerleri argüman olarak alır.
-  - [ ] 2.2 Girdi okuma (spec Bölüm 2): her yeni `debug_array` örneği (`mavlink_receiver.cpp:2815-2832`; `timestamp` = FC'ye varış anı, `:2822`). Ham değerler (LOS, yaş, sıra no, bayrak, varış anı) doğrulamadan önce saklanır (Grup 6'da log mesajına kopyalanacak).
+  - [ ] 2.2 Girdi okuma (spec Bölüm 2): her yeni `debug_array` örneği (`mavlink_receiver.cpp:2815-2832`; `timestamp` = FC'ye varış anı, `:2822`). Ham değerler (LOS, yaş, sıra no, bayrak, varış anı) doğrulamadan önce saklanır ve log mesajına kopyalanır (2.L4).
   - [ ] 2.3 Doğrulama, **bu sırayla**, ilk geçilemeyen kontrol sonucu belirler (sonuç adları `log-sozlugu.md` Bölüm 6):
     1. ad `AF_LOS` mı → `CHECK_NAME` (ad en fazla 9 karakter, son bayt NUL; `DebugArray.msg:4`, `mavlink_receiver.cpp:2825`),
     2. altı değer sonlu mu (`PX4_ISFINITE`) → `CHECK_NONFINITE`,
@@ -153,18 +153,30 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 
     Modül sorun anında susmaz, aktif hover yayınlar (standartla çelişki notu, `error-handling.md:4` ↔ `MulticopterPositionControl.cpp:438`; spec Bölüm 8 gerekçesi grup notuna da yazılır).
   - [ ] 2.10 Yerel konum geçersizken (spec Bölüm 8, C2, A10): `position[0..1]` NaN, `velocity[0..1] = 0`; asıl tepki PX4'ün `mode_req_local_position` fallback'idir.
-  - [ ] 2.11 `auto_follow status` anlamlı durum basar: mod numarası, mod aktif mi, iç durum, son doğrulama sonucu ve nedene göre sayaçlar (S5'te log mesajı olmadan bunlara buradan bakılacak).
+  - [ ] 2.11 `auto_follow status` anlamlı durum basar: mod numarası, mod aktif mi, iç durum, son doğrulama sonucu ve nedene göre sayaçlar (konsoldan hızlı kontrol için).
+  - **Log mesajı (Karar 2026-11-10, kullanıcı "1-a": Grup 6'dan buraya taşındı).** Neden: S1–S5 ölçümleri `auto_follow_status` alanlarına dayanıyor; mesaj erken gelirse açık çevrim testleri ilk seferde tam ölçülür ve tekrar koşulmaz. Log yolları Hüseyin'in onayına bağlı: onay → 2.L1–2.L6; ret → 2.LF.
+  - [ ] 2.L1 `msg/AutoFollowStatus.msg`: alanlar spec Bölüm 9 tablosundan **aynen** (ad, tip, birim yorumda; önek yok, C3): `timestamp`, `mode_nav_state`, `mode_active`, `state`, `los_timestamp`, `los_frd`, `los_age`, `los_seq`, `los_target`, `check_result`, `accept_count`, `reject_name_count`, `reject_nonfinite_count`, `reject_norm_count`, `reject_seq_count`, `reject_age_count`, `reject_position_count`, `reject_depression_count`, `reject_range_count`, `no_target_count`, `latency`, `los_ned`, `depression`, `height_diff`, `range_meas`, `target_meas_ned`, `target_est_ned`, `target_vel_ned`, `filter_updated`, `range_est`, `range_desired`, `vel_cmd_law`, `vel_cmd`, `yaw_cmd`, `yaw_frozen`, `alt_hold_z`, `time_since_valid`, `lost_time`, `hold_request_count`. Sabitler: `STATE_PASIF=0`, `STATE_TAKIP=1`, `STATE_KAYIP_BEKLE=2`, `STATE_HOLD_ISTENDI=3`; `CHECK_OK=0`, `CHECK_NAME`, `CHECK_NONFINITE`, `CHECK_NORM`, `CHECK_SEQ`, `CHECK_AGE`, `CHECK_NO_TARGET`, `CHECK_POSITION`, `CHECK_DEPRESSION`, `CHECK_RANGE` (sayısal değerler sözlükte "taslak 0–9", kodla kesinleşir).
+  - [ ] 2.L2 `msg/CMakeLists.txt`'e mesaj listesine bir satır (`msg_files`, `msg/CMakeLists.txt:39`).
+  - [ ] 2.L3 `src/modules/logger/logged_topics.cpp`'de varsayılan listeye (`add_default_topics`, `:46`) **aralıksız** bir `add_topic` satırı (her yayın, 50 Hz; C2). `logger_topics.txt` kullanılmaz (`logged_topics.cpp:531-540`). `SDLOG_MODE` değiştirilmez (Karar L3, A5).
+  - [ ] 2.L4 Modül mesajı **her çevrimde** doldurur ve yayınlar, mod kapalıyken (PASIF) de; `timestamp = hrt_absolute_time()`. Ham girdi doğrulamadan geçmese de `los_*` alanlarına yazılır; `mode_nav_state` kayıt yoksa 0.
+  - [ ] 2.L5 `log-sozlugu.md` **aynı commit'te**: her alan "koddan doğrulandı"; `CHECK_*` ve `STATE_*` sayısal değerleri koddakiyle eşitlenir; "hangi durumda ne değer" sütunundaki boşluklar doldurulur; `AUTO_FOLLOW_TARGET` uyarısı yerinde kalır; belge geçmişine yeni sürüm.
+  - [ ] 2.L6 Kısa doğrulama: yeni bir SITL logunda (kısa bir SITL açılışı, araç arm edilmeden) `auto_follow_status` alanlarının kendi adlarıyla göründüğü ve PASIF'te de yazıldığı görülür; `pxh>`'ta `listener auto_follow_status`.
+  - [ ] 2.LF **Geri dönüş (yalnızca Hüseyin `msg/` ve `logged_topics.cpp` yollarını reddederse):** 2.L1–2.L3 yapılmaz; aynı değerler PX4'ün hazır `debug_array` mesajına konur ve `log-sozlugu.md` Bölüm 4'e "`data[i]` ↔ alan" eşleme tablosu eklenir; `af_log_analiz.py` adları bu tablodan verir. Bu yolda bilinen sorunlar **(doğrulanacak)** ve kullanıcıya sunulur:
+    - `debug_array` girdiyle **aynı topic** ve kuyruğu tektir (spec Bölüm 2): modülün 50 Hz yayını gelen `AF_LOS` örneklerini ezebilir ve kendi mesajımız `CHECK_NAME` sayacını artırır;
+    - ham `debug_array` yalnızca logger'ın debug profili açıkken loglanır (`logged_topics.cpp:289-294`);
+    - durum mesajının `name` alanı **(ad kullanıcıya sorulacak)**; uint64 zaman alanları float32'ye sığmaz, 58 sayılık sınır.
   - [ ] 2.12 Derleme: `make px4_sitl` ve `make px4_fmu-v6c_default`; flash kullanımı ve Grup 1'e göre artış not edilir. Taşma → durulur, Hüseyin'e ve kullanıcıya haber.
   - [ ] 2.13 `tez/pin/verify_pin.sh --worktree`: yalnızca 7 yoldan değişenler.
   - [ ] 2.14 `log-sozlugu.md`: durumlar ve `CHECK_*` sonuçlarının koddaki karşılığı "koddan doğrulandı" diye işaretlenir; "hangi durumda ne değer" sütununda kodla netleşenler doldurulur (aynı commit).
   - [ ] 2.15 `rapor.md` (§4.5 "Her döngüde ne oluyor?" gerçekleşen hâliyle, flash satırı, belge geçmişi) ve görev grubu notu.
-  - [ ] 2.16 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 2 — doğrulama, geometri, alpha-beta, guidance, setpoint`.
+  - [ ] 2.16 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 2 — doğrulama, geometri, alpha-beta, guidance, setpoint, log mesajı`.
 
 **Kabul kriterleri:**
 - Doğrulama sırası spec Bölüm 2'deki 9 adımla birebir; atılan örnek guidance'a girmiyor.
 - Setpoint karışımı her durumda `PositionControl.cpp:224-250` kuralına uyuyor (her eksende konum/hız/ivmeden biri sonlu, x–y çiftleri birlikte).
 - Mod aktif değilken `trajectory_setpoint` yayınlanmıyor; aktifken her çevrimde yayınlanıyor.
 - İki derleme geçiyor; flash kaydı güncel. `double`, dinamik bellek yok.
+- `auto_follow_status` her logda, her çevrimde (PASIF'te de), alanlar spec Bölüm 9 tablosundaki adlarla; `log-sozlugu.md` aynı commit'te güncel, `AUTO_FOLLOW_TARGET` uyarısı içinde.
 
 #### Görev grubu 3: Kısa birim testi (`AutoFollowGuidanceTest.cpp`)
 
@@ -205,7 +217,7 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 - **Ne:** Geçici test göndericisi `tez/sitl/af_los_gonder.py`'nin yazılması (açık ve kapalı çevrim) ve Gazebo Harmonic'te açık çevrim senaryoları. S4'ün Hold kısmı Grup 5'ten sonra (Karar A4).
 - **Neden:** Spec Bölüm 11 (Karar 10.2, A1, A2, A12, B3); issue #6 kabul kriteri 3 ("ne verildi, drone ne yaptı, ULog adı").
 - **Nasıl kontrol edilir:** Her senaryonun ULog'u `~/Desktop/AUTO-FOLLOW LOG/`'a kopyalanmış ve kaydı yazılmış; değerlendirme pyulog 1.2.4 ile (`tez/env/requirements-lock.txt:27`); göz kararı test sayılmaz.
-- **⚠️ Sıra sorunu (kullanıcıya sorulacak):** Spec tablosundaki S1–S5 ölçümlerinin çoğu `auto_follow_status` alanlarıdır (`range_meas`, `vel_cmd_law`, `check_result`, `reject_*_count`…), ama log mesajı ve `af_log_analiz.py` **Grup 6**'da yazılıyor. Bu grupta ölçüm yalnızca varsayılan loglanan topic'lerle (`trajectory_setpoint` 200 ms aralıkla, `vehicle_status`, `vehicle_local_position`, `vehicle_attitude`, `vehicle_command`; `logged_topics.cpp:131-150`) ve konsoldaki `auto_follow status` çıktısıyla yapılabilir. **S1–S5'in Grup 6'dan sonra log alanlarıyla yeniden koşulup koşulmayacağı kullanıcıya sorulur** (bkz. 6.13).
+- **Ölçüm kaynağı:** Log mesajı Grup 2'de geldiği için (Karar 2026-11-10, 1-a) S1–S5 ölçümleri spec Bölüm 11 tablosundaki `auto_follow_status` alanlarıyla yapılır (`range_meas`, `range_desired`, `vel_cmd_law`, `vel_cmd`, `yaw_cmd`, `yaw_frozen`, `state`, `time_since_valid`, `check_result`, `reject_*_count`…), ayrıca varsayılan loglanan PX4 topic'leriyle (`trajectory_setpoint`, `vehicle_status`, `vehicle_local_position`, `vehicle_attitude`; `logged_topics.cpp:131-150`).
 
 - [ ] 4.0 Açık çevrim SITL testlerini tamamla
   - [ ] 4.1 `tez/sitl/af_los_gonder.py` (izinli yol; pymavlink 2.4.50, `tez/env/requirements-lock.txt:25`): Pi'nin `AF_LOS` mesajını spec Bölüm 2 yerleşimiyle `DEBUG_FLOAT_ARRAY` olarak **MAVLink 2** ile gönderir (`data` bir MAVLink 2 ek alanıdır, `common.xml:7630-7631`). SITL onboard bağlantısı UDP 14540/14580 (`px4-rc.mavlink:4-5, 26`). Sıra no her mesajda artar.
@@ -229,9 +241,9 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
   - [ ] 4.8 **S3 Hedef neredeyse tam altta:** LOS (0.174, 0, 0.985), δ = 80° → d ≈ 1.6 m → geri; yasa ≈ −7.0 m/s, 2 m/s'de kırpılır; d > `AF_YAW_MIN_D` (1 m) olduğundan yaw donmaz. Ölçüm: `trajectory_setpoint` hız ve yaw.
   - [ ] 4.9 **S4 (yalnız KAYIP_BEKLE kısmı, Karar A4):** (a) gönderim kesilir → 0.5 s sonra hover; (b) 1.0 s dolmadan gönderim geri gelir → takip kendiliğinden sürer; (c) `data[5] = 0` → hemen hover; (d) hedefsiz moda giriş → girişte hover. Bu grupta Hold komutu henüz olmadığından durum HOLD_ISTENDI'de kalır ve drone hover sürdürür; bu beklenen davranıştır ve kayda öyle yazılır. Ölçüm: `trajectory_setpoint` (hız 0, konum tutma), `auto_follow status` durumu.
   - [ ] 4.10 **S5 Girdi doğrulama:** yanlış ad, NaN/Inf, norm dışı, tekrar/geri sıra no, yaş > 0.5 s, ufka yakın (δ < 10°), menzil > 40 m → her biri atılır, ilgili sayaç artar (`auto_follow status` ve `perf` çıktısı), drone etkilenmez (`trajectory_setpoint` hızı değişmez). Uzun süren bozuk veri hedef kaybı yoluna girer.
-  - [ ] 4.11 Değerlendirme: her ULog pyulog 1.2.4'ün kendi komutlarıyla (ör. `ulog2csv`) okunur; senaryo başına sayısal sonuç (hız, yön, süre) kayda yazılır. Kesin başarı eşikleri m01'e aittir; şimdilik beklenen değerle karşılaştırma yazılır.
+  - [ ] 4.11 Değerlendirme: her ULog pyulog 1.2.4'ün kendi komutlarıyla (ör. `ulog2csv`) okunur; `auto_follow_status` alanları da dahil; senaryo başına sayısal sonuç (hız, yön, süre) kayda yazılır. Kesin başarı eşikleri m01'e aittir; şimdilik beklenen değerle karşılaştırma yazılır.
   - [ ] 4.12 `tez/pin/verify_pin.sh --worktree`; `make tests TESTFILTER=AutoFollowGuidance` hâlâ yeşil. SITL'de kod hatası bulunup düzeltildiyse iki derleme ve flash kaydı tekrarlanır.
-  - [ ] 4.13 Sonuç kayıtları (Grup 0.5'te belirlenen yere), `rapor.md` (§4.9 test sonuçları tablosu, belge geçmişi) ve görev grubu notu (çıkan sorunlar ve çözümleri dahil).
+  - [ ] 4.13 Sonuç kayıtları (`implementation/grup-4-sitl-acik-cevrim.md`), `rapor.md` (§4.9 test sonuçları tablosu, belge geçmişi) ve görev grubu notu (çıkan sorunlar ve çözümleri dahil).
   - [ ] 4.14 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 4 — test göndericisi, ön kontroller, S1–S5`.
 
 **Kabul kriterleri:**
@@ -254,7 +266,7 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 
 - [ ] 5.0 Hold geçişini tamamla
   - [ ] 5.1 HOLD_ISTENDI'ye geçişte `vehicle_command` yayınlanır: `command = VEHICLE_CMD_SET_NAV_STATE` (`msg/versioned/VehicleCommand.msg:114`), `param1 = NAVIGATION_STATE_AUTO_LOITER` (`VehicleStatus.msg:40`), hedef sistem/bileşen `vehicle_status.system_id/component_id` (`VehicleStatus.msg:118-119`; süzgeç `Commander.cpp:746-747`; işleme `:936-944`). `source_component < 1000` olmalı ki istek "User" sayılsın (`Commander.cpp:1559-1562`) **(doğrulanacak)**.
-  - [ ] 5.2 `vehicle_command_ack` izlenir; `TEMPORARILY_REJECTED` gelirse hover sürer ve istek **1 s arayla en fazla 3 kez** tekrarlanır (C2). Gönderilen istek sayısı tutulur (Grup 6'da `hold_request_count` alanına girecek). 3 denemeden sonra da reddedilirse spec "hover sürer" der; bunun ötesinde bir davranış spec'te yok, gerekirse **kullanıcıya sorulacak**.
+  - [ ] 5.2 `vehicle_command_ack` izlenir; `TEMPORARILY_REJECTED` gelirse hover sürer ve istek **1 s arayla en fazla 3 kez** tekrarlanır (C2). Gönderilen istek sayısı `hold_request_count` alanına yazılır. **3 denemeden sonra da reddedilirse (Karar 2026-11-10, kullanıcı "tamam"):** drone yerinde beklemeye (hover) devam eder, durum HOLD_ISTENDI'de kalır; QGC'ye uyarı düşer (`mavlink_log_critical`, bir kez) ve logda görünür (`hold_request_count` = 3, `state` = HOLD_ISTENDI); pilot RC ile devralır. Modül kendi başına RTL, iniş ya da başka bir mod istemez.
   - [ ] 5.3 PX4 Hold'a geçince (`nav_state` artık bizim mod değil) durum PASIF olur, setpoint durur; takibe **kendiliğinden dönülmez** (C reddedildi).
   - [ ] 5.4 Derleme: `make px4_sitl` ve `make px4_fmu-v6c_default`, flash kaydı; `make tests TESTFILTER=AutoFollowGuidance` yeşil.
   - [ ] 5.5 **S4 tam** (Grup 4.2 oturum adımlarıyla, `AF_LOST_T` = 1.0 s; kullanılan değer kayda yazılır):
@@ -280,42 +292,30 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 
 ### Loglama, analiz ve kapalı çevrim
 
-#### Görev grubu 6: Log mesajı, sözlük, analiz script'i, S6–S7 ve kapanış
+#### Görev grubu 6: Analiz script'i, kapalı çevrim S6–S7 ve kapanış
 
-**Bağımlılık:** Grup 5. Log mesajı yolu Hüseyin'in cevabına bağlıdır (Grup 0.2): onay → 6.1–6.7; ret → 6.F (geri dönüş).
+**Bağımlılık:** Grup 5. (Log mesajı Grup 2'de yazıldı.)
 
-- **Ne:** Kendi uORB mesajımız `auto_follow_status` (her çevrimde, PASIF'te de, her logda), sözlüğün kodla eşitlenmesi, ULog'dan senaryo ölçümlerini çıkaran `tez/analiz/af_log_analiz.py`, kapalı çevrim S6 ve S7, PR hazırlığı.
+- **Ne:** Sözlüğün son kez kodla eşitlenmesi, ULog'dan senaryo ölçümlerini çıkaran `tez/analiz/af_log_analiz.py`, kapalı çevrim S6 ve S7, PR hazırlığı.
 - **Neden:** Spec Bölüm 9 (Karar L2-b, L1, L3, L4, Karar 4, C3), Bölüm 11 (S6, S7, değerlendirme), Bölüm 12; kullanıcının vurgusu: filtrenin girdisi ve çıktısı loga yazılıp analiz edilir.
 - **Nasıl kontrol edilir:** Yeni bir SITL logunda alanlar `auto_follow_status.<alan>` adıyla görünür; analiz script'i S6–S7 ölçümlerini sayıyla çıkarır.
 
 - [ ] 6.0 Loglama, analiz ve kapalı çevrim testlerini tamamla
-  - [ ] 6.1 `msg/AutoFollowStatus.msg`: alanlar spec Bölüm 9 tablosundan **aynen** (ad, tip, birim yorumda; önek yok, C3): `timestamp`, `mode_nav_state`, `mode_active`, `state`, `los_timestamp`, `los_frd`, `los_age`, `los_seq`, `los_target`, `check_result`, `accept_count`, `reject_name_count`, `reject_nonfinite_count`, `reject_norm_count`, `reject_seq_count`, `reject_age_count`, `reject_position_count`, `reject_depression_count`, `reject_range_count`, `no_target_count`, `latency`, `los_ned`, `depression`, `height_diff`, `range_meas`, `target_meas_ned`, `target_est_ned`, `target_vel_ned`, `filter_updated`, `range_est`, `range_desired`, `vel_cmd_law`, `vel_cmd`, `yaw_cmd`, `yaw_frozen`, `alt_hold_z`, `time_since_valid`, `lost_time`, `hold_request_count`. Sabitler: `STATE_PASIF=0`, `STATE_TAKIP=1`, `STATE_KAYIP_BEKLE=2`, `STATE_HOLD_ISTENDI=3`; `CHECK_OK=0`, `CHECK_NAME`, `CHECK_NONFINITE`, `CHECK_NORM`, `CHECK_SEQ`, `CHECK_AGE`, `CHECK_NO_TARGET`, `CHECK_POSITION`, `CHECK_DEPRESSION`, `CHECK_RANGE` (sayısal değerler sözlükte "taslak 0–9", kodla kesinleşir).
-  - [ ] 6.2 `msg/CMakeLists.txt`'e mesaj listesine bir satır (`msg_files`, `msg/CMakeLists.txt:39`).
-  - [ ] 6.3 `src/modules/logger/logged_topics.cpp`'de varsayılan listeye (`add_default_topics`, `:46`) **aralıksız** bir `add_topic` satırı (her yayın, 50 Hz; C2). `logger_topics.txt` kullanılmaz (`logged_topics.cpp:531-540`). `SDLOG_MODE` değiştirilmez (Karar L3, A5).
-  - [ ] 6.4 Modül mesajı **her çevrimde** doldurur ve yayınlar, mod kapalıyken (PASIF) de; `timestamp = hrt_absolute_time()`. Ham girdi doğrulamadan geçmese de `los_*` alanlarına yazılır; `mode_nav_state` kayıt yoksa 0.
-  - [ ] 6.5 Derleme: `make px4_sitl` ve `make px4_fmu-v6c_default`, flash kaydı ve Grup 5'e göre artış; `make tests TESTFILTER=AutoFollowGuidance` yeşil.
-  - [ ] 6.6 `log-sozlugu.md` **aynı commit'te**: her alan "koddan doğrulandı"; `CHECK_*` ve `STATE_*` sayısal değerleri koddakiyle eşitlenir; "hangi durumda ne değer" sütunundaki boşluklar doldurulur; `AUTO_FOLLOW_TARGET` uyarısı yerinde kalır; belge geçmişine yeni sürüm.
-  - [ ] 6.7 Kısa doğrulama: yeni bir SITL logunda (ör. S1b'nin kısa tekrarı) `auto_follow_status` alanlarının kendi adlarıyla göründüğü ve PASIF'te de yazıldığı görülür; `pxh>`'ta `listener auto_follow_status`.
+  - [ ] 6.5 Kod değiştiyse derleme: `make px4_sitl` ve `make px4_fmu-v6c_default`, flash kaydı; `make tests TESTFILTER=AutoFollowGuidance` yeşil. `log-sozlugu.md` son hâliyle kodla karşılaştırılır (aynı commit).
   - [ ] 6.8 `tez/analiz/af_log_analiz.py` (izinli yol; pyulog 1.2.4, `tez/env/requirements-lock.txt:27`): ULog'u okur ve spec Bölüm 11 tablosunun "Ölçüm" sütunundaki değerleri senaryo başına çıkarır (ör. `range_est − range_desired`, `yaw_cmd − yön`, `vel_cmd`, `target_vel_ned`, son geçerli örnek → `nav_state = 4` süresi, `reject_*_count`). Alan adlarını sözlükle aynı kullanır. Komut satırı seçeneklerinin adları ve çıktı biçimi **(ad kullanıcıya sorulacak)**. `ruff format` + `ruff check`, tip ipuçları, docstring.
   - [ ] 6.9 **S6 Duran hayali insan** (kapalı çevrim, `AF_K_FF` = 0): beklenen `range_est → range_desired` (15.6 m), burun hedefte, salınım yok. Hedefin yerdeki başlangıç konumu **(değer kullanıcıya sorulacak)**. Ölçüm: `range_est − range_desired`, `yaw_cmd − yön`, `vel_cmd` (analiz script'iyle).
   - [ ] 6.10 **S7 Yürüyen hayali insan** (kapalı çevrim, `AF_K_FF > 0`): beklenen: geride kalmadan takip, mesafe hatası S6'ya yakın. `AF_K_FF` değeri, hedefin hızı ve yolu **(değer kullanıcıya sorulacak)**. Ölçüm: `target_vel_ned`, `range_est − range_desired`, `vel_cmd`. Filtre girdisi (`target_meas_ned`) ve çıktısı (`target_est_ned`, `target_vel_ned`) ayrıca karşılaştırılır (kullanıcının vurgusu). `AF_ALPHA` / `AF_BETA` ayarı gerekirse yapılan her değişiklik ve gerekçesi kayda yazılır.
   - [ ] 6.11 S6 ve S7 için oturum adımları Grup 4.2 ile aynı (parametre sıfırlama, `PX4_PARAM_AF_ENABLE=1`, `HEADLESS=1`, Position'da kalkış, ULog kopyası, **ne verildi, drone ne yaptı, ULog adı**).
   - [ ] 6.12 `latency` değerleri kayda yazılır; gecikme telafisi gerekip gerekmediği için veri olarak m13/m16'ya not düşülür (V3, spec Bölüm 9).
-  - [ ] 6.13 S1–S5'in log alanlarıyla ve `af_log_analiz.py` ile yeniden koşulup koşulmayacağı **kullanıcıya sorulur** (Grup 4'teki sıra sorunu); karar karar günlüğüne yazılır, "evet" ise koşulur ve kaydedilir.
+  - [ ] 6.13 S1–S5 yeniden koşulmaz: log mesajı Grup 2'de geldiği için ölçümleri Grup 4'te alındı (Karar 1-a). Yalnızca Grup 5–6'da kod değiştiyse etkilenen senaryo kısa tekrarlanır ve kayda yazılır.
   - [ ] 6.14 `tez/pin/verify_pin.sh --worktree`: yalnızca 7 yoldan değişenler.
   - [ ] 6.15 `planning/requirements.md` §1.3 "m16'ya kalanlar" yetişmeyenlerle güncellenir.
   - [ ] 6.16 `rapor.md` (§4.8 loglama gerçekleşen hâliyle, S6–S7 sonuçları, son flash, belge geçmişi) ve görev grubu notu.
-  - [ ] 6.17 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 6 — log mesajı, sözlük, analiz script'i, S6–S7`.
+  - [ ] 6.17 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 6 — analiz script'i, S6–S7, kapanış`.
   - [ ] 6.18 PR açıklaması taslağı hazırlanır (**push ve PR yalnızca kullanıcı isteyince**): başlık `[M15] ...`; PX4'e eklenen yeni dosya yolları (kabul kriteri 6); 6C flash kullanımı; `../agent-os/product/tech-stack.md:44` için "karar: external mode, güncellenmeli" notu; `Closes Auto-Follow/Auto-Follow#6`. Zorunlu CI: `verify-pin`, `derleme-sitl`, `derleme-fmu-v6c`; `verify-pin` Hüseyin'in izin listesi PR'ı birleşmeden yeşil olmaz.
 
-  - [ ] 6.F **Geri dönüş (yalnızca Hüseyin `msg/` ve `logged_topics.cpp` yollarını reddederse):** 6.1–6.3 yapılmaz; aynı değerler PX4'ün hazır `debug_array` mesajına konur ve `log-sozlugu.md` Bölüm 4'e "`data[i]` ↔ alan" eşleme tablosu eklenir; `af_log_analiz.py` adları bu tablodan verir. Bu yolda bilinen sorunlar **(doğrulanacak)** ve kullanıcıya sunulur:
-    - `debug_array` girdiyle **aynı topic** ve kuyruğu tektir (spec Bölüm 2): modülün 50 Hz yayını gelen `AF_LOS` örneklerini ezebilir ve kendi mesajımız `CHECK_NAME` sayacını artırır;
-    - ham `debug_array` yalnızca logger'ın debug profili açıkken loglanır (`logged_topics.cpp:289-294`);
-    - durum mesajının `name` alanı **(ad kullanıcıya sorulacak)**; uint64 zaman alanları float32'ye sığmaz, 58 sayılık sınır.
-
 **Kabul kriterleri:**
-- `auto_follow_status` her logda, her çevrimde (PASIF'te de), alanlar spec Bölüm 9 tablosundaki adlarla.
-- `log-sozlugu.md` kodla aynı commit'te güncel, `AUTO_FOLLOW_TARGET` uyarısı içinde.
+- `log-sozlugu.md` son kodla aynı.
 - S6 ve S7 için **ne verildi, drone ne yaptı, ULog adı** ve `af_log_analiz.py` ile çıkarılmış sayısal sonuçlar yazılı; ULog'lar `~/Desktop/AUTO-FOLLOW LOG/`'da.
 - Son 6C flash kullanımı spec'te, raporda ve PR taslağında.
 - Issue #6 kabul kriterleri 1–6 (`spec.md` "Kabul kriterleri") karşılanmış ya da karşılanmayan madde ve nedeni raporda yazılı.
@@ -326,11 +326,11 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 
 1. Görev grubu 0: Ön koşullar (kullanıcı ve ekip; diğer grupları engellemez)
 2. Görev grubu 1: İskelet
-3. Görev grubu 2: Guidance + alpha-beta
+3. Görev grubu 2: Guidance + alpha-beta + log mesajı
 4. Görev grubu 3: Kısa birim testi
 5. Görev grubu 4: SITL ön kontroller + S1–S5 (S4 yalnız KAYIP_BEKLE)
 6. Görev grubu 5: Hold geçişi + S4 tam
-7. Görev grubu 6: Log mesajı, sözlük, analiz, S6–S7, kapanış
+7. Görev grubu 6: Analiz script'i, S6–S7, kapanış
 
 Süre yetmezse sıra korunur ve kalanlar `planning/requirements.md` §1.3'e yazılır. Teslim 2026-11-15.
 
