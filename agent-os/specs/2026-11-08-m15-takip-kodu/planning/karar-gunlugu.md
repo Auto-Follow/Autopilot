@@ -449,7 +449,7 @@ Spec-writer ajanı `spec.md`'yi yazdı ve iki şema kopyasını güncelledi (com
     - Bizim verdiğimiz **bütün adlar** için ayrıntılı sözlük yazılır: mod, modül ve komutları, dosyalar, girdi mesajı, parametreler, log mesajı ve alanları, durumlar, doğrulama sonuçları, script'ler.
     - Sözlük, adı önceden onaylı `log-sozlugu.md` dosyasıdır; kapsamı genişletildi. İlk sürümü bu turda yazıldı. Kod yazıldıkça aynı commit'te güncellenir.
 
-### Bu turdan sonra açık kalanlar (kullanıcıya soruldu)
+### Bu turdan sonra açık kalanlar (kullanıcıya soruldu; cevaplar aşağıda, "Son cevaplar")
 
 - spec A13: `rc.mc_apps` satırı koşulsuz mu, açma/kapama parametresiyle mi? Parametreyle olursa adı kullanıcı verir.
 - spec A14: yerde arm'lıyken geçiş engelinin yöntemi, (a) ya da (b).
@@ -457,3 +457,12 @@ Spec-writer ajanı `spec.md`'yi yazdı ve iki şema kopyasını güncelledi (com
 - Henüz sunulmamış iki öneri:
   - kodun iç düzeni: hesaplar `AutoFollowGuidance` kütüphanesinde, zamanı argüman alan saf fonksiyonlar (birim testi için);
   - masa testinde gözlenecekler listesi (spec A3).
+
+### Son cevaplar (2026-11-10)
+
+- **A14 — Kullanıcı: "1-a".** **Karar:** drone yerdeyken ve mod aktif değilken modül arming check'e `can_arm_and_run = false` der; PX4 arm'lı araçta geçişi reddeder, QGC'de mesaj + uyarı sesi. Disarm iken geçiş serbest; mod aktifken koşul devreye girmez (RTL riski yok).
+- **A13 — Kullanıcı: "2-b".** Soru: "6C'ye ilk yüklediğimde 0 olarak gelecek; açıp reboot atmam yeterli mi, güç kesip açmam mı lazım?" Cevap: QGC'den "Reboot Vehicle" yeterli; PX4 açılış dosyalarını her reboot'ta baştan çalıştırır, parametre kalıcı saklanır. Kullanıcıya soruldu: ad **`AF_ENABLE`** (kullanıcı seçti), varsayılan **0 = kapalı** (kullanıcı seçti, öneriydi). SITL'de `PX4_PARAM_AF_ENABLE=1`.
+- **A2 — Kullanıcı: "evet, güvenlik amaçlı olsun".** **Karar:** `flag_control_auto_enabled = true`; pilot çubuğu oynatınca Position'a geçilir (`COM_RC_OVERRIDE`); SITL'de doğrulanacak.
+- **İç düzen — Kullanıcı: "okey".** **Karar (öneri kabul):** hesaplar `AutoFollowGuidance` kütüphanesinde, zamanı argüman alan saf fonksiyonlar.
+- **A3 — Kullanıcı:** "Masa testlerine şimdilik bunlar yeter, ama mesela dışarıda arm etmeden GPS fix olduğunda yapılacak testler eklenebilir; burası geliştirmeye açık, bunu not al, burayı düşüneceğim." **Karar:** liste yeterli. **Not (geliştirmeye açık):** dışarıda, arm'sız, GPS fix'li masa/yer testleri (geometri ve guidance çıktısı görülebilir) sonra eklenebilir; kullanıcı düşünecek.
+- Kullanıcı create-tasks'a geçişi onayladı. Kalan iş: rapor.md, requirements §3.14 ve log-sozlugu.md'ye bu son cevapların işlenmesi.
