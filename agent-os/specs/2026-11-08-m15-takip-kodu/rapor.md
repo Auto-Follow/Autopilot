@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 4 (Görev grubu 2: guidance, filtre, log mesajı), 2026-11-10
+> **Sürüm:** 5 (Görev grubu 3: kısa birim testi), 2026-11-10
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. Moda girip uçarak denenmedi (Grup 4); PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin sonucunu anlatır. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
+> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. Moda girip uçarak denenmedi (Grup 4); PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün sonucunu anlatır. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -20,7 +20,7 @@ Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıkt�
 | `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
 | `planning/raw-idea.md` | Görevin ilk tanımı |
 | `planning/visuals/` | İki akış şeması (Mermaid) |
-| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`) |
+| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`) |
 
 ---
 
@@ -150,7 +150,9 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `70323c83cf`, `e8131d3c23` | Spec son cevaplar ve son hali (rapor 2.1) |
 | `f6394fc7b3`, `3594966ada` | Görev listesi (`tasks.md`) ve güncellemesi |
 | `29116e848c` | Görev grubu 1: iskelet, mod kaydı, arming check, açılışta başlatma; rapor sürüm 3 |
-| *(bu sürüm)* | Görev grubu 2: doğrulama, geometri, alpha-beta, guidance, setpoint, log mesajı; rapor sürüm 4 |
+| `836c4ef047` | Görev grubu 2: doğrulama, geometri, alpha-beta, guidance, setpoint, log mesajı; rapor sürüm 4 |
+| `ee09be902e` | Lisans başlığına tez ekibi satırı, Grup 1 sorularının cevapları |
+| *(bu sürüm)* | Görev grubu 3: kısa birim testi; rapor sürüm 5 |
 
 ---
 
@@ -443,6 +445,20 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
   - zaman aşımı.
 - Testler firmware'e girmez, flash'ı etkilemez.
 
+**Birim testi sonuçları (Görev grubu 3, 2026-11-10):** `make tests TESTFILTER=AutoFollowGuidance` → **7 testin 7'si geçti**; guidance kodu değişmedi, hata bulunmadı. Ayrıntı: `implementation/grup-3-birim-testi.md`.
+
+| # | Test | Beklenen (spec) | Sonuç |
+|---|---|---|---|
+| 1 | Geometri: 10 m, düz, burun kuzey, LOS (0,8; 0; 0,6) | aşağı bakış 36,9°, h = 9,0 m, **d = 12,0 m**; burun doğudayken hedef doğuda | Geçti |
+| 2 | Kural: aynı örnek, `AF_TRK_ANG` 30° | istenen 15,6 m, **−1,8 m/s** (geri), kırpma yok | Geçti |
+| 3 | Kırpma: S1a, LOS (0,951; 0; 0,309) | d ≈ 27,7 m, kural ≈ +6,0 m/s, çıkış **2 m/s** | Geçti |
+| 4 | İvme sınırı: bir çevrim (20 ms) | değişim ≤ `AF_ACC_MAX · Δt` = 0,06 m/s, çaprazda da | Geçti |
+| 5 | Bozuk veri | NaN/Inf → `CHECK_NONFINITE`, norm 0,71 → `CHECK_NORM`, tekrar/eski sıra no → `CHECK_SEQ`, yanlış ad → `CHECK_NAME` | Geçti |
+| 6 | Veri kesilmesi | 0,5 s sonra KAYIP_BEKLE, +1,0 s sonra HOLD_ISTENDI | Geçti |
+| 7 | Hedef yok (bayrak 0) | hemen KAYIP_BEKLE, 1,0 s sonra HOLD_ISTENDI | Geçti |
+
+- Birim testinde olmayanlar (yaş, konum, aşağı bakış ve menzil kontrolleri, filtre, yaw donması, hedefsiz giriş) SITL'de (S4, S5) ölçülecek.
+
 **2) SITL testleri (Gazebo, `gz_x500`)**
 - Drone **Position** modunda kalkar, havada AUTO FOLLOW'a alınır ve geçici test script'i (`tez/sitl/af_los_gonder.py`, pymavlink 2.4.50) Pi gibi `AF_LOS` mesajı gönderir.
 
@@ -490,7 +506,7 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 - **Flash:** 6C'nin flash'ı ~%98 dolu. Derleme çıktısındaki kullanım spec'e yazılır. Taşarsa Hüseyin'e haber verilir; modül kapatarak yer açılmaz (o iş m14). Not: `CONSTRAINED_FLASH` ayarı açılırsa `DEBUG_FLOAT_ARRAY` işleyicisi derlemeden çıkar (`mavlink_receiver.cpp:284-305`), yani m14'te dikkat edilmeli.
 - **Flash ölçümü (Grup 1 sonu):** modül yokken 1 926 408 B (%97,98), iskelet + 16 parametreyle **1 931 164 B / 1920 KB (%98,22)**; artış **+4 756 B**, boş kalan ~34 KB. Grup 2 (guidance, filtre, log mesajı) bunun üstüne eklenecek.
 - **Flash ölçümü (Grup 2 sonu):** **1 936 100 B / 1920 KB (%98,48)**; Grup 1'e göre artış **+4 936 B**, boş kalan ~29 KB (29 980 B).
-- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. **Grup 2'de yazılanlar:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane), `AlphaBetaFilter.hpp`, `AutoFollow.cpp/.hpp`'ye girdi, setpoint ve log; `msg/AutoFollowStatus.msg`; `msg/CMakeLists.txt` ve `logged_topics.cpp`'ye birer satır. Kalan dosya (birim testi) Grup 3'te.
+- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. **Grup 2'de yazılanlar:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane), `AlphaBetaFilter.hpp`, `AutoFollow.cpp/.hpp`'ye girdi, setpoint ve log; `msg/AutoFollowStatus.msg`; `msg/CMakeLists.txt` ve `logged_topics.cpp`'ye birer satır. **Grup 3'te yazılanlar:** `AutoFollowGuidanceTest.cpp` ve `CMakeLists.txt`'e `px4_add_unit_gtest` satırı (firmware'e girmez, flash değişmedi).
 
 ---
 
@@ -668,7 +684,7 @@ Bekleyen dış bağımlılıklar:
 3. Uygulama, iş sırasıyla:
    1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi) — **bitti (2026-11-10)**, not: `implementation/grup-1-iskelet-mod-kaydi.md`
    2. guidance, alpha-beta ve log mesajı — **bitti (2026-11-10)**, not: `implementation/grup-2-guidance-filtre-log.md`
-   3. kısa birim testi
+   3. kısa birim testi — **bitti (2026-11-10)**, not: `implementation/grup-3-birim-testi.md`
    4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı)
    5. Hold geçişi, S4'ün tamamı
    6. S6–S7, analiz script'i ve sözlüğün son eşitlemesi (log mesajı Grup 2'ye taşındı ve yazıldı)
@@ -721,3 +737,4 @@ Bekleyen dış bağımlılıklar:
 | 2 | 2026-11-10 | Write-spec turu: S1–S7 düzeltmesi (S1a/S1b), açılışta başlatma (`rc.mc_apps`, 7. kilitli yol), bu modda arm yasağı, yerdeyken geçiş engeli kararı, hedefsiz girişte 1.5 s, `SDLOG_MODE` kullanıcıya bırakıldı, öneriler kabul, bütün adların sözlüğü |
 | 3 | 2026-11-10 | Görev grubu 1 (iskelet): yazılan dosyalar, 6C flash ölçümü (%97,98 → %98,22, +4 756 B), SITL duman testi (mod 23, `AF_ENABLE` = 0 iken başlamıyor), `auto_follow stop` düzeltmesi, PX4'ten 4 yeni bulgu, onay bekleyen 3 küçük konu |
 | 4 | 2026-11-10 | Görev grubu 2 (guidance, filtre, log mesajı): §4.5 gerçekleşen hâliyle (9 kontrol, geometri, filtre, kural → kırpma → ivme sınırı, durumlar, setpoint), §4.8 log mesajı yazıldı ve SITL'de 50 Hz görüldü, 6C flash %98,22 → %98,48 (+4 936 B), kullanıcıya 5 soru (yanlış adlı mesajın ham kaydı, `perf` sayaçları, uzun boşlukta filtre, EKF sıfırlamasında tutma noktası, sıra no'da "önceki") |
+| 5 | 2026-11-10 | Görev grubu 3 (kısa birim testi): `AutoFollowGuidanceTest.cpp`, 7 test (geometri 12,0 m, kural −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s zaman aşımı, hedef yok), hepsi geçti; kod değişmedi, hata bulunmadı; §4.9'a sonuç tablosu; flash değişmedi (%98,48) |

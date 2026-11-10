@@ -1,6 +1,6 @@
 # AUTO FOLLOW (M15) sözlüğü: bizim verdiğimiz bütün adlar
 
-> **Sürüm:** 3 (Görev grubu 2), 2026-11-10 · **Durum:** guidance, filtre ve log mesajı yazıldı. Bölüm 1, 3, 4, 5, 6 ve Bölüm 7'deki modül dosyaları **koddan doğrulandı** (✔). `STATE_*` ve `CHECK_*` sayısal değerleri artık kesin (`msg/AutoFollowStatus.msg`). Uçuşta (mod açıkken) görülecek değerler Grup 4'te SITL'de doğrulanacak. Adlar **karar**; davranış ve değerler `spec.md`'den alındı. Kod yazıldıkça bu dosya **aynı commit'te** güncellenir.
+> **Sürüm:** 4 (Görev grubu 3), 2026-11-10 · **Durum:** guidance, filtre ve log mesajı yazıldı; kısa birim testi (Grup 3) geçti. Bölüm 1, 3, 4, 5, 6 ve Bölüm 7'deki modül dosyaları **koddan doğrulandı** (✔). `STATE_*` ve `CHECK_*` sayısal değerleri artık kesin (`msg/AutoFollowStatus.msg`). Uçuşta (mod açıkken) görülecek değerler Grup 4'te SITL'de doğrulanacak. Adlar **karar**; davranış ve değerler `spec.md`'den alındı. Kod yazıldıkça bu dosya **aynı commit'te** güncellenir.
 >
 > **Kapsam (Karar C3, 2026-11-10):** Yalnızca log alanları değil, M15'te bizim ad verdiğimiz her şey: mod, modül ve komutları, dosyalar, girdi mesajı, parametreler, log mesajı ve alanları, durumlar, doğrulama sonuçları, script'ler. Kullanıcı: "Bizim yazdığımız, isimlerini verdiğimiz her şeyi detaylı kaydet."
 
@@ -191,7 +191,7 @@ Kontroller bu sırayla yapılır; ilk geçilemeyen kontrol sonucu belirler. ✔ 
 | `src/modules/auto_follow/AutoFollow.cpp/.hpp` | Modülün ana kodu: PX4'e kayıt, 50 Hz çevrim, girdi okuma, setpoint ve log yayını | Kilitli, onay gerekli · ✔ Grup 1 (kayıt, arming check, 50 Hz) ve Grup 2 (girdi, setpoint, log) |
 | `src/modules/auto_follow/AutoFollowGuidance.cpp/.hpp` | Hesaplar: doğrulama, geometri, guidance kuralı, sınırlar, durum makinesi (ayrı kütüphane `AutoFollowGuidance`, birim testi için; uORB ve parametre okumaz) | Kilitli, onay gerekli · ✔ Grup 2'de yazıldı |
 | `src/modules/auto_follow/AlphaBetaFilter.hpp` | Alpha-beta filtresi sınıfı | Kilitli, onay gerekli · ✔ Grup 2'de yazıldı |
-| `src/modules/auto_follow/AutoFollowGuidanceTest.cpp` | Kısa birim testi (`make tests TESTFILTER=AutoFollowGuidance`) | Kilitli, onay gerekli |
+| `src/modules/auto_follow/AutoFollowGuidanceTest.cpp` | Kısa birim testi (`make tests TESTFILTER=AutoFollowGuidance`) | Kilitli, onay gerekli · ✔ Grup 3'te yazıldı (7 test, hepsi geçti) |
 | `src/modules/auto_follow/CMakeLists.txt`, `Kconfig`, `module.yaml` | Derleme, açma ayarı, parametre tanımları | Kilitli, onay gerekli · ✔ Grup 1'de yazıldı |
 | `msg/AutoFollowStatus.msg` | Log mesajının tanımı (Bölüm 4) | Kilitli, onay gerekli · ✔ Grup 2'de yazıldı |
 | `msg/CMakeLists.txt` (satır) | Mesaj listesine `AutoFollowStatus.msg` | Kilitli, onay gerekli · ✔ Grup 2'de yazıldı |
@@ -208,3 +208,4 @@ Kontroller bu sırayla yapılır; ilk geçilemeyen kontrol sonucu belirler. ✔ 
 | 1 | 2026-11-10 | İlk sürüm (write-spec turu): bütün adlar, spec'teki tanımlarla; kod henüz yok |
 | 2 | 2026-11-10 | Görev grubu 1: mod adı, modül ve komutları, `CONFIG_MODULES_AUTO_FOLLOW`, `rc.mc_apps` satırı, 16 parametre ve modül dosyaları koddan doğrulandı; SITL'de alınan mod numarası (23) yazıldı; QGC parametre grubu adı onay bekliyor |
 | 3 | 2026-11-10 | Görev grubu 2: girdi yerleşimi, log mesajının 39 alanı, `STATE_*` (0–3) ve `CHECK_*` (0–9) değerleri koddan doğrulandı; "hangi durumda ne değer" sütunu kodla dolduruldu (NaN anlamı, PASIF'teki değerler, hedefsiz girişte `lost_time`); `auto_follow status` çıktısı ve konsol uyarısı; yanlış adlı mesajın `los_*`'a yazılmaması ve `perf` sayaçları kullanıcıya soruldu |
+| 4 | 2026-11-10 | Görev grubu 3: `AutoFollowGuidanceTest.cpp` yazıldı (dosya satırı işaretlendi); yeni ad yok |

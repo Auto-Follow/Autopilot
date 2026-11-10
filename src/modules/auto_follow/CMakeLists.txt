@@ -52,3 +52,5 @@ px4_add_module(
 		AutoFollowGuidance
 		px4_work_queue
 )
+
+px4_add_unit_gtest(SRC AutoFollowGuidanceTest.cpp LINKLIBS AutoFollowGuidance)

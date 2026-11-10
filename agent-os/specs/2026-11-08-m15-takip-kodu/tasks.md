@@ -186,8 +186,8 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 - **Neden:** Spec Bölüm 11; `../agent-os/standards/testing/test-writing.md:6-10` (nominal, sınır, NaN/Inf, zaman aşımı).
 - **Nasıl kontrol edilir:** `make tests TESTFILTER=AutoFollowGuidance` yeşil (`Makefile:406-407`). CI'da çalışmaz, yerelde koşulur; firmware'e girmez, flash'ı etkilemez.
 
-- [ ] 3.0 Birim testini tamamla
-  - [ ] 3.1 `AutoFollowGuidanceTest.cpp`, `px4_add_unit_gtest(SRC AutoFollowGuidanceTest.cpp LINKLIBS AutoFollowGuidance)` ile (`cmake/px4_add_gtest.cmake:40`). En fazla ~8 test:
+- [x] 3.0 Birim testini tamamla
+  - [x] 3.1 `AutoFollowGuidanceTest.cpp`, `px4_add_unit_gtest(SRC AutoFollowGuidanceTest.cpp LINKLIBS AutoFollowGuidance)` ile (`cmake/px4_add_gtest.cmake:40`). En fazla ~8 test:
     1. **Geometri:** drone 10 m, düz, burun kuzey, LOS (0.8, 0, 0.6), `AF_TGT_HGT` 1.0, `AF_GND_OFS` 0 → δ ≈ 36.9°, h = 9.0 m, **d = 12.0 m** (spec Bölüm 3 örneği).
     2. **Yasa:** aynı örnek, `AF_TRK_ANG` 30° → `d_ist` ≈ 15.6 m, `v` ≈ **−1.8 m/s** (hedeften uzaklaşma), kırpma yok.
     3. **Kırpma:** S1a geometrisi (LOS (0.951, 0, 0.309)) → yasa ≈ +6.0 m/s, çıkış `AF_VEL_MAX` = 2 m/s.
@@ -195,11 +195,11 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
     5. **Bozuk veri:** NaN/Inf → `CHECK_NONFINITE`; norm dışı → `CHECK_NORM`; tekrar/geri sıra no → `CHECK_SEQ`; yanlış ad → `CHECK_NAME`.
     6. **Zaman aşımı:** son geçerli örnekten 0.5 s sonra KAYIP_BEKLE; +1.0 s sonra HOLD_ISTENDI.
     7. **Hedef yok:** bayrak 0 → hemen KAYIP_BEKLE.
-  - [ ] 3.2 `make tests TESTFILTER=AutoFollowGuidance` çalıştırılır; **yalnızca bu testler** koşulur, hepsi geçer. Hata çıkarsa düzeltme Grup 2 koduna yapılır ve hatanın nedeni grup notuna yazılır.
-  - [ ] 3.3 `make px4_sitl` hâlâ derleniyor (test dosyası firmware'i değiştirmez; 6C derlemesi bu grupta gerekmez, kod değişmediyse).
-  - [ ] 3.4 `tez/pin/verify_pin.sh --worktree`: yalnızca 7 yoldan değişenler.
-  - [ ] 3.5 `rapor.md` (§4.9 birim testi sonuçları, belge geçmişi) ve görev grubu notu: hangi testler, sonuçlar, çıkan sorunlar.
-  - [ ] 3.6 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 3 — kısa birim testi`.
+  - [x] 3.2 `make tests TESTFILTER=AutoFollowGuidance` çalıştırılır; **yalnızca bu testler** koşulur, hepsi geçer. Hata çıkarsa düzeltme Grup 2 koduna yapılır ve hatanın nedeni grup notuna yazılır.
+  - [x] 3.3 `make px4_sitl` hâlâ derleniyor (test dosyası firmware'i değiştirmez; 6C derlemesi bu grupta gerekmez, kod değişmediyse).
+  - [x] 3.4 `tez/pin/verify_pin.sh --worktree`: yalnızca 7 yoldan değişenler.
+  - [x] 3.5 `rapor.md` (§4.9 birim testi sonuçları, belge geçmişi) ve görev grubu notu: hangi testler, sonuçlar, çıkan sorunlar.
+  - [x] 3.6 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 3 — kısa birim testi`.
 
 **Kabul kriterleri:**
 - `make tests TESTFILTER=AutoFollowGuidance` yeşil; test sayısı ~8'i geçmiyor.
