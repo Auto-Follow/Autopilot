@@ -465,4 +465,4 @@ Spec-writer ajanı `spec.md`'yi yazdı ve iki şema kopyasını güncelledi (com
 - **A2 — Kullanıcı: "evet, güvenlik amaçlı olsun".** **Karar:** `flag_control_auto_enabled = true`; pilot çubuğu oynatınca Position'a geçilir (`COM_RC_OVERRIDE`); SITL'de doğrulanacak.
 - **İç düzen — Kullanıcı: "okey".** **Karar (öneri kabul):** hesaplar `AutoFollowGuidance` kütüphanesinde, zamanı argüman alan saf fonksiyonlar.
 - **A3 — Kullanıcı:** "Masa testlerine şimdilik bunlar yeter, ama mesela dışarıda arm etmeden GPS fix olduğunda yapılacak testler eklenebilir; burası geliştirmeye açık, bunu not al, burayı düşüneceğim." **Karar:** liste yeterli. **Not (geliştirmeye açık):** dışarıda, arm'sız, GPS fix'li masa/yer testleri (geometri ve guidance çıktısı görülebilir) sonra eklenebilir; kullanıcı düşünecek.
-- Kullanıcı create-tasks'a geçişi onayladı. Kalan iş: rapor.md, requirements §3.14 ve log-sozlugu.md'ye bu son cevapların işlenmesi.
+- Kullanıcı create-tasks'a geçişi onayladı. Son cevaplar `spec.md`, `requirements.md` §3.14, `log-sozlugu.md` ve rapor (sürüm 2.1) dosyalarına işlendi.

@@ -1,6 +1,6 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 2 (write-spec sonu), 2026-11-10
+> **Sürüm:** 2.1 (write-spec sonu), 2026-11-10
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
@@ -196,7 +196,7 @@ flowchart TD
 - `auto_follow` açılışta PX4'e "ben **AUTO FOLLOW** adında bir modum" der. PX4 ona dış modlara ayrılmış **23–30** aralığından bir mod numarası verir (`msg/versioned/VehicleStatus.msg:59-66`). Bu mod QGC'nin mod listesinde görünür ve RC anahtarına atanabilir.
 - Mod aktifken PX4 kendi uçuş görevlerini (FlightTask) **çalıştırmaz** (`src/modules/flight_mode_manager/FlightModeManager.cpp:139-144`). Bu yüzden konum kontrolcüsüne istek (`trajectory_setpoint`) vermek bizim modülün işi.
 - PX4 her 300 ms'de modüle "çalışabilir misin?" diye sorar; modül 50 ms içinde cevap vermelidir (`HealthAndArmingChecks/checks/externalChecks.hpp:69-70`). Modül donarsa PX4 bunu fark eder ve kendi failsafe'ini çalıştırır.
-- **Modül açılışta kendiliğinden başlar.** PX4 arm iken yeni mod kaydını kabul etmiyor (`ModeManagement.cpp:371-380`); uçuş sırasında mod listesi değişmesin diye. Bu yüzden modül arm'dan önce başlamalı. Çözüm: PX4'ün her multikopter açılışında çalıştırdığı `rc.mc_apps` dosyasına bir satır (SITL'de ve 6C'de aynı dosya; `mc_nn_control` da böyle başlıyor, `rc.mc_apps:40-43`). Bu kilitli bir dosya; Hüseyin'in onayı gerekiyor (7. yol).
+- **Modül açılışta kendiliğinden başlar.** PX4 arm iken yeni mod kaydını kabul etmiyor (`ModeManagement.cpp:371-380`); uçuş sırasında mod listesi değişmesin diye. Bu yüzden modül arm'dan önce başlamalı. Çözüm: PX4'ün her multikopter açılışında çalıştırdığı `rc.mc_apps` dosyasına bir satır (SITL'de ve 6C'de aynı dosya; `mc_nn_control` da böyle başlıyor, `rc.mc_apps:40-43`). Bu kilitli bir dosya; Hüseyin'in onayı gerekiyor (7. yol). Satır `AF_ENABLE` parametresine bağlı: varsayılan 0, yani firmware ilk yüklendiğinde mod görünmez. Kullanıcı 1 yapıp QGC'den reboot atar; güç kesmek gerekmez. Sorun olursa 0 yapılıp reboot atılır ve mod listeden kalkar.
 - **Modül "çalışabilirim" der** (`can_arm_and_run = true`), hedef yokken bile. "Çalışamam" derse PX4 drone'u Hold'a değil **eve dönüşe (RTL)** gönderir (`src/modules/commander/failsafe/failsafe.cpp:698-702`); hedef bir an görünmedi diye drone eve uçmamalı. Hedefin yokluğunu modül kendisi yönetir (4.4). Tek istisna adayı: drone yerde arm'lıyken ve mod henüz açık değilken "çalışamam" demek; böylece PX4 yerdeyken moda geçişi reddeder (4.7). Mod açık değilken RTL tehlikesi yoktur.
 - Moda **QGC'den** ya da **RC anahtarından** geçilir. **Bu modda arm etmek yasak** (kalkış Position modunda yapılır; bu modda kalkış mantığı yok). Araç arm edilmemişken ise moda geçilebilir; PX4 disarm araçta her mod değişikliğine zaten izin veriyor (`src/modules/commander/UserModeIntention.cpp:54-55`). Bu, kullanıcının "masa testinde arm etmeden moda geçebilmeliyim" isteğini karşılıyor.
 - **Neden bu yol seçildi?** Değerlendirilen diğer yollar:
@@ -335,12 +335,13 @@ Hepsi QGC'den değiştirilebilir, kod yeniden derlenmez. Ön ek `AF_` (PX4 v1.17
 
 | Parametre | Anlamı | Başlangıç | Neden bu değer |
 |---|---|---|---|
+| `AF_ENABLE` | Modülü açılışta başlat (1) / başlatma (0) | 0 | İlk yüklemede mod görünmesin; kullanıcı bilerek açar. Değişince QGC'den reboot yeterli |
 | `AF_TRK_ANG` | Takip açısı (kamera eğimi) | 30° (SITL) | m06'dan gelecek |
 | `AF_K_DIST` | Mesafe kazancı | 0.5 1/s | 2 m hata → 1 m/s, yumuşak |
 | `AF_K_FF` | Hedef hızı katsayısı | 0 | Açık çevrim testlerde kaçmayı önler (4.9) |
 | `AF_VEL_MAX` | En fazla hız | 2 m/s | İlk testler için yavaş |
 | `AF_ACC_MAX` | İvme sınırı | 3 m/s² | PX4'ün otomatik modlardaki değeri (`MPC_ACC_HOR`, `multicopter_autonomous_params.c:88`) |
-| `AF_ALPHA`, `AF_BETA` | Filtre katsayıları | SITL'de seçilecek | |
+| `AF_ALPHA`, `AF_BETA` | Filtre katsayıları | 0.5 / 0.17 | Başlangıç; SITL'de ayarlanacak (β ≈ α²/(2−α)) |
 | `AF_DATA_TOUT` | Veri zaman aşımı | 0.5 s | Pi 10–30 Hz gönderir; 0.5 s, 5–15 kayıp mesaj demek |
 | `AF_LOST_T` | Kayıptan Hold'a | 1.0 s | PX4 offboard kaybı da 1 s (`COM_OF_LOSS_T`); ilk uçuşlarda kısa |
 | `AF_YAW_MIN_D` | Bunun altında yaw sabit | 1 m | Hedef altındayken yön belirsiz |
@@ -374,10 +375,11 @@ Hepsi QGC'den değiştirilebilir, kod yeniden derlenmez. Ön ek `AF_` (PX4 v1.17
 | Modül donarsa | PX4 cevap alamadığını fark eder ve kendi failsafe'ini çalıştırır |
 | Pilot | Her an başka moda geçebilir. İlk uçuşta RC'de Position moduna ayrılmış bir anahtar konumu olmalı |
 | Bu modda arm | Yasak. Önce Position'da arm edilip kalkılır, AUTO FOLLOW havada açılır |
-| Yerde arm'lıyken moda geçiş | Engellenecek (kullanıcı: "AUTO FOLLOW'da kalkış yok"); yöntem kullanıcıya soruldu |
+| Yerde arm'lıyken moda geçiş | Engellenir: modül yerdeyken PX4'e "şu an çalışamam" der, PX4 geçişi reddeder (QGC'de mesaj + uyarı sesi). Disarm iken geçiş serbest |
+| Pilot çubuğu oynatırsa | Drone Position moduna geçer (güvenlik amaçlı; SITL'de doğrulanacak) |
 | Hold isteği reddedilirse | Yerinde beklemeye devam eder; 1 s arayla en fazla 3 kez yeniden ister |
 
-- **(doğrulanacak):** RC çubuğuna dokununca external moddan çıkılıp çıkılmadığı.
+- **(doğrulanacak):** Çubuk oynayınca Position'a geçişin gerçekten çalıştığı (SITL ön kontrolü).
 - **İlk uçuş önerisi:** `AF_LOST_T` kısa (1 s), `AF_VEL_MAX` düşük (2 m/s), `AF_K_FF` = 0.
 
 ### 4.8 Loglama
@@ -516,7 +518,11 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 | A3 | Hedefsiz girişte süre | — | Girişten 1.5 s sonra Hold | Karar 5a ile tutarlı | Karar |
 | A5 | Masa testinde `SDLOG_MODE` | 1 · 2 | Kullanıcı kendisi seçer | "Kendim ayarlayacağım" | Karar |
 | B2 | Modülün açılışta başlaması | a) elle / SD kart · b) `rc.mc_apps` satırı | b (7. kilitli yol) | Unutulma riski yok, kendiliğinden | Karar |
-| B4 | Yerde arm'lıyken moda geçiş | a) PX4'e "çalışamam" bildir · b) girişte Hold iste | Engellenecek; yöntem açık | "AUTO FOLLOW'da kalkış yok" | Karar (yöntem açık) |
+| B4 | Yerde arm'lıyken moda geçiş | a) PX4'e "çalışamam" bildir · b) girişte Hold iste | a | PX4'ün kendi reddi; drone moda hiç girmez; RTL riski yok | Karar |
+| A13 | Başlatma satırının koşulu | koşulsuz · parametreyle | `AF_ENABLE`, varsayılan 0 | Ucuz kapatma düğmesi; ilk yüklemede kapalı | Karar |
+| A2 | RC çubuğuyla müdahale | çubuk modu değiştirmez · Position'a geçer | Position'a geçer | "Güvenlik amaçlı olsun" | Karar |
+| İç | Kodun iç düzeni | — | Hesaplar ayrı kütüphanede saf fonksiyonlar | Birim testi drone'suz çalışsın | Öneri kabul |
+| A3 | Masa testi | — | Liste yeterli; dışarıda GPS fix'li arm'sız testler sonra eklenebilir | "Geliştirmeye açık, düşüneceğim" | Karar |
 | C1 | Bu modda arm | serbest · yasak | Yasak; disarm iken geçiş serbest | "Arm değilken bu moda geçebileyim" | Karar |
 | C2 | Davranış ayrıntıları (filtre, ivme sınırı başlangıcı, Hold reddi, konum geçersiz, parametre sınırları, `AF_ALPHA` 0.5 / `AF_BETA` 0.17) | — | Spec'teki öneriler | — | Öneri kabul |
 | C3 | Log alan adları ve sözlük | önekli · öneksiz | Öneksiz; bütün adlar için ayrıntılı sözlük | "Her şeyi detaylı kaydet" | Karar |
@@ -617,19 +623,19 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 
 ## 11. Açık konular
 
-- **`rc.mc_apps` satırının koşulu:** koşulsuz mu, açma/kapama parametresiyle mi? (Parametreyle olursa adı kullanıcı verir.)
-- **Yerde arm'lıyken moda geçiş engelinin yöntemi:** (a) PX4'e "şu an çalışamam" bildirmek · (b) girişte yerdeyse Hold istemek.
-- **RC çubuğuna dokununca Position'a geçilsin mi?** (doğrulanacak; SITL'de denenecek)
-- **Kodun iç düzeni:** hesapların `AutoFollowGuidance` kütüphanesinde saf fonksiyonlar olması (birim testi için).
-- **Masa testi:** GPS yokken neler gözlenecek (spec A3'te öneri listesi).
-- Şemaların PNG'ye çevrilmesi: ertelendi; araç kurulmadan önce sorulacak.
+Kullanıcının karar vereceği konu kalmadı (2026-11-10). Bekleyen dış bağımlılıklar:
+- Hüseyin: 7 kilitli yol için onay.
+- Vision: `AF_LOS` yerleşimi ve eksenler (m10).
+- Ahmet (m06): kamera eğimi → `AF_TRK_ANG`; gerçekçi simülasyon.
+- **Geliştirmeye açık (kullanıcı notu):** dışarıda, arm etmeden, GPS fix'liyken yapılacak masa/yer testleri eklenebilir; kullanıcı düşünecek.
+- Şemaların PNG'ye çevrilmesi: ertelendi.
 
 ---
 
 ## 12. Sonraki adımlar
 
-1. Yukarıdaki açık konular cevaplanınca `spec.md` son haline gelir.
-2. **Kullanıcı onay verirse** `/agent-os:create-tasks`: görev listesi.
+1. `spec.md` son haline geldi (2026-11-10).
+2. `/agent-os:create-tasks`: görev listesi (kullanıcı onayladı).
 3. Uygulama, iş sırasıyla:
    1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi)
    2. guidance ve alpha-beta
@@ -682,4 +688,5 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 | Sürüm | Tarih | Ne eklendi |
 |---|---|---|
 | 1 | 2026-11-09 | Shape-spec sonu: süreç, bütün kararlar, oluşan sistem (henüz kod yok) |
+| 2.1 | 2026-11-10 | Son cevaplar: `AF_ENABLE` (varsayılan 0), yerde arm'lıyken geçiş engeli yöntemi (a), çubukla Position'a geçiş, masa testi notu |
 | 2 | 2026-11-10 | Write-spec turu: S1–S7 düzeltmesi (S1a/S1b), açılışta başlatma (`rc.mc_apps`, 7. kilitli yol), bu modda arm yasağı, yerdeyken geçiş engeli kararı, hedefsiz girişte 1.5 s, `SDLOG_MODE` kullanıcıya bırakıldı, öneriler kabul, bütün adların sözlüğü |

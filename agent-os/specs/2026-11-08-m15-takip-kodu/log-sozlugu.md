@@ -17,7 +17,7 @@
 | Ad | Ne | Nerede görülür | Not |
 |---|---|---|---|
 | `AUTO FOLLOW` | Uçuş modunun kayıt adı | QGC mod listesi, RC anahtarı ayarı | Ad **değişmemeli**: PX4 modun yerini adın hash'iyle hatırlar (`COM_MODE${i}_HASH`, `src/modules/commander/module.yaml:5-16`). PX4 modu 23–30 aralığından bir `nav_state`'e atar. |
-| `auto_follow` | PX4 modülü ve konsol komutu | `pxh>` (SITL) / NSH (6C) konsolu, `top`, `work_queue status` | Komutlar: `auto_follow start` (başlat ve modu kaydet), `auto_follow stop` (durdur, kaydı sil), `auto_follow status` (durum yazdır). Açılışta `rc.mc_apps` satırıyla kendiliğinden başlar (Karar B2-b; satırın koşulu açık, `spec.md` A13). |
+| `auto_follow` | PX4 modülü ve konsol komutu | `pxh>` (SITL) / NSH (6C) konsolu, `top`, `work_queue status` | Komutlar: `auto_follow start` (başlat ve modu kaydet), `auto_follow stop` (durdur, kaydı sil), `auto_follow status` (durum yazdır). Açılışta `rc.mc_apps` satırıyla kendiliğinden başlar, ama yalnızca `AF_ENABLE` = 1 ise (Karar B2-b, A13). |
 | `CONFIG_MODULES_AUTO_FOLLOW` | Modülü firmware'e katan ayar | `boards/px4/sitl/default.px4board`, `boards/px4/fmu-v6c/default.px4board` | `=y` olunca modül derlenir. |
 | `src/modules/auto_follow/` | Modülün klasörü | Repo | İçindeki dosyalar Bölüm 7'de. |
 
@@ -41,6 +41,7 @@ Hepsi QGC'den değiştirilir, derleme gerekmez. Açılar QGC'de **derece** giril
 
 | Ad | Ne işe yarar | Varsayılan | Birim | Min–max | Ne zaman değiştirilir? |
 |---|---|---|---|---|---|
+| `AF_ENABLE` | AUTO FOLLOW modülünü açılışta başlat (1) ya da başlatma (0). 0 iken mod QGC listesinde görünmez | 0 | — | 0–1 | İlk yüklemede 0 gelir. Kullanmak için 1 yap, QGC'den **Reboot Vehicle** (güç kesmek gerekmez). Modülde sorun olursa 0 yapıp reboot: mod listeden kalkar. SITL'de testler `PX4_PARAM_AF_ENABLE=1` ile başlar |
 | `AF_TRK_ANG` | Takip açısı: hedefe bu aşağı bakış açısıyla bakılacak mesafede durulur. İstenen mesafe = yükseklik farkı / tan(`AF_TRK_ANG`) | 30 | deg | 5–85 | Kamera eğimi (m06) bilinince ona eşitlenir. Büyük açı = daha yakın takip. |
 | `AF_K_DIST` | Mesafe kazancı K: 1 m mesafe hatası için kaç m/s hız istenir | 0.5 | 1/s | 0–2 | Mesafe yavaş toplanıyorsa artır, salınım varsa azalt. |
 | `AF_K_FF` | Hedef hızı katsayısı c: filtrenin bulduğu hedef hızının ne kadarı hız isteğine eklenir (0 = kapalı) | 0 | — | 0–1.5 | Açık çevrim testlerde **0**. Yürüyen hedefte (kapalı çevrim) geride kalınıyorsa açılır. |
@@ -180,7 +181,7 @@ Kontroller bu sırayla yapılır; ilk geçilemeyen kontrol sonucu belirler. Say�
 | `src/modules/auto_follow/AutoFollowGuidanceTest.cpp` | Kısa birim testi (`make tests TESTFILTER=AutoFollowGuidance`) | Kilitli, onay gerekli |
 | `src/modules/auto_follow/CMakeLists.txt`, `Kconfig`, `module.yaml` | Derleme, açma ayarı, parametre tanımları | Kilitli, onay gerekli |
 | `msg/AutoFollowStatus.msg` | Log mesajının tanımı (Bölüm 4) | Kilitli, onay gerekli |
-| `ROMFS/px4fmu_common/init.d/rc.mc_apps` (satır) | Açılışta `auto_follow start` | Kilitli, onay gerekli (7. yol) |
+| `ROMFS/px4fmu_common/init.d/rc.mc_apps` (satır) | `AF_ENABLE` = 1 ise açılışta `auto_follow start` | Kilitli, onay gerekli (7. yol) |
 | `tez/sitl/af_los_gonder.py` | Geçici test göndericisi: Pi gibi `AF_LOS` gönderir (açık / kapalı çevrim) | İzinli |
 | `tez/analiz/af_log_analiz.py` | ULog'u pyulog 1.2.4 ile okuyup senaryo ölçümlerini çıkaran script | İzinli |
 | `~/Desktop/AUTO-FOLLOW LOG/` | Her SITL testinden sonra ULog'un kopyalandığı klasör (repo dışı) | — |
