@@ -34,8 +34,9 @@
 /**
  * @file AutoFollow.hpp
  *
- * AUTO FOLLOW external flight mode: registers itself with commander and
- * answers the arming checks. Guidance follows in a later step.
+ * AUTO FOLLOW external flight mode: registers itself with commander, answers the arming checks,
+ * validates the companion computer line of sight (debug_array "AF_LOS"), estimates the target position
+ * and publishes trajectory_setpoint while the mode is active. auto_follow_status is published every cycle.
  */
 
 #pragma once
@@ -47,17 +48,25 @@
 #include <px4_platform_common/module_params.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 
+#include "AlphaBetaFilter.hpp"
+#include "AutoFollowGuidance.hpp"
+
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/arming_check_reply.h>
 #include <uORB/topics/arming_check_request.h>
+#include <uORB/topics/auto_follow_status.h>
+#include <uORB/topics/debug_array.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/register_ext_component_reply.h>
 #include <uORB/topics/register_ext_component_request.h>
+#include <uORB/topics/trajectory_setpoint.h>
 #include <uORB/topics/unregister_ext_component.h>
+#include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_status.h>
 
 using namespace time_literals;
@@ -94,6 +103,14 @@ private:
 	bool unregistration_done();
 	void reply_to_arming_check(uint8_t request_id);
 
+	void update_vehicle_state();
+	void process_input(hrt_abstime now);
+	void count_check_result(uint8_t check_result, hrt_abstime now);
+	void enter_mode();
+	void publish_setpoint(hrt_abstime now, float dt, bool lost_state_entered);
+	void clear_guidance_output();
+	void publish_status(hrt_abstime now);
+
 	bool registered() const { return _mode_id >= 0 && _arming_check_id >= 0; }
 
 	// Mode name shown in QGC / RC. Must stay fixed: commander keeps the slot by its hash (COM_MODEx_HASH).
@@ -108,18 +125,26 @@ private:
 	// Longest wait on stop for commander to drop the mode (vehicle_status is published at least at 2 Hz).
 	static constexpr hrt_abstime UNREGISTER_TIMEOUT = 1_s;
 
+	// Shortest interval between two console warnings about rejected input samples.
+	static constexpr hrt_abstime REJECT_WARN_INTERVAL = 1_s;
+
 	// Subscriptions
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _register_ext_component_reply_sub{ORB_ID(register_ext_component_reply)};
 	uORB::Subscription _arming_check_request_sub{ORB_ID(arming_check_request)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
+	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
+	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	uORB::Subscription _debug_array_sub{ORB_ID(debug_array)};
 
 	// Publications
 	uORB::Publication<register_ext_component_request_s> _register_ext_component_request_pub{ORB_ID(register_ext_component_request)};
 	uORB::Publication<unregister_ext_component_s> _unregister_ext_component_pub{ORB_ID(unregister_ext_component)};
 	uORB::Publication<vehicle_control_mode_s> _config_control_setpoints_pub{ORB_ID(config_control_setpoints)};
 	uORB::Publication<arming_check_reply_s> _arming_check_reply_pub{ORB_ID(arming_check_reply)};
+	uORB::Publication<trajectory_setpoint_s> _trajectory_setpoint_pub{ORB_ID(trajectory_setpoint)};
+	uORB::Publication<auto_follow_status_s> _auto_follow_status_pub{ORB_ID(auto_follow_status)};
 
 	// Performance counters
 	perf_counter_t _loop_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")};
@@ -135,6 +160,31 @@ private:
 	// Vehicle state
 	bool _mode_active{false};     // vehicle_status.nav_state == _mode_id
 	bool _landed{false};          // vehicle_land_detected.landed
+	vehicle_local_position_s _local_position{};
+	matrix::Quatf _attitude{0.f, 0.f, 0.f, 0.f}; // FRD to NED; zero until received, rotates to NaN (rejected)
+	uint8_t _xy_reset_counter{0};
+	uint8_t _z_reset_counter{0};
+
+	// Status message, also holds the raw input, counters and geometry of the last sample between cycles
+	auto_follow_status_s _status{};
+
+	// Input history
+	bool _has_previous_seq{false};
+	float _previous_seq{0.f};               // sequence number of the last sample that passed the sequence check
+	hrt_abstime _last_valid{0};             // [us] arrival of the last sample that passed all checks
+	hrt_abstime _last_no_target{0};         // [us] arrival of the last CHECK_NO_TARGET sample
+	hrt_abstime _last_accepted_arrival{0};  // [us] arrival of the last accepted sample
+	float _last_accepted_age{0.f};          // [ms] age of the last accepted sample (capture time = arrival - age)
+	float _last_height_diff{NAN};           // [m] h of the last accepted sample
+	hrt_abstime _last_reject_warn{0};
+
+	// Estimation and guidance
+	AlphaBetaFilter _filter;
+	AutoFollowGuidance::StateMachine _state_machine;
+	hrt_abstime _last_cycle{0};
+	matrix::Vector2f _vel_cmd{};            // [m/s] NED x, y, state of the acceleration limit
+	float _yaw_cmd{NAN};                    // [rad] last yaw setpoint
+	matrix::Vector2f _hold_xy{NAN, NAN};    // [m] NED x, y held in KAYIP_BEKLE / HOLD_ISTENDI
 
 	// Angle parameters converted from [deg] to [rad]
 	float _trk_ang_rad{0.f};

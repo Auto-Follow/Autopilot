@@ -31,14 +31,23 @@
 #
 ############################################################################
 
+# Pure computations (validation, geometry, guidance, state machine), unit testable without uORB
+px4_add_library(AutoFollowGuidance
+	AutoFollowGuidance.cpp
+	AutoFollowGuidance.hpp
+)
+target_include_directories(AutoFollowGuidance PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 px4_add_module(
 	MODULE modules__auto_follow
 	MAIN auto_follow
 	SRCS
+		AlphaBetaFilter.hpp
 		AutoFollow.cpp
 		AutoFollow.hpp
 	MODULE_CONFIG
 		module.yaml
 	DEPENDS
+		AutoFollowGuidance
 		px4_work_queue
 )

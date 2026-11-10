@@ -263,6 +263,7 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 |---|---|---|---|---|
 | Modül yokken (değişiklikten önce, 2026-11-10) | 1 926 408 B | %97,98 | 39 672 B | — |
 | Görev grubu 1 sonu (iskelet + 16 parametre, 2026-11-10) | 1 931 164 B | %98,22 | 34 916 B | +4 756 B |
+| Görev grubu 2 sonu (doğrulama, geometri, filtre, guidance, setpoint, `auto_follow_status`, 2026-11-10) | 1 936 100 B | %98,48 | 29 980 B | +4 936 B |
 
 ## Out of Scope
 

@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 3 (Görev grubu 1: iskelet), 2026-11-10
+> **Sürüm:** 4 (Görev grubu 2: guidance, filtre, log mesajı), 2026-11-10
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in sonucunu anlatır. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
+> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. Moda girip uçarak denenmedi (Grup 4); PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin sonucunu anlatır. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -20,7 +20,7 @@ Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıkt�
 | `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
 | `planning/raw-idea.md` | Görevin ilk tanımı |
 | `planning/visuals/` | İki akış şeması (Mermaid) |
-| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (ilki `grup-1-iskelet-mod-kaydi.md`) |
+| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`) |
 
 ---
 
@@ -149,7 +149,8 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `6c24883e4f` | Write-spec turu kararları, sözlük, rapor sürüm 2 |
 | `70323c83cf`, `e8131d3c23` | Spec son cevaplar ve son hali (rapor 2.1) |
 | `f6394fc7b3`, `3594966ada` | Görev listesi (`tasks.md`) ve güncellemesi |
-| *(bu sürüm)* | Görev grubu 1: iskelet, mod kaydı, arming check, açılışta başlatma; rapor sürüm 3 |
+| `29116e848c` | Görev grubu 1: iskelet, mod kaydı, arming check, açılışta başlatma; rapor sürüm 3 |
+| *(bu sürüm)* | Görev grubu 2: doğrulama, geometri, alpha-beta, guidance, setpoint, log mesajı; rapor sürüm 4 |
 
 ---
 
@@ -268,22 +269,26 @@ stateDiagram-v2
 
 ### 4.5 Her döngüde ne oluyor? (50 Hz, adım adım)
 
-Modül saniyede 50 kez çalışır. Veri gelmese de çalışır; yalnızca veri gelince çalışsaydı veri kesildiğinde modül de durur ve kesintiyi fark edemezdi.
+> **Gerçekleşen hâli (Görev grubu 2, 2026-11-10).** Aşağıdaki adımlar kodda böyle yazıldı. Ayrıntılı anlatım, küçük kod kararları ve açık sorular: `implementation/grup-2-guidance-filtre-log.md`. Uçuş davranışı Grup 4'te SITL'de, sayısal doğruluk Grup 3'te birim testiyle sınanacak.
 
-**Adım 1: Girdiyi doğrula.** Yeni bir `AF_LOS` mesajı geldiyse:
-- Adı `AF_LOS` mu? (`debug_array`'i başka yazılımlar da kullanabilir.)
-- Sayılar geçerli mi (NaN ya da sonsuz değil mi)?
-- Vektörün uzunluğu 1'e yakın mı? (±`AF_NORM_TOL` = 0.1)
-- Sıra numarası öncekinden büyük mü? (Tekrar eden ya da geri giden mesaj atılır.)
-- Yaşı, veri zaman aşımından (`AF_DATA_TOUT` = 0.5 s) küçük mü?
-- "Hedef var" bayrağı 1 mi?
-- Yön yeterince aşağı bakıyor mu? (en az `AF_MIN_DEP` = 10°)
-- Hesaplanan mesafe en büyük menzilden (`AF_MAX_RNG` = 40 m) küçük mü?
-- Drone'un kendi konum bilgisi geçerli mi?
+Modül saniyede 50 kez çalışır. Veri gelmese de çalışır; yalnızca veri gelince çalışsaydı veri kesildiğinde modül de durur ve kesintiyi fark edemezdi. Her çevrimde, mod kayıt ve arming check işlerinden (4.2) sonra:
 
-Geçmeyen mesaj atılır, nedeniyle birlikte sayılır ve (çok sık olmamak üzere) loga yazılır. Guidance hesabına asla girmez.
+**Adım 0: Hazırlık.** Bir önceki çevrimden beri geçen süre ölçülür (~20 ms). PX4'ün konum ve tutum bilgisi okunur. PX4'ün konum tahmini (EKF) kendini sıfırladıysa filtre unutulur; bir sonraki geçerli mesaj onu yeniden kurar. Filtrenin tahmini bir adım ilerletilir ("hedef bu hızla gidiyordu, şimdi şurada olmalı"). Bunlar mod kapalıyken de yapılır.
 
-**Adım 2: Yönü dünyaya çevir.** Pi'nin verdiği yön drone'a göredir (ileri/sağ/aşağı). Drone'un o anki eğikliği ve burnunun yönü (`vehicle_attitude`) kullanılarak "kuzey/doğu/aşağı" (NED) yönüne çevrilir. Görüntünün çekildiği anki eğiklik değil, verinin geldiği anki eğiklik kullanılır (V3); farkın önemli olup olmadığı loglardaki gecikmeye bakılarak sonra karar verilecek.
+**Adım 1: Girdiyi doğrula.** Yeni bir mesaj geldiyse **bu sırayla** bakılır; ilk geçilemeyen kontrol mesajın sonucu olur ve mesaj atılır:
+1. Adı `AF_LOS` mu? (`debug_array`'i başka yazılımlar da kullanabilir.) → değilse `CHECK_NAME`
+2. Altı sayı geçerli mi (NaN ya da sonsuz değil mi)? → `CHECK_NONFINITE`
+3. Vektörün uzunluğu 1'e yakın mı? (±`AF_NORM_TOL` = 0.1) → `CHECK_NORM`
+4. Sıra numarası öncekinden büyük mü? (Tekrar eden ya da geri giden mesaj atılır.) → `CHECK_SEQ`
+5. Gerçek yaşı = (şimdi − varış) + Pi'nin yazdığı yaş, `AF_DATA_TOUT` (0.5 s)'ten küçük mü? → `CHECK_AGE`
+6. "Hedef var" bayrağı 1 mi? → `CHECK_NO_TARGET` (bozuk veri değil; ayrı sayılır, takip sırasında gelirse hemen yerinde beklemeye geçilir)
+7. Drone'un kendi konum bilgisi geçerli mi? → `CHECK_POSITION`
+8. Yön yeterince aşağı bakıyor mu? (en az `AF_MIN_DEP` = 10°) → `CHECK_DEPRESSION` (Adım 2–3'te)
+9. Yükseklik farkı pozitif ve mesafe 0 ile `AF_MAX_RNG` (40 m) arasında mı? → `CHECK_RANGE` (Adım 3'te)
+
+Pi'nin ham değerleri (yön, yaş, sıra no, bayrak, varış anı) mesaj geçse de geçmese de log mesajına yazılır (adı `AF_LOS` olmayanlar hariç). Atılan mesaj nedeniyle sayılır, konsola **en fazla saniyede bir** uyarı düşer; guidance hesabına asla girmez. 9 kontrolü geçen mesajın varış anı "son geçerli mesaj" olarak saklanır.
+
+**Adım 2: Yönü dünyaya çevir.** Pi'nin verdiği yön drone'a göredir (ileri/sağ/aşağı). Drone'un eğikliği ve burnunun yönü (`vehicle_attitude`) kullanılarak "kuzey/doğu/aşağı" (NED) yönüne çevrilir. Görüntünün çekildiği anki eğiklik değil, mesajın işlendiği çevrimdeki eğiklik kullanılır (varıştan en fazla ~20 ms sonra; V3); farkın önemli olup olmadığı loglardaki gecikmeye (`latency`) bakılarak sonra karar verilecek.
 
 **Adım 3: Mesafe ve hedefin yeri.** Zemin düz kabul edilir:
 ```
@@ -294,35 +299,39 @@ hedef konumu    = drone konumu + mesafe × (yönün yatay kısmı)
 - Drone yüksekliği PX4'ün kendi irtifa tahmininden okunur (`-vehicle_local_position.z`); zemin = kalkış yeri.
 - `AF_TGT_HGT` (1.0 m): Pi insanın ayağına değil gövdesine bakıyorsa o noktanın yerden yüksekliği.
 - `AF_GND_OFS` (0 m): Hedefin yürüdüğü zemin kalkış yerinden yüksekse (ör. tepe) farkı.
+- Drone yerdeyken yükseklik farkı negatiftir (≈ −1 m), mesajlar `CHECK_RANGE` ile atılır; SITL'de böyle görüldü.
 
 **Adım 4: Alpha-beta filtresi.** Ölçülen hedef konumu her görüntüde biraz titrer. Filtre iki iş yapar:
-- **Tahmin:** "Hedef en son şu hızla gidiyordu, şimdi şurada olmalı."
-- **Düzeltme:** Yeni ölçüm gelince tahmin ile ölçüm arasındaki fark `AF_ALPHA` oranında konuma, `AF_BETA` oranında hıza eklenir.
+- **Tahmin** (her çevrimde, Adım 0): "Hedef en son şu hızla gidiyordu, şimdi şurada olmalı."
+- **Düzeltme** (yalnızca 9 kontrolü geçen mesajda): Tahmin ile ölçüm arasındaki fark `AF_ALPHA` oranında konuma, `AF_BETA` / (iki görüntünün çekim anı arasındaki süre) oranında hıza eklenir. İlk mesajda filtre ölçüme kurulur, hız 0.
 
-Çıktı: yumuşatılmış hedef konumu ve **hedefin hızı**. PX4'ün Follow Me modundaki benzer filtre GPS mesajına bağlı olduğu için doğrudan kullanılamadı (`flight_mode_manager/tasks/AutoFollowTarget/follow_target_estimator/TargetEstimator.hpp:112, 210`); küçük, kendi filtremiz yazılacak.
+Çıktı: yumuşatılmış hedef konumu ve **hedefin hızı**. PX4'ün Follow Me modundaki benzer filtre GPS mesajına bağlı olduğu için kullanılamadı (`flight_mode_manager/tasks/AutoFollowTarget/follow_target_estimator/TargetEstimator.hpp:112, 210`); küçük, kendi filtremiz yazıldı (`AlphaBetaFilter.hpp`).
 
-**Adım 5: İstenen mesafe.** Kullanıcının takip tasarımı: "Hedefi sabit yükseklikte ve sabit açıyla, kadrajın ortasında tutarak takip edeceğim."
+**Adım 5: Durum.** Durum makinesi (4.4) bu çevrimin durumuna karar verir: mod kapalıysa PASIF; açıksa TAKIP, KAYIP_BEKLE ya da HOLD_ISTENDI. Moda girişin ilk çevriminde o anki irtifa saklanır, hız sınırlayıcı drone'un o anki yatay hızından başlar, burun o anki yönünde kalır.
+
+**Adım 6 (yalnızca mod açık ve TAKIP'te): İstenen mesafe ve hız kuralı.** Kullanıcının takip tasarımı: "Hedefi sabit yükseklikte ve sabit açıyla, kadrajın ortasında tutarak takip edeceğim."
 ```
 istenen mesafe = yükseklik farkı / tan(AF_TRK_ANG)
+yatay hız      = AF_K_FF × (filtrenin hedef hızı) + AF_K_DIST × (mesafe − istenen mesafe) × (hedefe doğru yatay yön)
 ```
-`AF_TRK_ANG`, hedefin kadraj ortasında durduğu aşağı bakış açısı, yani kameranın eğimi. Değeri m06'dan gelecek; SITL'de 30°.
-
-**Adım 6: Hız kuralı (guidance).**
-```
-yatay hız = AF_K_FF × (filtrenin hedef hızı) + AF_K_DIST × (mesafe − istenen mesafe) × (hedefe doğru yatay yön)
-```
-- Hız en fazla `AF_VEL_MAX` (2 m/s) olur.
-- Hız isteği bir anda değil, en fazla `AF_ACC_MAX` (3 m/s²) ivmeyle değişir; drone sert eğilmez.
+- "Mesafe" filtrenin kestirdiği hedefe olan yatay mesafedir; yükseklik farkı son geçerli mesajınkidir.
+- `AF_TRK_ANG`, hedefin kadraj ortasında durduğu aşağı bakış açısı, yani kameranın eğimi. Değeri m06'dan gelecek; SITL'de 30°.
+- Sıra: önce kural, sonra hız en fazla `AF_VEL_MAX` (2 m/s) olacak şekilde kırpılır, sonra bir çevrimde en fazla `AF_ACC_MAX` (3 m/s²) × 20 ms = 0,06 m/s değişir. İvme sınırı hız vektörünün büyüklüğüne uygulanır; yani çapraz giderken de aynı sınır geçerlidir.
 - `AF_K_FF` = 0 iken drone yalnızca mesafe farkına bakar. Yürüyen hedefin biraz gerisinde kalabilir. `AF_K_FF` açılınca hedefin hızı eklenir ve bu açık kapanır. İlk testlerde 0 tutulur (nedeni 4.9'da).
 - **Neden hız tabanlı?** Konum tabanlı yasada ("hedefin 8 m gerisine git") her ölçümde hedef noktası zıplar ve drone sarsılır; PX4 bu mesaj için yumuşak istek bekliyor (`msg/versioned/TrajectorySetpoint.msg:3`). Pure pursuit ve PN önleme ("hedefe çarp") yasaları; mesafe korumazlar.
 
 **Adım 7: Yaw ve irtifa.**
-- **Yaw:** Burun hedefe çevrilir, böylece hedef kadrajın ortasında kalır. Hedef 1 m'den (`AF_YAW_MIN_D`) yakına gelirse ("tam altında") yön belirsizleşir; o zaman yaw değiştirilmez.
+- **Yaw:** Burun kestirilen hedefe çevrilir, böylece hedef kadrajın ortasında kalır. Hedef 1 m'den (`AF_YAW_MIN_D`) yakına gelirse ("tam altında") yön belirsizleşir; o zaman yaw değiştirilmez (`yaw_frozen` = 1). Dönüş hızını PX4'ün kendi sınırı belirler (doğrulanacak).
 - **İrtifa:** Moda girildiği andaki irtifa sabit tutulur.
 
-**Adım 8: PX4'e ver.** `trajectory_setpoint` yayınlanır: `velocity[0..1]` = yatay hız, `position[2]` = irtifa, `yaw` = burun açısı; diğer alanlar boş (NaN). PX4 bu karışımı geçerli sayıyor: her eksende konum ya da hız verilmiş olması, x ve y'nin aynı türde olması yeterli (`src/modules/mc_pos_control/PositionControl/PositionControl.cpp:224-250`).
+**Adım 8: PX4'e ver** (yalnızca mod açıkken, her çevrimde; moda girişin ilk çevriminde de). `trajectory_setpoint` yayınlanır:
+- **TAKIP:** `velocity[0..1]` = sınırlı yatay hız, `position[2]` = giriş irtifası, `yaw` = burun açısı.
+- **KAYIP_BEKLE ve HOLD_ISTENDI:** `position[0..1]` = hedefin kaybolduğu anki drone konumu, `velocity[0..1]` = 0, `position[2]` = giriş irtifası, `yaw` = son yaw. Takip geri gelirse hız 0'dan yumuşakça artar.
+- **Drone'un konum bilgisi geçersizse** (her durumda): `position[0..1]` boş, `velocity[0..1]` = 0; asıl tepkiyi PX4 verir (konum gereksinimi, A10).
+- Diğer alanlar boş (NaN). PX4 bu karışımı geçerli sayıyor: her eksende konum ya da hız verilmiş olması, x ve y'nin aynı türde olması yeterli (`src/modules/mc_pos_control/PositionControl/PositionControl.cpp:224-250`).
+- Mod kapalıyken hiç yayın yapılmaz. Hata anında da modül susmaz, aktif olarak "yerinde dur" ister; çünkü yayın kesilince PX4 son isteği uygulamaya devam eder (4.7).
 
-**Adım 9: Log mesajını yayınla** (4.8).
+**Adım 9: Log mesajını yayınla** (4.8): her çevrimde, mod kapalıyken de.
 
 **Sayısal örnek (baştan sona):**
 - Drone 10 m irtifada, burnu kuzeyde, düz duruyor. Pi'den yön (0.8, 0, 0.6) geliyor, yani hedef önde ve aşağıda.
@@ -402,6 +411,7 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
   - durum (TAKİP / KAYIP-BEKLE / HOLD İSTENDİ),
   - toplam gecikme,
   - AUTO FOLLOW'un mod numarası.
+- **Gerçekleşen hâli (Görev grubu 2, 2026-11-10):** `msg/AutoFollowStatus.msg` yazıldı (39 alan, `STATE_*` 0–3, `CHECK_*` 0–9; adlar spec'teki tablodan, önek yok). `msg/CMakeLists.txt`'e ve `logged_topics.cpp`'ye (`add_topic("auto_follow_status")`, aralıksız) birer satır eklendi. Kısa SITL denemesinde (arm yok, mod kapalı) mesaj 50 Hz yayınlandı ve ULog'da 39 alanın hepsi kendi adıyla göründü (pyulog 1.2.4; 96 s'de 4 809 örnek, kayıp yok). "Henüz hesaplanmadı" değerleri NaN yazılır. Her alanın hangi durumda ne değer aldığı `log-sozlugu.md` Bölüm 4'te.
 - **`DEBUG_FLOAT_ARRAY` yalnızca taşıyıcı.** Logda bakılan, `auto_follow_status`'un adlı alanları. Ham `debug_array` logda yalnızca debug ayarı açıksa ve `data[0]`… diye görünür; ihtiyaç yok.
 - **Zaten kendiliğinden kaydedilenler:** `trajectory_setpoint`, `vehicle_status` (mod değişimleri), `vehicle_command` (Hold isteği), `vehicle_local_position`, `vehicle_attitude`, `vehicle_control_mode`, `actuator_motors` (`src/modules/logger/logged_topics.cpp:131-150, 214`).
 - **Sözlük:** `log-sozlugu.md`. Kullanıcının isteğiyle yalnız log alanları değil, **bizim verdiğimiz bütün adlar** orada: mod, modül ve komutları, parametreler, girdi mesajı, log alanları, durumlar, doğrulama sonuçları, dosyalar. Her ad için anlam, birim, frame ve hangi durumda ne değer aldığı yazılır. Kod değişince aynı commit'te güncellenir.
@@ -479,7 +489,8 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 - **Geri dönüş:** Hüseyin log mesajı için gereken yolları reddederse PX4'ün hazır `debug_array` mesajı kullanılır; alanlar logda `data[0]`… diye görünür, adlar sözlükten okunur.
 - **Flash:** 6C'nin flash'ı ~%98 dolu. Derleme çıktısındaki kullanım spec'e yazılır. Taşarsa Hüseyin'e haber verilir; modül kapatarak yer açılmaz (o iş m14). Not: `CONSTRAINED_FLASH` ayarı açılırsa `DEBUG_FLOAT_ARRAY` işleyicisi derlemeden çıkar (`mavlink_receiver.cpp:284-305`), yani m14'te dikkat edilmeli.
 - **Flash ölçümü (Grup 1 sonu):** modül yokken 1 926 408 B (%97,98), iskelet + 16 parametreyle **1 931 164 B / 1920 KB (%98,22)**; artış **+4 756 B**, boş kalan ~34 KB. Grup 2 (guidance, filtre, log mesajı) bunun üstüne eklenecek.
-- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. Kalan dosyalar (guidance, filtre, birim testi, log mesajı) sonraki gruplarda.
+- **Flash ölçümü (Grup 2 sonu):** **1 936 100 B / 1920 KB (%98,48)**; Grup 1'e göre artış **+4 936 B**, boş kalan ~29 KB (29 980 B).
+- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. **Grup 2'de yazılanlar:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane), `AlphaBetaFilter.hpp`, `AutoFollow.cpp/.hpp`'ye girdi, setpoint ve log; `msg/AutoFollowStatus.msg`; `msg/CMakeLists.txt` ve `logged_topics.cpp`'ye birer satır. Kalan dosya (birim testi) Grup 3'te.
 
 ---
 
@@ -656,11 +667,11 @@ Bekleyen dış bağımlılıklar:
 2. `/agent-os:create-tasks`: görev listesi (kullanıcı onayladı).
 3. Uygulama, iş sırasıyla:
    1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi) — **bitti (2026-11-10)**, not: `implementation/grup-1-iskelet-mod-kaydi.md`
-   2. guidance ve alpha-beta
+   2. guidance, alpha-beta ve log mesajı — **bitti (2026-11-10)**, not: `implementation/grup-2-guidance-filtre-log.md`
    3. kısa birim testi
    4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı)
    5. Hold geçişi, S4'ün tamamı
-   6. S6–S7, log mesajı ve sözlük güncellemesi
+   6. S6–S7, analiz script'i ve sözlüğün son eşitlemesi (log mesajı Grup 2'ye taşındı ve yazıldı)
 
    Her görev grubundan sonra ne yapıldığı, neden yapıldığı ve nasıl test edildiği bu rapora ve spec klasörüne sade dille yazılır.
 4. Yetişmeyenler "m16'ya kalanlar" listesine; PR açıklamasına `Closes Auto-Follow/Auto-Follow#6`.
@@ -709,3 +720,4 @@ Bekleyen dış bağımlılıklar:
 | 2.1 | 2026-11-10 | Son cevaplar: `AF_ENABLE` (varsayılan 0), yerde arm'lıyken geçiş engeli yöntemi (a), çubukla Position'a geçiş, masa testi notu |
 | 2 | 2026-11-10 | Write-spec turu: S1–S7 düzeltmesi (S1a/S1b), açılışta başlatma (`rc.mc_apps`, 7. kilitli yol), bu modda arm yasağı, yerdeyken geçiş engeli kararı, hedefsiz girişte 1.5 s, `SDLOG_MODE` kullanıcıya bırakıldı, öneriler kabul, bütün adların sözlüğü |
 | 3 | 2026-11-10 | Görev grubu 1 (iskelet): yazılan dosyalar, 6C flash ölçümü (%97,98 → %98,22, +4 756 B), SITL duman testi (mod 23, `AF_ENABLE` = 0 iken başlamıyor), `auto_follow stop` düzeltmesi, PX4'ten 4 yeni bulgu, onay bekleyen 3 küçük konu |
+| 4 | 2026-11-10 | Görev grubu 2 (guidance, filtre, log mesajı): §4.5 gerçekleşen hâliyle (9 kontrol, geometri, filtre, kural → kırpma → ivme sınırı, durumlar, setpoint), §4.8 log mesajı yazıldı ve SITL'de 50 Hz görüldü, 6C flash %98,22 → %98,48 (+4 936 B), kullanıcıya 5 soru (yanlış adlı mesajın ham kaydı, `perf` sayaçları, uzun boşlukta filtre, EKF sıfırlamasında tutma noktası, sıra no'da "önceki") |
