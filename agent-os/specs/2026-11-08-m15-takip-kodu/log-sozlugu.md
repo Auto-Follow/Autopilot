@@ -1,6 +1,6 @@
 # AUTO FOLLOW (M15) sözlüğü: bizim verdiğimiz bütün adlar
 
-> **Sürüm:** 4 (Görev grubu 3), 2026-11-10 · **Durum:** guidance, filtre ve log mesajı yazıldı; kısa birim testi (Grup 3) geçti. Bölüm 1, 3, 4, 5, 6 ve Bölüm 7'deki modül dosyaları **koddan doğrulandı** (✔). `STATE_*` ve `CHECK_*` sayısal değerleri artık kesin (`msg/AutoFollowStatus.msg`). Uçuşta (mod açıkken) görülecek değerler Grup 4'te SITL'de doğrulanacak. Adlar **karar**; davranış ve değerler `spec.md`'den alındı. Kod yazıldıkça bu dosya **aynı commit'te** güncellenir.
+> **Sürüm:** 5 (Grup 2 düzeltme turu), 2026-11-10 · **Durum:** guidance, filtre ve log mesajı yazıldı; kısa birim testi (Grup 3) geçti; Grup 2 sonrası kararlar (filtre ve sıra no sıfırlama, EKF sıfırlamasında kaydırma) işlendi. Bölüm 1, 3, 4, 5, 6 ve Bölüm 7'deki modül dosyaları **koddan doğrulandı** (✔). `STATE_*` ve `CHECK_*` sayısal değerleri artık kesin (`msg/AutoFollowStatus.msg`). Uçuşta (mod açıkken) görülecek değerler Grup 4'te SITL'de doğrulanacak. Adlar **karar**; davranış ve değerler `spec.md`'den alındı. Kod yazıldıkça bu dosya **aynı commit'te** güncellenir.
 >
 > **Kapsam (Karar C3, 2026-11-10):** Yalnızca log alanları değil, M15'te bizim ad verdiğimiz her şey: mod, modül ve komutları, dosyalar, girdi mesajı, parametreler, log mesajı ve alanları, durumlar, doğrulama sonuçları, script'ler. Kullanıcı: "Bizim yazdığımız, isimlerini verdiğimiz her şeyi detaylı kaydet."
 
@@ -31,7 +31,7 @@ Pi, MAVLink `DEBUG_FLOAT_ARRAY` mesajını **MAVLink 2** ile gönderir (veri kı
 | `AF_LOS` | Mesajın `name` alanı | — | En fazla 9 karakter. Bu adı taşımayan `debug_array` örnekleri yalnızca sayılır (`CHECK_NAME`), `los_*` alanlarına yazılmaz. ✔ koddan doğrulandı (`AutoFollowGuidance.hpp`, `INPUT_NAME`; ad tam eşleşmeli, "AF_LOSX" geçmez) |
 | `data[0]`, `data[1]`, `data[2]` | Hedef yönü: LOS birim vektörünün x, y, z bileşenleri | body FRD | Uzunluğu 1 olmalı (tolerans `AF_NORM_TOL`). z > 0 = hedef aşağıda. |
 | `data[3]` | Yaş: görüntünün çekildiği andan gönderime kadar geçen süre | ms | Pixhawk gerçek yaşı `(şimdi − varış) + data[3]` diye hesaplar. |
-| `data[4]` | Sıra numarası | — | Her mesajda artar. Float olarak gelir; 2²⁴'e kadar (30 Hz'de ~155 saat) kesin. |
+| `data[4]` | Sıra numarası | — | Her mesajda artar. Float olarak gelir; 2²⁴'e kadar (30 Hz'de ~155 saat) kesin. Pixhawk "önceki" numarayı, `AF_DATA_TOUT` (0,5 s) boyunca sıra kontrolünü geçen mesaj gelmezse unutur; yeniden başlayan Pi 1'den sayabilir (Karar 2026-11-10, 5b-a). |
 | `data[5]` | Hedef var (1) / yok (0) | — | 0 bozuk veri sayılmaz; KAYIP_BEKLE'yi hemen başlatır. |
 
 ✔ Yerleşim koddan doğrulandı (`AutoFollowGuidance.hpp`, `InputIndex`; SITL'de pymavlink ile gönderilen değerler `los_*` alanlarında aynen görüldü). `data[6..57]` kullanılmaz.
@@ -103,14 +103,14 @@ Hepsi QGC'den değiştirilir, derleme gerekmez. Açılar QGC'de **derece** giril
 | `reject_name_count` | uint32 | adet | Adı `AF_LOS` olmadığı için atılan | `CHECK_NAME` |
 | `reject_nonfinite_count` | uint32 | adet | NaN / sonsuz değer içerdiği için atılan | `CHECK_NONFINITE` |
 | `reject_norm_count` | uint32 | adet | LOS uzunluğu 1'den çok saptığı için atılan | `CHECK_NORM` |
-| `reject_seq_count` | uint32 | adet | Sıra no artmadığı için (tekrar / geri) atılan | `CHECK_SEQ` |
+| `reject_seq_count` | uint32 | adet | Sıra no artmadığı için (tekrar / geri) atılan | `CHECK_SEQ`. "Önceki" = 1–4. kontrolleri geçen son mesajın numarası; `AF_DATA_TOUT` boyunca böyle mesaj gelmezse unutulur, sonraki mesaj bu kontrolden geçer (Karar 2026-11-10, 5a ve 5b-a) |
 | `reject_age_count` | uint32 | adet | Gerçek yaş `AF_DATA_TOUT`'tan büyük olduğu için atılan | `CHECK_AGE` |
 | `reject_position_count` | uint32 | adet | Drone'un kendi yerel konumu geçersiz olduğu için atılan | `CHECK_POSITION` (ör. masada GPS yok) |
 | `reject_depression_count` | uint32 | adet | Aşağı bakış açısı `AF_MIN_DEP`'ten küçük olduğu için atılan | `CHECK_DEPRESSION` |
 | `reject_range_count` | uint32 | adet | Yükseklik farkı ≤ 0 ya da mesafe `AF_MAX_RNG`'den büyük olduğu için atılan | `CHECK_RANGE` |
 | `no_target_count` | uint32 | adet | "Hedef yok" bayrağıyla gelen mesaj sayısı | `CHECK_NO_TARGET` (bozuk veri değil; konsol uyarısı basılmaz) |
 
-Bütün sayaçlar açılıştan beri sayar, sıfırlanmaz, mod kapalıyken de artar. Aynı sayılar `auto_follow status` çıktısında da görülür. Spec'teki "perf_counter ile de sayılır" maddesi şimdilik uygulanmadı: konsol adları verilmediği için kullanıcıya soruldu (Grup 2 notu Bölüm 7, soru 2).
+Bütün sayaçlar açılıştan beri sayar, sıfırlanmaz, mod kapalıyken de artar. Aynı sayılar `auto_follow status` çıktısında da görülür. Nedene göre `perf` sayacı yoktur (Karar 2026-11-10, 2-a); sayaçlar yalnızca bu log mesajında ve `auto_follow status`'ta.
 | `latency` | float32 | ms | Kullanılan ölçümün toplam gecikmesi = (işlem anı − varış) + yaş | Son **kabul edilen** mesajın değeri; hiç kabul edilmediyse NaN. İşlem anı varıştan en fazla ~20 ms sonradır. Gecikme telafisi gerekip gerekmediği buna bakılarak karar verilecek (m13/m16) |
 
 ### 4.4 Geometri (yönden hedefin yerine)
@@ -127,8 +127,8 @@ Bütün sayaçlar açılıştan beri sayar, sıfırlanmaz, mod kapalıyken de ar
 | Alan | Tip | Birim | Anlam | Hangi durumda ne değer |
 |---|---|---|---|---|
 | `target_meas_ned` | float32[2] | m (NED x, y) | **Filtre girdisi:** bu ölçümden bulunan hedef konumu | Geometriye ulaşan son mesajın; kontrol 8 ya da 9'da atıldıysa NaN. Hiç yoksa NaN |
-| `target_est_ned` | float32[2] | m (NED x, y) | **Filtre çıktısı:** kestirilen hedef konumu | Her çevrimde (mod kapalıyken de) son hızla ilerletilir. İlk kabul edilen ölçümde ölçüme eşit. Filtre kurulmadıysa ya da EKF konum sıfırlamasından sonra yeni ölçüm gelene kadar NaN |
-| `target_vel_ned` | float32[2] | m/s (NED x, y) | **Filtre çıktısı:** kestirilen hedef hızı | İlk ölçümde 0. Kurulmadıysa NaN. Açık çevrimde drone'un kendi hızına yakın çıkar (hedef drone'la "kayar"); bu yüzden orada `AF_K_FF` = 0 |
+| `target_est_ned` | float32[2] | m (NED x, y) | **Filtre çıktısı:** kestirilen hedef konumu | Her çevrimde (mod kapalıyken de) son hızla ilerletilir. İlk kabul edilen ölçümde ölçüme eşit. Filtre kurulmadıysa ya da EKF konum sıfırlamasından sonra yeni ölçüm gelene kadar NaN. **Uzun kesinti (Karar 2026-11-10, 3):** `AF_DATA_TOUT` (0,5 s) boyunca 9 kontrolü geçen mesaj gelmezse NaN olur (filtre sıfırlanır; mod kapalıyken süre son geçerli mesajdan, açıkken `max(son geçerli mesaj, giriş anı)`'ndan sayılır, yani TAKIP → KAYIP_BEKLE ile aynı çevrimde); sonraki ilk kabul edilen ölçümde yine ölçüme eşit |
+| `target_vel_ned` | float32[2] | m/s (NED x, y) | **Filtre çıktısı:** kestirilen hedef hızı | İlk ölçümde 0. Kurulmadıysa NaN. `target_est_ned` ile birlikte uzun kesintide ve EKF konum sıfırlamasında NaN olur; yeniden kurulunca 0'dan başlar (eski hız taşınmaz). Açık çevrimde drone'un kendi hızına yakın çıkar (hedef drone'la "kayar"); bu yüzden orada `AF_K_FF` = 0 |
 | `filter_updated` | bool | — | Bu çevrimde yeni ölçümle düzeltme yapıldı mı | Yalnızca 9 kontrolü geçen mesajın işlendiği çevrimde 1; diğer çevrimlerde 0 (yalnızca tahmin) |
 
 ### 4.6 Guidance (karar ve PX4'e giden istek)
@@ -141,7 +141,7 @@ Bütün sayaçlar açılıştan beri sayar, sıfırlanmaz, mod kapalıyken de ar
 | `vel_cmd` | float32[2] | m/s (NED x, y) | `AF_VEL_MAX` kırpması ve `AF_ACC_MAX` sınırından **sonra**, PX4'e giden hız. İvme sınırı vektörün büyüklüğüne uygulanır (her yönde aynı) | KAYIP_BEKLE ve HOLD_ISTENDI'de 0; TAKIP'te yerel konum geçersizse ya da filtre kurulu değilse 0. Moda girişte drone'un o anki yatay hızından başlar; KAYIP_BEKLE'den TAKIP'e dönüşte 0'dan. PASIF'te NaN |
 | `yaw_cmd` | float32 | rad (NED) | Burun yönü isteği (drone → kestirilen hedef) | Moda girişte drone'un o anki yönü; KAYIP_BEKLE ve HOLD_ISTENDI'de son yaw. PASIF'te NaN |
 | `yaw_frozen` | bool | — | Hedef `AF_YAW_MIN_D`'den yakın olduğu için yaw sabit mi | Yalnızca TAKIP'te 1 olabilir; diğer durumlarda 0 |
-| `alt_hold_z` | float32 | m (NED z, aşağı +) | Tutulan irtifa: moda girildiği andaki z | Örnek: 10 m irtifa → −10.0. PASIF'te NaN. Girişte irtifa geçersizse NaN (yalnızca masada olabilir; o zaman PX4'e dikey hız 0 istenir) |
+| `alt_hold_z` | float32 | m (NED z, aşağı +) | Tutulan irtifa: moda girildiği andaki z | Örnek: 10 m irtifa → −10.0. PASIF'te NaN. Girişte irtifa geçersizse NaN (yalnızca masada olabilir; o zaman PX4'e dikey hız 0 istenir). **EKF dikey konum sıfırlamasında** (`z_reset_counter` değişir) `delta_z` kadar kaydırılır; drone gerçekte aynı irtifada kalır, logda değer sıçrama kadar değişir (Karar 2026-11-10, 4). Tutulan yatay konum da (logda alanı yok, `trajectory_setpoint.position[0..1]`'de görülür) `delta_xy` kadar kaydırılır |
 
 ### 4.7 Süreler
 
@@ -209,3 +209,4 @@ Kontroller bu sırayla yapılır; ilk geçilemeyen kontrol sonucu belirler. ✔ 
 | 2 | 2026-11-10 | Görev grubu 1: mod adı, modül ve komutları, `CONFIG_MODULES_AUTO_FOLLOW`, `rc.mc_apps` satırı, 16 parametre ve modül dosyaları koddan doğrulandı; SITL'de alınan mod numarası (23) yazıldı; QGC parametre grubu adı onay bekliyor |
 | 3 | 2026-11-10 | Görev grubu 2: girdi yerleşimi, log mesajının 39 alanı, `STATE_*` (0–3) ve `CHECK_*` (0–9) değerleri koddan doğrulandı; "hangi durumda ne değer" sütunu kodla dolduruldu (NaN anlamı, PASIF'teki değerler, hedefsiz girişte `lost_time`); `auto_follow status` çıktısı ve konsol uyarısı; yanlış adlı mesajın `los_*`'a yazılmaması ve `perf` sayaçları kullanıcıya soruldu |
 | 4 | 2026-11-10 | Görev grubu 3: `AutoFollowGuidanceTest.cpp` yazıldı (dosya satırı işaretlendi); yeni ad yok |
+| 5 | 2026-11-10 | Grup 2 düzeltme turu: "hangi durumda ne değer" güncellendi: `target_est_ned` / `target_vel_ned` uzun kesintide (`AF_DATA_TOUT`) NaN olur (Karar 3); `alt_hold_z` EKF dikey sıfırlamasında `delta_z` kadar kayar (Karar 4); sıra no hafızası `AF_DATA_TOUT` sonra unutulur (`data[4]`, `reject_seq_count`; Karar 5b-a); `perf` sayacı yok (Karar 2-a). Yeni ad yok |

@@ -225,10 +225,18 @@ void AutoFollow::reply_to_arming_check(uint8_t request_id)
 void AutoFollow::update_vehicle_state()
 {
 	if (_vehicle_local_position_sub.update(&_local_position)) {
-		// The filter state is in local NED and not valid across an EKF position reset
-		if (_local_position.xy_reset_counter != _xy_reset_counter || _local_position.z_reset_counter != _z_reset_counter) {
+		// An EKF position reset shifts local NED by delta_xy / delta_z. The held point is shifted with it, so the vehicle
+		// stays in place (as FlightTaskManualAcceleration.cpp:106-109, MulticopterPositionControl.cpp:700-707).
+		// The filter state is not valid across the reset; the next accepted measurement initializes it again.
+		if (_local_position.xy_reset_counter != _xy_reset_counter) {
 			_xy_reset_counter = _local_position.xy_reset_counter;
+			_hold_xy += Vector2f(_local_position.delta_xy);
+			_filter.reset();
+		}
+
+		if (_local_position.z_reset_counter != _z_reset_counter) {
 			_z_reset_counter = _local_position.z_reset_counter;
+			_status.alt_hold_z += _local_position.delta_z;
 			_filter.reset();
 		}
 	}
@@ -251,6 +259,7 @@ void AutoFollow::process_input(hrt_abstime now)
 	}
 
 	const float *data = input.data;
+	_has_previous_seq = keep_previous_seq(_has_previous_seq, _last_seq_pass, now, _param_af_data_tout.get());
 	uint8_t result = check_input(input.name, data, input.timestamp, now, _has_previous_seq, _previous_seq,
 				     _param_af_norm_tol.get(), _param_af_data_tout.get(), _local_position.xy_valid && _local_position.z_valid);
 
@@ -268,6 +277,7 @@ void AutoFollow::process_input(hrt_abstime now)
 	if (sequence_passed(result)) {
 		_has_previous_seq = true;
 		_previous_seq = data[INPUT_SEQ];
+		_last_seq_pass = now;
 	}
 
 	if (result == auto_follow_status_s::CHECK_OK) {
@@ -547,6 +557,12 @@ void AutoFollow::Run()
 	const uint8_t previous_state = _state_machine.state;
 	const bool entered = AutoFollowGuidance::update_state(_state_machine, _mode_active, now, _last_valid, _last_no_target,
 			     _param_af_data_tout.get(), _param_af_lost_t.get());
+
+	// No valid sample for AF_DATA_TOUT (same reference as the state machine): the estimate is stale and is not used again,
+	// the next accepted measurement initializes the filter (position = measurement, velocity 0)
+	if (!(AutoFollowGuidance::time_since_valid(_state_machine, now, _last_valid) < _param_af_data_tout.get())) {
+		_filter.reset();
+	}
 
 	if (_mode_active) {
 		if (entered) {

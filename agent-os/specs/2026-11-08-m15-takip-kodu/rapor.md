@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 5 (Görev grubu 3: kısa birim testi), 2026-11-10
+> **Sürüm:** 6 (Grup 2 düzeltme turu), 2026-11-10
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. Moda girip uçarak denenmedi (Grup 4); PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün sonucunu anlatır. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
+> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. **Grup 2 düzeltme turu bitti:** kullanıcının Grup 2 sonrası kararlarıyla filtre uzun veri kesintisinde, Pi'nin sıra no hafızası `AF_DATA_TOUT` sonra sıfırlanıyor; EKF konum sıfırlamasında tutulan nokta kaydırılıyor; 2 test eklendi (9/9 geçti). Moda girip uçarak denenmedi (Grup 4); PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün, sürüm 6 düzeltme turunun sonucunu anlatır; uygulama sırasında verilen bütün kararlar §5.1'de. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -152,7 +152,9 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `29116e848c` | Görev grubu 1: iskelet, mod kaydı, arming check, açılışta başlatma; rapor sürüm 3 |
 | `836c4ef047` | Görev grubu 2: doğrulama, geometri, alpha-beta, guidance, setpoint, log mesajı; rapor sürüm 4 |
 | `ee09be902e` | Lisans başlığına tez ekibi satırı, Grup 1 sorularının cevapları |
-| *(bu sürüm)* | Görev grubu 3: kısa birim testi; rapor sürüm 5 |
+| `774583fdbc` | Görev grubu 3: kısa birim testi; rapor sürüm 5 |
+| `909f13ec97` | Grup 2 soruları (filtre sıfırlama, EKF reset kaydırma kararları) |
+| *(bu sürüm)* | Grup 2 düzeltme turu: filtre ve sıra no sıfırlama, EKF reset kaydırma; rapor sürüm 6 |
 
 ---
 
@@ -275,13 +277,13 @@ stateDiagram-v2
 
 Modül saniyede 50 kez çalışır. Veri gelmese de çalışır; yalnızca veri gelince çalışsaydı veri kesildiğinde modül de durur ve kesintiyi fark edemezdi. Her çevrimde, mod kayıt ve arming check işlerinden (4.2) sonra:
 
-**Adım 0: Hazırlık.** Bir önceki çevrimden beri geçen süre ölçülür (~20 ms). PX4'ün konum ve tutum bilgisi okunur. PX4'ün konum tahmini (EKF) kendini sıfırladıysa filtre unutulur; bir sonraki geçerli mesaj onu yeniden kurar. Filtrenin tahmini bir adım ilerletilir ("hedef bu hızla gidiyordu, şimdi şurada olmalı"). Bunlar mod kapalıyken de yapılır.
+**Adım 0: Hazırlık.** Bir önceki çevrimden beri geçen süre ölçülür (~20 ms). PX4'ün konum ve tutum bilgisi okunur. PX4'ün konum tahmini (EKF) kendini sıfırladıysa filtre unutulur; bir sonraki geçerli mesaj onu yeniden kurar. Aynı anda tutulan yatay konum ve tutulan irtifa, sıfırlamanın sıçraması (`delta_xy`, `delta_z`) kadar kaydırılır; böylece drone gerçekte yerinde kalır, PX4'ün kendi modları da böyle yapar (Karar 2026-11-10, 4). Filtrenin tahmini bir adım ilerletilir ("hedef bu hızla gidiyordu, şimdi şurada olmalı"). Bunlar mod kapalıyken de yapılır.
 
 **Adım 1: Girdiyi doğrula.** Yeni bir mesaj geldiyse **bu sırayla** bakılır; ilk geçilemeyen kontrol mesajın sonucu olur ve mesaj atılır:
 1. Adı `AF_LOS` mu? (`debug_array`'i başka yazılımlar da kullanabilir.) → değilse `CHECK_NAME`
 2. Altı sayı geçerli mi (NaN ya da sonsuz değil mi)? → `CHECK_NONFINITE`
 3. Vektörün uzunluğu 1'e yakın mı? (±`AF_NORM_TOL` = 0.1) → `CHECK_NORM`
-4. Sıra numarası öncekinden büyük mü? (Tekrar eden ya da geri giden mesaj atılır.) → `CHECK_SEQ`
+4. Sıra numarası öncekinden büyük mü? (Tekrar eden ya da geri giden mesaj atılır.) → `CHECK_SEQ`. "Önceki", 1–4. kontrolleri geçen son mesajındır; `AF_DATA_TOUT` (0,5 s) boyunca böyle bir mesaj gelmezse unutulur, böylece yeniden başlayan Pi (sıra no yine 1'den) kabul edilir (Karar 2026-11-10, 5b-a).
 5. Gerçek yaşı = (şimdi − varış) + Pi'nin yazdığı yaş, `AF_DATA_TOUT` (0.5 s)'ten küçük mü? → `CHECK_AGE`
 6. "Hedef var" bayrağı 1 mi? → `CHECK_NO_TARGET` (bozuk veri değil; ayrı sayılır, takip sırasında gelirse hemen yerinde beklemeye geçilir)
 7. Drone'un kendi konum bilgisi geçerli mi? → `CHECK_POSITION`
@@ -309,7 +311,7 @@ hedef konumu    = drone konumu + mesafe × (yönün yatay kısmı)
 
 Çıktı: yumuşatılmış hedef konumu ve **hedefin hızı**. PX4'ün Follow Me modundaki benzer filtre GPS mesajına bağlı olduğu için kullanılamadı (`flight_mode_manager/tasks/AutoFollowTarget/follow_target_estimator/TargetEstimator.hpp:112, 210`); küçük, kendi filtremiz yazıldı (`AlphaBetaFilter.hpp`).
 
-**Adım 5: Durum.** Durum makinesi (4.4) bu çevrimin durumuna karar verir: mod kapalıysa PASIF; açıksa TAKIP, KAYIP_BEKLE ya da HOLD_ISTENDI. Moda girişin ilk çevriminde o anki irtifa saklanır, hız sınırlayıcı drone'un o anki yatay hızından başlar, burun o anki yönünde kalır.
+**Adım 5: Durum.** Durum makinesi (4.4) bu çevrimin durumuna karar verir: mod kapalıysa PASIF; açıksa TAKIP, KAYIP_BEKLE ya da HOLD_ISTENDI. `AF_DATA_TOUT` (0,5 s) boyunca geçerli mesaj gelmediyse filtre de unutulur (mod kapalıyken de); eski kestirim hiç kullanılmaz, bir sonraki geçerli mesaj filtreyi yeniden kurar (konum = ölçüm, hız = 0) (Karar 2026-11-10, 3). Moda girişin ilk çevriminde o anki irtifa saklanır, hız sınırlayıcı drone'un o anki yatay hızından başlar, burun o anki yönünde kalır.
 
 **Adım 6 (yalnızca mod açık ve TAKIP'te): İstenen mesafe ve hız kuralı.** Kullanıcının takip tasarımı: "Hedefi sabit yükseklikte ve sabit açıyla, kadrajın ortasında tutarak takip edeceğim."
 ```
@@ -456,6 +458,10 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 | 5 | Bozuk veri | NaN/Inf → `CHECK_NONFINITE`, norm 0,71 → `CHECK_NORM`, tekrar/eski sıra no → `CHECK_SEQ`, yanlış ad → `CHECK_NAME` | Geçti |
 | 6 | Veri kesilmesi | 0,5 s sonra KAYIP_BEKLE, +1,0 s sonra HOLD_ISTENDI | Geçti |
 | 7 | Hedef yok (bayrak 0) | hemen KAYIP_BEKLE, 1,0 s sonra HOLD_ISTENDI | Geçti |
+| 8 | Yeniden başlayan Pi (düzeltme turu, Karar 5b-a): önceki sıra no 1000, sonra sıra no 1 | 0,48 s'de hâlâ `CHECK_SEQ`; **0,5 s'de** önceki numara unutulur, sıra no 1 `CHECK_OK` | Geçti |
+| 9 | Uzun kesintiden sonra filtre (düzeltme turu, Karar 3): hareketli hedef kestirimi, sonra veri yok | 0,48 s'de kestirim hâlâ kullanılır; **0,5 s'de** eskimiş sayılır; sıfırlamadan sonraki ilk ölçümde konum = ölçüm, hız = 0 | Geçti |
+
+Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.**
 
 - Birim testinde olmayanlar (yaş, konum, aşağı bakış ve menzil kontrolleri, filtre, yaw donması, hedefsiz giriş) SITL'de (S4, S5) ölçülecek.
 
@@ -562,6 +568,74 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 
 Ayrıntılı gerekçeler ve kullanıcının kendi sözleri: `planning/karar-gunlugu.md`.
 
+### 5.1 Uygulamada verilen kararlar
+
+Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta burada toplanır (kullanıcının talimatı, 2026-11-10: "Hep böyle noktaları, seçimlerde, yapılan adımlarda hep rapor olarak kaydedeceğiz"). Her grubun notunda (`implementation/`) aynı kararlar daha ayrıntılı anlatılır.
+
+"Kim karar verdi" sütunu: **Kullanıcı** = kullanıcı seçeneklerden birini açıkça seçti · **Öneri kabul** = kullanıcı Claude'un önerisini kabul etti ("öneri", "olur", "tamam") · **Kod içi** = kullanıcıya görünen bir ad ya da davranış değil; ajan kod yazarken seçti, gerekçesi yazıldı (sorun çıkarsa ilk bakılacak yerlerden biri).
+
+**Görev grubu 1 (iskelet)** — ayrıntı `implementation/grup-1-iskelet-mod-kaydi.md` Bölüm 5–7:
+
+| # | Konu | Seçenekler | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|---|
+| U1.1 | `auto_follow stop` ne zaman kapansın? | a) kayıt silme mesajını yayınlayıp hemen kapan (`mc_nn_control` kalıbı) · b) PX4 modu listeden kaldırana kadar bekle (en fazla 1 s) | b; kaldırıldığı `vehicle_status.can_set_nav_states_mask`'taki mod bitinden anlaşılır | (a)'da mesaj PX4'e ulaşmıyordu (yayıncı silinince mesaj görünmez oluyor), mod "cevap vermiyor" yoluyla kalkıyordu. İlk denenen `valid_nav_states_mask` dış mod bitini hep 1 gösterdiği için işe yaramadı | Kod içi (SITL'de bulunan hatanın düzeltmesi) |
+| U1.2 | QGC parametre grubu adı | `AUTO FOLLOW` · `Auto Follow` · `auto_follow` | `AUTO FOLLOW` | Mod adıyla aynı; QGC'de aranınca bulunur | Öneri kabul ("öneri") |
+| U1.3 | `module.yaml` açıklamalarının dili | İngilizce · Türkçe | İngilizce | PX4 geleneği, QGC'de görünen metin; Türkçe açıklamalar `log-sozlugu.md`'de | Öneri kabul ("öneri") |
+| U1.4 | Yeni dosyaların lisans başlığı | a) "PX4 Development Team" · b) ekip adı · c) kişi adı | a kalır, altına ikinci satır: `Copyright (c) 2026 Pamukkale Elektrik-Elektronik Mühendisliği tez ekibi.` BSD-3 metni aynen | Başlık yalnızca yorumdur, firmware'e ve flash'a girmez; PX4 geleneği korunur, ekip de görünür | Kullanıcı ("A kalsın, altına … tez ekibini ekleyelim") |
+| U1.5 | Arming check cevabında spec'te geçmeyen iki alan (`mode_req_*_relaxed`) | doldur · sıfır bırak | Sıfır (false) | Mesaj sıfırla başlatılır; daha sıkı olan `mode_req_local_position` zaten true | Kod içi |
+| U1.6 | Kontrol bayrağı `flag_multicopter_position_control_enabled` | true · false | true | Şema (A) ile aynı; commander bunu zaten kendisi hesaplıyor | Kod içi |
+| U1.7 | Kayıt silmede `mode_executor_id` | 0 (`mc_nn_control`) · −1 | −1 | "Executor yok" demek (şema (A)) | Kod içi |
+| U1.8 | Kayıt reddedilirse | yeniden dene · bir kez hata yaz | Konsola bir kez `PX4_ERR`, yeniden deneme yok | Şema (A) "Kayıt başarısız" kutusu; QGC uyarısı (events) bu grupta yapılmadı | Kod içi |
+| U1.9 | `vehicle_land_detected` hiç gelmemişse | yerde say · havada say | Havada ("yerde değil") | Mesajın boş hâli; PX4 multikopterde `land_detector`'ı her açılışta başlatıyor | Kod içi |
+| U1.10 | `module.yaml` ondalık basamakları, `AF_ENABLE` tipi | — | Basamaklar varsayılan ve sınırlar tam görünecek kadar (ör. `AF_BETA` 2 basamak); `AF_ENABLE` tam sayı 0–1, "yeniden başlatma gerekir" işaretli | QGC'de doğru görünsün; modül `AF_ENABLE`'ı okumaz, yalnızca açılış dosyası okur | Kod içi |
+
+**Görev grubu 2 (guidance, filtre, log mesajı): kullanıcıya sorulan 6 nokta** — ayrıntı `implementation/grup-2-guidance-filtre-log.md` Bölüm 7 ve 10, gerekçeler ve kullanıcının sözleri `planning/karar-gunlugu.md` "Görev grubu 2 sonrası sorular":
+
+| # | Konu | Seçenekler | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|---|
+| G2-1 | Adı `AF_LOS` olmayan `debug_array` mesajı `los_*` alanlarına yazılsın mı? | a) yazılmaz · b) her mesaj yazılır | a (kod değişmedi) | `los_*` alanları her zaman Pi'nin `AF_LOS`'unu gösterir; yabancı mesaj yalnızca `reject_name_count`'u artırır. İçeriği gerekirse kod değiştirmeden `SDLOG_PROFILE`'a 32 (debug) eklenir | Kullanıcı ("1-a") |
+| G2-2 | Nedene göre `perf` sayaçları | a) eklenmez · b) tek sayaç · c) her neden için bir sayaç | a; spec Bölüm 2'deki cümle düzeltildi | Aynı sayılar zaten log mesajında ve `auto_follow status`'ta; yeni ad ve flash gerekmez | Kullanıcı ("2-a") |
+| G2-3 | Uzun veri kesintisinden sonra filtre | a) sıfırlanmaz (spec'in eski hâli) · b) `AF_DATA_TOUT` boyunca geçerli mesaj yoksa sıfırlanır | b (kod değişti, spec Bölüm 4) | Eski kestirim hiç kullanılmaz; veri dönünce ilk mesajlarda yanlış yöne hız istenmez. Eksisi: KAYIP_BEKLE'den dönüşte hedef hızı sıfırdan başlar (`AF_K_FF` = 0 iken etkisi yok) | Öneri kabul ("olur") |
+| G2-4 | EKF konum sıfırlamasında tutulan nokta | a) kaydırılmaz · b) `delta_xy` / `delta_z` kadar kaydırılır | b (kod değişti, spec Bölüm 8) | Drone fiziksel olarak yerinde kalır; PX4'ün kendi modları da böyle yapar (`FlightTaskManualAcceleration.cpp:106-109`, `MulticopterPositionControl.cpp:700-707`) | Öneri kabul ("olur") |
+| G2-5a | Sıra kontrolündeki "önceki" hangi mesajın? | 1–4. kontrolleri (ad, sonlu, norm, sıra) geçen son mesaj · 9 kontrolü geçen son mesaj | 1–4 (kod değişmedi) | Masada (konum geçersizken) de tekrar eden mesaj `CHECK_SEQ` olarak görülür | Kullanıcı ("5a olsun") |
+| G2-5b | "Önceki numara" unutulsun mu? | a) `AF_DATA_TOUT` boyunca sıra kontrolünü geçen mesaj yoksa · b) hiç · c) büyük geri düşüşte hemen (yeni eşik) · d) moda her girişte | a (kod değişti, spec Bölüm 2) | Pi ne zaman yeniden başlarsa başlasın (sıra no yine 1'den) mesajları kendiliğinden kabul edilir; yeni ad/eşik gerekmez. Güvenlik açısından seçenekler aynı (Hold'dan sonra takibe kendiliğinden dönülmez) | Kullanıcı ("a olsun") |
+| G2-6 | NaN davranışları: PASIF'te guidance alanları NaN; hiç geçerli mesaj yokken PASIF'te `time_since_valid` NaN; hedefsiz girişte `lost_time` ilk 0,5 s 0 | onay · değiştir | Onay (kod değişmedi) | Sözlükte böyle anlatıldı | Kullanıcı ("tamam") |
+
+**Görev grubu 2: kod içi küçük kararlar** — ayrıntı grup-2 notu Bölüm 6:
+
+| # | Konu | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|
+| K2.1 | Kontrollerin yazımı | "NaN geçemez" biçiminde; tutum hiç gelmediyse sıfır dörtlü tutulur, LOS NaN'a döner ve mesaj kontrol 8'de atılır | Tutum yokken "düz ve kuzeye bakıyor" sanılmasın | Kod içi |
+| K2.2 | LOS dönüşümden önce | Birim uzunluğa getirilir | `asin` her zaman açı verir, 1'den biraz uzun vektör NaN üretmez | Kod içi |
+| K2.3 | Mesafe formülünün yazımı | `d = h × yatay uzunluk / LOS_NED_z` (matematikçe `h / tan δ`) | Hedef tam alttayken sıfıra bölme olmaz | Kod içi |
+| K2.4 | Hedef bayrağı "1 mi?" | `abs(data[5] − 1) ≤ FLT_EPSILON` | PX4 derleyici ayarı float eşitliğini hata sayar | Kod içi |
+| K2.5 | Filtrede iki çekim anı arası süre ≤ 0 ise | Hız düzeltmesi yapılmaz, yalnızca konum | `β/Δt` sonsuz olurdu | Kod içi |
+| K2.6 | İvme sınırının süresi | İki çevrim arasında gerçekten geçen süre (~20 ms) | Sınır gerçek zamana göre doğru olsun | Kod içi |
+| K2.7 | LOS hangi tutumla çevrilir? | Mesajın işlendiği çevrimdeki en son tutum (varıştan en fazla ~20 ms sonra) | V3 "varış anındaki tutum" bu küçük farkla uygulanır | Kod içi |
+| K2.8 | Hedef tam drone'un üstündeyse | Kuralın mesafe kısmı 0 | Yön tanımsız | Kod içi |
+| K2.9 | TAKIP'te filtre kurulu değilse (EKF sıfırlaması hemen sonrası) | Yatay hız 0; bir sonraki kabul edilen mesaj filtreyi kurar | Kestirim yokken hareket istenmesin | Kod içi |
+| K2.10 | Moda girişte irtifa geçersizse | `alt_hold_z` NaN, dikey hız 0 istenir | Setpoint geçerli kalsın (yalnızca masada olabilir) | Kod içi |
+| K2.11 | Atılan mesaj uyarısı | Konsola en fazla saniyede bir; "hedef yok" için uyarı yok | Mesajlar tam hızda gelebilir; hedef yok bozuk veri değil | Kod içi |
+| K2.12 | Konsol metinleri | Yalnızca sözlükteki adlar (`STATE_*`, `CHECK_*`, sayaç adları) | Logla konsol aynı dili konuşsun | Kod içi |
+| K2.13 | Şema ile spec çelişkisi (konum kontrolünün sırası) | Spec'e uyuldu (konum 7. kontrol); şemaya dokunulmadı | Spec geçerli kaynak | Kod içi |
+
+**Görev grubu 3 (birim testi)** — ayrıntı `implementation/grup-3-birim-testi.md` Bölüm 2 ve 6:
+
+| # | Konu | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|
+| K3.1 | Zaman aşımının başladığı an (bilgi, spec A3'e uygun) | Durum makinesi referansı her durumda `max(son geçerli mesaj, giriş anı)`; girişten sonra yeni mesaj gelmezse 0,5 s giriş anından sayılır. Test 6 son geçerli mesajın girişten sonra geldiği durumu sınar; kod değişmedi | Spec A3 genel kural olarak yazılmış; fark en fazla girişten önceki mesajın yaşı kadar (< 0,5 s) | Kod içi (bilgi) |
+| K3.2 | Test değerleri | Parametre varsayılanları ve spec'in sayısal örnekleri; testler saf fonksiyonları zamanı argümanla çağırır | Spec örnekleri bu değerlerle hesaplanmış | Kod içi |
+
+**Grup 2 düzeltme turu (2026-11-10)** — ayrıntı grup-2 notu Bölüm 10:
+
+| # | Konu | Seçenekler | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|---|
+| D1 | G2-3'te süre nereden sayılır? | a) yalnızca son geçerli mesajdan · b) durum makinesiyle aynı referanstan (mod kapalıyken son geçerli mesaj, açıkken `max(son geçerli mesaj, giriş anı)`) | b | Filtre, TAKIP → KAYIP_BEKLE zaman aşımıyla aynı çevrimde sıfırlanır. (a)'da girişten hemen önce gelen mesajdan sonra veri kesilirse TAKIP'te kısa bir "kestirim yok, hız 0" penceresi oluşurdu | Kod içi |
+| D2 | G2-5b'de süre nasıl ölçülür? | — | Sıra kontrolünü geçen son mesajın işlendiği çevrimden sayılır; unutma bir sonraki mesaj işlenirken uygulanır (etkisi aynı). Hesap saf fonksiyonda (`keep_previous_seq`, kod içi ad, sözlüğe girmez), birim testli | Kullanıcıya görünen ad eklenmez; test edilebilir | Kod içi |
+| D3 | EKF sayaçları | — | Yatay (`xy_reset_counter`) ve dikey (`z_reset_counter`) ayrı ele alınır: yatayda tutulan konum, dikeyde tutulan irtifa kaydırılır; ikisi de filtreyi sıfırlar (önceki gibi) | Her sıçrama yalnızca kendi eksenini kaydırsın | Kod içi |
+| D4 | Pi yavaş gönderirse (2 Hz'den yavaş) | — | Her mesajda önceki numara unutulmuş olur; bilerek bırakıldı | Eski/tekrar mesaj yine yaş kontrolüyle (`CHECK_AGE`, 0,5 s) atılır | Kod içi |
+| D5 | EKF yön (heading) sıfırlamasında tutulan yaw | kaydır · kaydırma | Kaydırılmadı (karar 4 yalnızca konumu kapsıyor) | Açık soru; kullanıcıya sorulacak (§11) | Açık |
+
 ---
 
 ## 6. Varsayımlar (ortak spec'ler yazılınca güncellenecek)
@@ -663,10 +737,10 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 
 ## 11. Açık konular
 
-Grup 1'de açılan, kullanıcının onayını bekleyen küçük konular (ayrıntı, seçenekler ve öneri: `implementation/grup-1-iskelet-mod-kaydi.md` Bölüm 7):
-- QGC'deki parametre **grubu adı** (şimdilik `AUTO FOLLOW`, öneri).
-- Yeni dosyalardaki lisans başlığının sahiplik satırı (şimdilik PX4 geleneği).
-- `module.yaml` açıklama dili (şimdilik İngilizce).
+Grup 1'in 3 sorusu (QGC grup adı, lisans başlığı, `module.yaml` dili) ve Grup 2'nin 6 sorusu cevaplandı; seçilenler §5.1'de.
+
+Uygulamadan açık kalan:
+- **EKF yön (heading) sıfırlaması:** KAYIP_BEKLE / HOLD_ISTENDI'de tutulan yaw, PX4'ün yön tahmini sıçrarsa (`delta_heading`) kaydırılmıyor; drone o kadar dönebilir. Karar 4 yalnızca konumu kapsıyor. PX4 `mc_pos_control` yalnızca bir kez, gelen setpoint'i kaydırıyor (`MulticopterPositionControl.cpp:709-711`). Kullanıcıya sorulacak (§5.1 D5).
 
 Bekleyen dış bağımlılıklar:
 - Hüseyin: 7 kilitli yol için onay.
@@ -738,3 +812,4 @@ Bekleyen dış bağımlılıklar:
 | 3 | 2026-11-10 | Görev grubu 1 (iskelet): yazılan dosyalar, 6C flash ölçümü (%97,98 → %98,22, +4 756 B), SITL duman testi (mod 23, `AF_ENABLE` = 0 iken başlamıyor), `auto_follow stop` düzeltmesi, PX4'ten 4 yeni bulgu, onay bekleyen 3 küçük konu |
 | 4 | 2026-11-10 | Görev grubu 2 (guidance, filtre, log mesajı): §4.5 gerçekleşen hâliyle (9 kontrol, geometri, filtre, kural → kırpma → ivme sınırı, durumlar, setpoint), §4.8 log mesajı yazıldı ve SITL'de 50 Hz görüldü, 6C flash %98,22 → %98,48 (+4 936 B), kullanıcıya 5 soru (yanlış adlı mesajın ham kaydı, `perf` sayaçları, uzun boşlukta filtre, EKF sıfırlamasında tutma noktası, sıra no'da "önceki") |
 | 5 | 2026-11-10 | Görev grubu 3 (kısa birim testi): `AutoFollowGuidanceTest.cpp`, 7 test (geometri 12,0 m, kural −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s zaman aşımı, hedef yok), hepsi geçti; kod değişmedi, hata bulunmadı; §4.9'a sonuç tablosu; flash değişmedi (%98,48) |
+| 6 | 2026-11-10 | Grup 2 düzeltme turu (kullanıcının Grup 2 sonrası kararları): filtre `AF_DATA_TOUT` boyunca geçerli veri yoksa sıfırlanır (3), EKF konum sıfırlamasında tutulan nokta `delta_xy` / `delta_z` kadar kaydırılır (4), sıra no hafızası `AF_DATA_TOUT` sonra unutulur (5b-a), spec'teki `perf` cümlesi düzeltildi (2-a); 1-a, 5a, 6 kod değişikliği yok. 2 test eklendi (9/9 geçti); 6C flash +160 B (%98,48). Yeni §5.1 "Uygulamada verilen kararlar": Grup 1–3 ve bu turun bütün uygulama kararları; §4.5 ve §11 güncellendi |

@@ -88,6 +88,19 @@ inline bool sequence_passed(uint8_t check_result)
 	return check_result == auto_follow_status_s::CHECK_OK || check_result > auto_follow_status_s::CHECK_SEQ;
 }
 
+/**
+ * Whether the previous sequence number is still compared with. It is forgotten when no sample passed the sequence check
+ * for data_timeout, so that a restarted companion computer (sequence back to 1) is accepted again.
+ * @param has_previous_seq a sample passed the sequence check before
+ * @param last_seq_pass time the last sample passed the sequence check [us]
+ * @param now current time [us]
+ * @param data_timeout AF_DATA_TOUT [s]
+ */
+inline bool keep_previous_seq(bool has_previous_seq, uint64_t last_seq_pass, uint64_t now, float data_timeout)
+{
+	return has_previous_seq && now < last_seq_pass + static_cast<uint64_t>(data_timeout * 1e6f);
+}
+
 struct Geometry {
 	matrix::Vector3f los_ned;       // LOS in NED (unit length)
 	float depression;               // [rad] depression angle

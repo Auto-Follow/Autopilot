@@ -2,6 +2,7 @@
 
 - **Tarih:** 2026-11-10 · **Dal:** `ozellik/m15-takip-kodu` · **Görev listesi:** `../tasks.md` Grup 2 (2.1–2.16, log mesajı 2.L1–2.L6; geri dönüş 2.LF yapılmadı, gerekmedi)
 - **Durum:** Bitti. İki derleme geçti, kısa SITL kontrolü geçti. `verify-pin` CI'da Hüseyin'in izin listesi PR'ı gelene kadar kırmızı kalır (beklenen). Uçuş davranışı (moda girip takip etmek) bu grupta **denenmedi**; o Grup 4'ün işi.
+- **Düzeltme turu (2026-11-10):** Bölüm 7'deki 6 soru cevaplandı; yapılan değişiklikler, nedenleri ve testleri **Bölüm 10**'da.
 - Bu not kod okumadan anlaşılacak şekilde yazıldı. Adların anlamı `../log-sozlugu.md`'de.
 
 ## 1. Ne yapıldı?
@@ -188,3 +189,65 @@ Grup 1'den kalan sorular (QGC parametre grubu adı, lisans başlığı, `module.
 - Grup 3 (birim testi) için: `AutoFollowGuidance.hpp`'deki `check_input`, `compute_geometry`, `compute_guidance`, `constrain_length`, `limit_change`, `update_state`, `time_since_valid`, `lost_time` saf fonksiyonlardır; sonuç kodları `auto_follow_status_s::CHECK_*` / `STATE_*`. Test dosyası `CMakeLists.txt`'e `px4_add_unit_gtest(SRC AutoFollowGuidanceTest.cpp LINKLIBS AutoFollowGuidance)` satırıyla eklenir.
 - Spec Bölüm 3 örneği (drone 10 m, LOS (0,8; 0; 0,6)) için beklenen: `depression` 0,6435 rad, h = 9,0 m, d = 12,0 m; Bölüm 5: `range_desired` 15,59 m, kural −1,8 m/s.
 - Grup 5: Hold isteği HOLD_ISTENDI'ye geçişte gönderilecek; `hold_request_count` alanı hazır (şimdi hep 0).
+
+## 10. Düzeltme turu (Grup 2 sonrası kararlar)
+
+- **Tarih:** 2026-11-10 · **Dal:** `ozellik/m15-takip-kodu` · Kararların kendisi ve kullanıcının sözleri: `../planning/karar-gunlugu.md` "Görev grubu 2 sonrası sorular". Bütün uygulama kararlarının listesi: `../rapor.md` §5.1.
+- Yeni parametre, log alanı, durum ya da kullanıcıya görünen ad **eklenmedi**. Yalnızca `src/modules/auto_follow/` ve bu spec klasörü değişti.
+
+### 10.1 Ne değişti, neden?
+
+| Karar | Önce | Şimdi | Neden |
+|---|---|---|---|
+| **3** — uzun kesintide filtre | Filtre yalnızca EKF konum sıfırlamasında unutuluyordu; veri dakikalarca gelmese de son hızla hedefi ilerletmeye devam ediyordu | `AF_DATA_TOUT` (0,5 s) boyunca 9 kontrolü geçen mesaj gelmezse filtre unutulur; bir sonraki kabul edilen mesaj onu yeniden kurar (konum = ölçüm, hız = 0). Mod kapalıyken de çalışır | Eski kestirim hiç kullanılmaz; kesintiden sonra moda girilince ilk anlarda yanlış yöne hız istenmez |
+| **4** — EKF sıfırlamasında tutulan nokta | EKF konumu sıçratınca filtre unutuluyordu ama tutulan yatay konum ve irtifa olduğu gibi kalıyordu; drone sıçrama kadar yer değiştirebilirdi | Yatay sayaç (`xy_reset_counter`) değişirse tutulan yatay konum `delta_xy` kadar, dikey sayaç (`z_reset_counter`) değişirse tutulan irtifa (`alt_hold_z`) `delta_z` kadar kaydırılır. Filtre her iki durumda da unutulur (önceki gibi) | Drone fiziksel olarak yerinde kalır. PX4'ün kendi kalıbı (aşağıda) |
+| **5b-a** — sıra no hafızası | "Önceki numara" hiç unutulmuyordu; Pi yeniden başlayıp 1'den sayınca bütün mesajları `CHECK_SEQ` ile atılıyordu (Pixhawk yeniden başlatılana kadar) | `AF_DATA_TOUT` boyunca sıra kontrolünü (1–4. kontroller) geçen mesaj gelmezse önceki numara unutulur; bir sonraki mesajda sıra karşılaştırılmaz | Pi ne zaman yeniden başlarsa başlasın (yerde, mod kapalıyken, uçuşta) kendiliğinden kabul edilir. Güvenlik değişmez: Hold'dan sonra takibe kendiliğinden dönülmez |
+| **2-a** — `perf` sayaçları | Spec "nedene göre `perf_counter` ile de sayılır" diyordu, kod eklememişti | Kod aynı; spec Bölüm 2'deki cümle düzeltildi: sayaçlar `auto_follow_status`'ta ve `auto_follow status`'ta | Aynı bilgi zaten var; yeni ad ve flash gerekmez |
+| **1-a, 5a, 6** | — | Değişiklik yok (şimdiki hâl onaylandı) | — |
+
+**PX4'ün kendi kalıbı (Karar 4):** PX4'ün manuel konum modu, EKF yatay sıfırlamasında tuttuğu noktaya `delta_xy` ekler (`src/modules/flight_mode_manager/tasks/ManualAcceleration/FlightTaskManualAcceleration.cpp:106-109` → `tasks/Utility/StickAccelerationXY.cpp:60-63`; sayaç kontrolü `tasks/FlightTask/FlightTask.cpp:59-75`). Konum kontrolcüsü de, sıfırlamadan önce yayınlanmış setpoint'in konumuna `delta_xy` / `delta_z` ekler (`src/modules/mc_pos_control/MulticopterPositionControl.cpp:700-707`). Yani sıfırlama anında bizim son isteğimizi PX4 bir kez kaydırıyor; bizim kaydırmamız olmasaydı bir sonraki çevrimdeki isteğimiz drone'u eski (yanlış) noktaya geri çekerdi. Alan tanımları: `msg/versioned/VehicleLocalPosition.msg:20-23`.
+
+**Spec'e işlenen yerler:** Bölüm 2 (sıra no sıfırlama kuralı; `perf` cümlesi), Bölüm 4 (uzun kesintide filtre), Bölüm 8 (EKF sıfırlamasında kaydırma); her biri "(Karar 2026-11-10, <no>)" etiketli. `log-sozlugu.md` sürüm 5: `target_est_ned`, `target_vel_ned`, `alt_hold_z`, `data[4]`, `reject_seq_count` satırları. `tasks.md`: 2.17 satırı.
+
+### 10.2 Kodda nerede? (kısa)
+
+| Dosya | Değişiklik |
+|---|---|
+| `AutoFollowGuidance.hpp` | Yeni saf fonksiyon `keep_previous_seq(...)`: "önceki numara hâlâ geçerli mi?" (zaman argümanla; kod içi ad, sözlüğe girmez) |
+| `AutoFollow.hpp` | Yeni iç değişken: sıra kontrolünü geçen son mesajın zamanı |
+| `AutoFollow.cpp` | `update_vehicle_state`: yatay ve dikey sayaç ayrı; tutulan nokta kaydırılır, filtre unutulur. `process_input`: kontrolden önce önceki numaranın süresi dolduysa unutulur. `Run`: durum makinesinden sonra, süre dolduysa filtre unutulur |
+| `AutoFollowGuidanceTest.cpp` | 2 test (aşağıda) |
+
+### 10.3 Bu turda verilen kod içi kararlar (kullanıcıya görünen ad ya da davranış değil)
+
+- **Filtre için süre nereden sayılır? (D1)** Seçenekler: (a) yalnızca son geçerli mesajdan · (b) durum makinesiyle aynı referanstan (`time_since_valid`: mod kapalıyken son geçerli mesaj, açıkken `max(son geçerli mesaj, giriş anı)`). **Seçilen (b).** Neden: filtre, TAKIP → KAYIP_BEKLE zaman aşımıyla **aynı çevrimde** unutulur. (a)'da, girişten 0,3 s önce gelen son mesajdan sonra veri kesilirse filtre giriş + 0,2 s'de unutulur, durum ise giriş + 0,5 s'ye kadar TAKIP kalırdı; arada "kestirim yok, yatay hız 0" penceresi oluşurdu. Mod kapalıyken iki seçenek aynıdır.
+- **Sıra no için süre (D2):** Sıra kontrolünü geçen son mesajın işlendiği çevrimden sayılır. Unutma, bir sonraki mesaj işlenirken (kontrolden hemen önce) uygulanır; etkisi süre dolduğu anda unutmakla aynıdır.
+- **Sayaçlar ayrı (D3):** Önceden iki sayaçtan biri değişince filtre unutuluyordu; şimdi her sayaç kendi eksenini kaydırır, ikisi de filtreyi unutturur.
+- **Pi yavaş gönderirse (D4):** Pi 2 Hz'den yavaş gönderirse her mesajda önceki numara unutulmuş olur; tekrar eden eski bir mesaj sıra kontrolünden geçer ama yaş kontrolünde (`CHECK_AGE`, 0,5 s) yine atılır. Bilerek bırakıldı.
+- **Açılıştaki ilk konum mesajı:** İç sayaçlar 0'dan başlar; EKF'nin sayacı açılışta 0 değilse ilk mesajda bir "kaydırma" çalışır. O anda tutulan noktalar NaN olduğu (mod kapalı) için etkisi yoktur; yalnızca henüz kurulmamış filtre unutulur.
+- **Açık kalan (D5): EKF yön (heading) sıfırlaması.** KAYIP_BEKLE / HOLD_ISTENDI'de tutulan yaw, `delta_heading` kadar kaydırılmıyor (Karar 4 yalnızca konumu kapsıyor). PX4 konum kontrolcüsü yalnızca o anki setpoint'i bir kez kaydırıyor (`MulticopterPositionControl.cpp:709-711`), sonraki çevrimde bizim isteğimiz eski açıyı geri getirir; drone sıçrama kadar dönebilir. Yön sıfırlaması seyrek (pusula/GPS yönü değişimi). Kullanıcıya sorulacak; kod değiştirilmedi.
+
+### 10.4 Nasıl test edildi?
+
+| Ne | Sonuç |
+|---|---|
+| `make tests TESTFILTER=AutoFollowGuidance` | **Geçti.** Test programı doğrudan çalıştırılınca **9 testin 9'u geçti** (7 eski + 2 yeni). Test dosyasında derleme uyarısı yok |
+| Yeni test 8 `RestartedSenderAcceptedAfterTimeout` | Önceki numara 1000 iken sıra no 1 gelir: 0,48 s'de hâlâ `CHECK_SEQ`; **0,5 s'de** önceki numara unutulur, aynı mesaj `CHECK_OK` (Karar 5b-a) |
+| Yeni test 9 `FilterRestartsAfterLongGap` | Hareketli hedefi kestiren filtre; son geçerli mesajdan 0,48 s sonra kestirim hâlâ geçerli, **0,5 s'de** eskimiş sayılır; sıfırlamadan sonraki ilk ölçümde konum = ölçüm, hız = 0 (eski hız taşınmaz) (Karar 3) |
+| `make px4_sitl_default` | **Geçti**, modülde uyarı yok |
+| `make px4_fmu-v6c_default` | **Geçti**, `region FLASH overflowed` yok |
+| `tez/pin/verify_pin.sh --worktree` | Beklenen kırmızı: 15 dosya, hepsi onay bekleyen 7 yolda; yeni yol yok. `tez/pin/allowed-paths.txt`'e dokunulmadı |
+
+**Flash (Pixhawk 6C):**
+
+| Ölçüm | FLASH (kullanılan / toplam) | Yüzde | Boş kalan |
+|---|---|---|---|
+| Grup 2 sonu | 1 936 100 B / 1 966 080 B | %98,48 | 29 980 B |
+| **Düzeltme turu** | **1 936 260 B / 1 966 080 B** | **%98,48** | **29 820 B** |
+| Artış | **+160 B** | — | |
+
+`AutoFollow.cpp` nesne dosyası (text) 7 087 B → 7 259 B; `AutoFollowGuidance.cpp` değişmedi (1 921 B; yeni fonksiyon başlıkta, satır içi). `double` yok, dinamik bellek yok. `astyle` çalıştırılmadı (sürümü sabit değil, çatı kural 4); biçim elle PX4 stiline uyduruldu.
+
+**Denenmeyen:** EKF sıfırlamasında kaydırma ve uzun kesintide filtre sıfırlaması uçuşta (SITL) görülmedi; EKF sıfırlaması saf fonksiyon olmadığı için birim testi yok. Grup 4'te SITL'de bakılabilir: `alt_hold_z`'nin `vehicle_local_position.delta_z` kadar değişmesi; veri kesilince `target_est_ned`'in 0,5 s'de NaN olması.
+
+**Not (test sayısı):** Görev listesi Grup 3 için "~8 test" diyordu; düzeltme turu 2 test ekledi, toplam 9 (talimat: en fazla 3 yeni test).

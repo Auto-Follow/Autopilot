@@ -36,13 +36,15 @@
  * @file AutoFollowGuidanceTest.cpp
  *
  * Short unit test of the AUTO FOLLOW pure computations with the numerical examples of the spec:
- * geometry, velocity law, velocity limit, acceleration limit, corrupt input and the target loss timeouts.
+ * geometry, velocity law, velocity limit, acceleration limit, corrupt input and the target loss timeouts,
+ * and the resets after AF_DATA_TOUT without input (sequence number memory, filter).
  */
 
 #include <string.h>
 
 #include <gtest/gtest.h>
 
+#include <AlphaBetaFilter.hpp>
 #include <AutoFollowGuidance.hpp>
 #include <px4_platform_common/defines.h>
 
@@ -254,4 +256,46 @@ TEST(AutoFollowGuidanceTest, NoTargetImmediatelyLost)
 	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_KAYIP_BEKLE);
 	update_state(sm, true, t_no_target + S, t0, t_no_target, DATA_TIMEOUT, LOST_TIMEOUT);
 	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_HOLD_ISTENDI);
+}
+
+TEST(AutoFollowGuidanceTest, RestartedSenderAcceptedAfterTimeout)
+{
+	// GIVEN: sequence 1000 passed the sequence check at t0, then the companion computer restarts and counts from 1
+	const uint64_t t0 = 10 * S;
+	const float restarted[INPUT_SIZE] {0.8f, 0.f, 0.6f, 50.f, 1.f, 1.f};
+
+	// WHEN: sequence 1 arrives just before AF_DATA_TOUT (0.5 s), THEN: still compared with 1000 and rejected
+	uint64_t now = t0 + S / 2 - 20000;
+	bool has_previous_seq = keep_previous_seq(true, t0, now, DATA_TIMEOUT);
+	EXPECT_EQ(check_input("AF_LOS", restarted, now, now, has_previous_seq, 1000.f, NORM_TOL, DATA_TIMEOUT, true),
+		  auto_follow_status_s::CHECK_SEQ);
+
+	// WHEN: AF_DATA_TOUT without a sample passing the sequence check, THEN: 1000 is forgotten and sequence 1 is accepted
+	now = t0 + S / 2;
+	has_previous_seq = keep_previous_seq(true, t0, now, DATA_TIMEOUT);
+	EXPECT_FALSE(has_previous_seq);
+	EXPECT_EQ(check_input("AF_LOS", restarted, now, now, has_previous_seq, 1000.f, NORM_TOL, DATA_TIMEOUT, true),
+		  auto_follow_status_s::CHECK_OK);
+}
+
+TEST(AutoFollowGuidanceTest, FilterRestartsAfterLongGap)
+{
+	// GIVEN: the filter estimates a target moving 1 m/s north, last valid sample at t0 (mode not active)
+	AlphaBetaFilter filter;
+	filter.correct(Vector2f(0.f, 0.f), 0.f, 0.5f, 0.17f);
+	filter.correct(Vector2f(0.1f, 0.f), 0.1f, 0.5f, 0.17f);
+	EXPECT_GT(filter.velocity()(0), 0.f);
+	StateMachine sm{};
+	const uint64_t t0 = 10 * S;
+
+	// THEN: the estimate is still used just before AF_DATA_TOUT, it is stale from AF_DATA_TOUT on (module resets the filter)
+	EXPECT_LT(time_since_valid(sm, t0 + S / 2 - 20000, t0), DATA_TIMEOUT);
+	EXPECT_FALSE(time_since_valid(sm, t0 + S / 2, t0) < DATA_TIMEOUT);
+	filter.reset();
+
+	// WHEN: the next accepted measurement arrives, THEN: position = measurement, velocity 0 (no old velocity carried over)
+	filter.predict(10.f);
+	filter.correct(Vector2f(5.f, 3.f), 10.f, 0.5f, 0.17f);
+	EXPECT_EQ(filter.position(), Vector2f(5.f, 3.f));
+	EXPECT_EQ(filter.velocity(), Vector2f(0.f, 0.f));
 }

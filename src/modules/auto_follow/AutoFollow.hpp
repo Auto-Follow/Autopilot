@@ -172,6 +172,7 @@ private:
 	// Input history
 	bool _has_previous_seq{false};
 	float _previous_seq{0.f};               // sequence number of the last sample that passed the sequence check
+	hrt_abstime _last_seq_pass{0};          // [us] time the last sample passed the sequence check
 	hrt_abstime _last_valid{0};             // [us] arrival of the last sample that passed all checks
 	hrt_abstime _last_no_target{0};         // [us] arrival of the last CHECK_NO_TARGET sample
 	hrt_abstime _last_accepted_arrival{0};  // [us] arrival of the last accepted sample
