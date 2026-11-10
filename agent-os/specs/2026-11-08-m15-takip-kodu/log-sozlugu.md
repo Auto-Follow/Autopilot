@@ -40,6 +40,8 @@ Logda bu ham değerler `auto_follow_status`'un `los_*` alanlarına kopyalanmış
 
 ## 3. Parametreler (`AF_*`, QGC → Parameters)
 
+QGC'de **`AUTO FOLLOW`** grubu altında görünürler (Karar 2026-11-10; açıklamalar İngilizce, PX4 geleneği; Türkçe açıklamalar bu tabloda).
+
 Hepsi QGC'den değiştirilir, derleme gerekmez. Açılar QGC'de **derece** girilir, kod içinde radyana çevrilir. Min–max dışındaki değer QGC'de girilemez.
 
 ✔ **Koddan doğrulandı (Grup 1):** 16 parametrenin adı, varsayılanı, birimi ve min–max'ı `src/modules/auto_follow/module.yaml` ile bu tabloyla birebir aynı; SITL'de `param show AF_*` ile görüldü. `AF_ENABLE` tam sayıdır (0/1) ve "değişince yeniden başlatma gerekir" diye işaretlidir; modül bu parametreyi okumaz, yalnızca `rc.mc_apps` okur. Birimsiz parametreler (`AF_K_FF`, `AF_ALPHA`, `AF_BETA`, `AF_NORM_TOL`) QGC'de birimsiz görünür. QGC'deki parametre **grubu** şimdilik `AUTO FOLLOW` (öneri, **kullanıcı onayı bekliyor**; bkz. `implementation/grup-1-iskelet-mod-kaydi.md` Bölüm 7).

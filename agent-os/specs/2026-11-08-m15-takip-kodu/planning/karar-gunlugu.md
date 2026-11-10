@@ -474,3 +474,11 @@ Görev listesi ajanı `tasks.md`'yi yazdı (commit `f6394fc7b3`). Yeni karar ger
 - **Grup notlarının yeri.** Öneri `implementation/grup-<N>-notu.md`. Kullanıcı: "Kayıt yeri okey, ama dosya adları o grupta ne var anlatan isimler olsun." **Karar:** `implementation/` altında `grup-0-on-kosullar.md`, `grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`, `grup-5-hold-gecisi.md`, `grup-6-kapali-cevrim-analiz.md` (kullanıcının ilkesine göre Claude'un önerdiği adlar; kullanıcı değiştirebilir). SITL sonuç kayıtları da bu notlara girer.
 - **Hold 3 denemede de reddedilirse.** Öneri: hover sürer, QGC'ye uyarı ve log, pilot RC ile devralır; modül kendi başına RTL/iniş istemez. Kullanıcı: **"tamam"**.
 - Kullanıcı implement adımı için onay verdi ("güncellemeni yap, implement için onayım var").
+
+### Görev grubu 1 sonrası sorular (2026-11-10)
+
+- **QGC parametre grubu adı** (`module.yaml` zorunlu alan; kaynaklarda yoktu, Grup 1'de geçici `AUTO FOLLOW` kondu). Seçenekler: `AUTO FOLLOW` / `Auto Follow` / `auto_follow`. Öneri `AUTO FOLLOW` (mod adıyla aynı). Kullanıcı: **"öneri"** → **Karar: `AUTO FOLLOW`**.
+- **`module.yaml` açıklamalarının dili.** Seçenekler: İngilizce (PX4 geleneği, QGC'de görünen) / Türkçe. Öneri İngilizce; Türkçe açıklamalar `log-sozlugu.md`'de. Kullanıcı: **"öneri"** → **Karar: İngilizce**.
+- **Lisans başlığı.** Kullanıcı soruyu anlamadı; sade anlatım verildi: başlık yalnızca yorumdur, firmware'e girmez, flash'ı etkilemez; Copyright satırı kodun sahibini, BSD-3 metni kullanım şartını söyler. Seçenekler: (a) "PX4 Development Team" · (b) ekip adı · (c) kişi adı. Öneri (b).
+  - Kullanıcı: "A kalsın, biz altına Pamukkale Elektrik-elektronik mühendisliği tez ekibini ekleyelim ama."
+  - **Karar:** PX4 satırı kalır; altına ikinci bir Copyright satırı eklenir: `Copyright (c) 2026 Pamukkale Elektrik-Elektronik Mühendisliği tez ekibi.` Lisans metni (BSD-3) aynen kalır. Lisans başlığı olan bütün yeni dosyalara, Grup 2 bittikten sonra uygulanır.

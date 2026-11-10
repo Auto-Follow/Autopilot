@@ -1,6 +1,7 @@
 ############################################################################
 #
 #   Copyright (c) 2026 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2026 Pamukkale Elektrik-Elektronik Mühendisliği tez ekibi.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
