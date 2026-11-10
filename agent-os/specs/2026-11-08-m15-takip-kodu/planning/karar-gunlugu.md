@@ -482,3 +482,11 @@ Görev listesi ajanı `tasks.md`'yi yazdı (commit `f6394fc7b3`). Yeni karar ger
 - **Lisans başlığı.** Kullanıcı soruyu anlamadı; sade anlatım verildi: başlık yalnızca yorumdur, firmware'e girmez, flash'ı etkilemez; Copyright satırı kodun sahibini, BSD-3 metni kullanım şartını söyler. Seçenekler: (a) "PX4 Development Team" · (b) ekip adı · (c) kişi adı. Öneri (b).
   - Kullanıcı: "A kalsın, biz altına Pamukkale Elektrik-elektronik mühendisliği tez ekibini ekleyelim ama."
   - **Karar:** PX4 satırı kalır; altına ikinci bir Copyright satırı eklenir: `Copyright (c) 2026 Pamukkale Elektrik-Elektronik Mühendisliği tez ekibi.` Lisans metni (BSD-3) aynen kalır. Lisans başlığı olan bütün yeni dosyalara, Grup 2 bittikten sonra uygulanır.
+
+### Görev grubu 2 sonrası sorular (2026-11-10)
+
+Grup 2 ajanı spec'in söylemediği 6 nokta buldu (ayrıntı `implementation/grup-2-guidance-filtre-log.md` Bölüm 7). Kullanıcının cevapları:
+- **3 — Uzun veri kesintisinden sonra filtre.** Öneri: `AF_DATA_TOUT` boyunca geçerli veri yoksa filtre de sıfırlansın. Kullanıcı: **"olur"** → **Karar.**
+- **4 — EKF konum sıfırlamasında bekleme noktası.** Öneri: PX4 modları gibi tutulan nokta (`_hold_xy`, `alt_hold_z`) sıfırlamanın `delta_xy` / `delta_z` kadar kaydırılsın. Kullanıcı: **"olur"** → **Karar.**
+- **Kullanıcının genel talimatı (3. cevapla birlikte):** "Burayı not et. Hep böyle noktaları, en son yaptıklarımızda, seçimlerde, yapılan adımlarda hep rapor olarak kaydedeceğiz." → Uygulama sırasında çıkan her seçim (spec'in söylemediği nokta, seçenekler, seçilen, neden) hem grup notuna hem `rapor.md`'ye ("Uygulamada verilen kararlar" bölümü) yazılır.
+- **1, 2, 5, 6:** Kullanıcı daha ayrıntılı anlatım istedi; anlatıldı, cevap bekleniyor. Anlatım sırasında 5'e bağlı yeni bir nokta bulundu: sıra no "öncekinden büyük" kuralı hiç sıfırlanmıyor (`AutoFollow.cpp:268-270`, `AutoFollowGuidance.cpp:75`); Pi uçuşta yeniden başlarsa sıra no 1'den başlar ve bütün mesajlar `CHECK_SEQ` ile atılır.
