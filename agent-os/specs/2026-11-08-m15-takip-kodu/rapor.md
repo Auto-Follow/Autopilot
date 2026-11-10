@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 6 (Grup 2 düzeltme turu), 2026-11-10
+> **Sürüm:** 7 (Görev grubu 4), 2026-11-11
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. **Grup 2 düzeltme turu bitti:** kullanıcının Grup 2 sonrası kararlarıyla filtre uzun veri kesintisinde, Pi'nin sıra no hafızası `AF_DATA_TOUT` sonra sıfırlanıyor; EKF konum sıfırlamasında tutulan nokta kaydırılıyor; 2 test eklendi (9/9 geçti). Moda girip uçarak denenmedi (Grup 4); PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün, sürüm 6 düzeltme turunun sonucunu anlatır; uygulama sırasında verilen bütün kararlar §5.1'de. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
+> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. **Grup 2 düzeltme turu bitti:** kullanıcının Grup 2 sonrası kararlarıyla filtre uzun veri kesintisinde, Pi'nin sıra no hafızası `AF_DATA_TOUT` sonra sıfırlanıyor; EKF konum sıfırlamasında tutulan nokta kaydırılıyor; 2 test eklendi (9/9 geçti). **Görev grubu 4 (SITL açık çevrim) bitti:** test göndericisi `tez/sitl/af_los_gonder.py` yazıldı; Gazebo'da ön kontroller ve S1a, S1b, S2, S3, S4 (yerinde bekleme kısmı), S5 uçuldu ve loglardan sayıyla ölçüldü; spec'in beklediği değerler görüldü, modül kodunda hata çıkmadı; açık çevrime özgü 2 davranış (S1b salınımı, S3 dönmesi) ve 5 açık soru var (§4.9, §11). PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün, sürüm 6 düzeltme turunun, sürüm 7 Grup 4'ün sonucunu anlatır; uygulama sırasında verilen bütün kararlar §5.1'de. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -20,7 +20,7 @@ Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıkt�
 | `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
 | `planning/raw-idea.md` | Görevin ilk tanımı |
 | `planning/visuals/` | İki akış şeması (Mermaid) |
-| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`) |
+| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`) |
 
 ---
 
@@ -154,7 +154,8 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `ee09be902e` | Lisans başlığına tez ekibi satırı, Grup 1 sorularının cevapları |
 | `774583fdbc` | Görev grubu 3: kısa birim testi; rapor sürüm 5 |
 | `909f13ec97` | Grup 2 soruları (filtre sıfırlama, EKF reset kaydırma kararları) |
-| *(bu sürüm)* | Grup 2 düzeltme turu: filtre ve sıra no sıfırlama, EKF reset kaydırma; rapor sürüm 6 |
+| `1ac574d8cb` | Grup 2 düzeltme turu: filtre ve sıra no sıfırlama, EKF reset kaydırma; rapor sürüm 6 |
+| *(bu sürüm)* | Görev grubu 4: test göndericisi, ön kontroller, S1–S5; rapor sürüm 7 |
 
 ---
 
@@ -432,7 +433,7 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 - **⚠️ Uyarı (log sözlüğüne de yazılacak): PX4'ün kendi `AUTO_FOLLOW_TARGET` modu bizim AUTO FOLLOW ile ilgili değildir.**
   - PX4'ün GPS tabanlı Follow Me modu, `nav_state` = **19** (`msg/versioned/VehicleStatus.msg:55`; kod `FlightTaskAutoFollowTarget`, parametreler `FLW_TGT_*`). Bazı log araçları 19'u "Auto Follow" diye gösterebilir.
   - Bizim AUTO FOLLOW **23–30** aralığından bir numara alır; hangisi olduğu `auto_follow_status`'ta yazar.
-  - Çalışma anında çakışma yok: PX4 modları numarayla ayırıyor, kod, parametre ve topic adları da ayrı. Kodda hiçbir şeye `AutoFollowTarget` / `follow_target` adı verilmeyecek. RC anahtarı (`COM_FLTMODEx`) bizim mod numarasıyla ayarlanır. QGC listesinde "Follow Me" ile "AUTO FOLLOW"u karıştırmayın.
+  - Çalışma anında çakışma yok: PX4 modları numarayla ayırıyor, kod, parametre ve topic adları da ayrı. Kodda hiçbir şeye `AutoFollowTarget` / `follow_target` adı verilmeyecek. RC anahtarı (`COM_FLTMODEx`) bizim modun dış mod sırasıyla ayarlanır: değer 100 = "External Mode 1" = `nav_state` 23 (Grup 4'te SITL'de görüldü; değer 23 değildir). QGC listesinde "Follow Me" ile "AUTO FOLLOW"u karıştırmayın.
 
 ### 4.9 Test planı
 
@@ -480,6 +481,21 @@ Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.**
 | S5 | Bozuk veri (NaN, yanlış ad, yukarı bakan yön, tekrar eden sıra no, eski, çok uzak) | Atar, sayaç artar, etkilenmez | Açık |
 | S6 | Yerde duran hayali insan | Takip açısının verdiği mesafeye gelip durur | Kapalı |
 | S7 | Yürüyen hayali insan, `AF_K_FF` > 0 | Geride kalmadan takip eder | Kapalı |
+
+**SITL sonuçları (Görev grubu 4, 2026-11-10/11; açık çevrim, `AF_K_FF` = 0, `AF_LOST_T` = 1,0 s):** ayrıntı ve bütün sayılar `implementation/grup-4-sitl-acik-cevrim.md`. Loglar `~/Desktop/AUTO-FOLLOW LOG/`'da, özgün adlarıyla (PX4 logu UTC saatiyle adlandırır). İrtifa elle kalkış yüzünden 9,9 m oldu (h ≈ 8,92 m, istenen mesafe 15,46 m); beklenenler buna göre.
+
+| # | Script ne gönderdi | Drone ne yaptı / ölçülen | Beklenen | Sonuç | ULog |
+|---|---|---|---|---|---|
+| Ön | Disarm/arm/geçiş denemeleri, giriş/çıkış, RC anahtarı ve çubuğu, MAVLink 2 | Mod açılışta kendiliğinden 23 numarayla kaydoldu (10 açılışta, yeniden açılışta da); disarm iken geçiş kabul; bu modda arm reddedildi; yerde arm'lıyken geçiş reddedildi (`Switching to External 1 is currently not available`); girişin ilk çevriminde setpoint başladı, çıkışta durdu; RC anahtarı (`COM_FLTMODE6` = 100) ile giriş/çıkış; çubuk oynayınca Position; `debug_array` verisi sıfır değil | Spec ön kontrolleri | Geçti (QGC ekranı kullanıcıda; Hold sonrası yeniden giriş Grup 5) | `20_48_09.ulg`, `20_52_31.ulg`, `20_55_24.ulg` |
+| S1a | LOS (0,951; 0; 0,309) | Girişte d = 27,81 m, kural +6,17 m/s → **2,00 m/s** ileri; ivme ≤ 3,000 m/s²; drone 2,04 m/s ileri | ileri, ~6 → 2 m/s, ≤ 3 m/s² | Geçti | `20_56_47.ulg` |
+| S1b | LOS (0,8; 0; 0,6) | Girişte d = 11,93 m, kural **−1,76 m/s** (geri), kırpma yok; uçarken eğimle salınım, ortalama 1,53 m/s geri | geri ~1,8 m/s | Geçti (salınım gözlemi) | `20_58_51.ulg` |
+| S2 | LOS (0; 0,8; 0,6) | Burun **sağa** döndü ve dönmeyi sürdürdü: ortalama 192°/s, en çok 206°/s (`MC_YAWRATE_MAX` 200°/s) | sağa dönüş | Geçti | `21_00_19.ulg` |
+| S3 | LOS (0,174; 0; 0,985) | Girişte d = 1,61 m, kural −6,93 m/s → **2,00 m/s** geri; yaw donmadı; ~2,5 s sonra kendi etrafında dönmeye başladı | geri, 2 m/s kırpma, yaw donmaz | Geçti (dönme gözlemi) | `21_01_32.ulg` |
+| S4 | Kesinti 1,0 s ve 3,0 s; "hedef yok" 0,5 s ve 3,0 s; hedefsiz giriş | KAYIP_BEKLE kesintiden **0,51 s** sonra, HOLD_ISTENDI **1,51 s** sonra; kısa kesintide takip kendiliğinden sürdü; "hedef yok"ta **bir çevrimde** bekleme, **1,00 s** sonra HOLD_ISTENDI; hedefsiz girişte **1,50 s**; HOLD_ISTENDI'de veri dönünce takibe dönülmedi; beklemede hız isteği 0, drone tutulan noktada (en çok 0,7 m fren payı) | 0,5 / +1,0 s; hemen / 1,0 s; 1,5 s | Geçti (Hold isteği Grup 5) | `21_02_55.ulg` |
+| S5 | Araya karışık ve sürekli: yanlış ad, NaN/Inf, norm, sıra no, eski, ufuk, uzak | Araya karışıkta her tür yalnızca kendi sayacını artırdı, durum hep TAKIP, hız isteği salınım içinde (`uzak` hariç); sürekli bozukta 0,5 s / 1,5 s'de bekleme / HOLD_ISTENDI. İstisnalar: **`sira`** (aynı sıra no sürekli gelince her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor) ve **`ufuk`/`uzak`** (gövdeye sabit yön drone eğilince eşiği geçiyor; kontrol 400 mesajın 400'ünde eşikte doğru karar verdi) | atılır, sayaç artar, drone etkilenmez | Geçti, 3 türde açık çevrim / spec çelişkisi notu | `21_05_34.ulg`, `21_10_47.ulg` |
+
+- **Kapalı çevrim kısa kontrolü** (`20_48_09.ulg`): 20 m öndeki hayali hedefe 4,5 s'de 15,5 m'ye geldi, aşım 0,04 m, son 10 s'de hata −0,006 ± 0,02 m. Ayrıntılı ölçüm S6'da.
+- **Açık çevrimin doğası:** LOS gövdeye sabit; drone eğildikçe aynı gövde yönü dünyada başka açıya denk gelir. Spec'in sayıları drone düzken (moda girişte) birebir görüldü; uçarken eğim yüzünden kaydı (S1b salınımı, S3 dönmesi, S5 `ufuk`/`uzak`). Kod hatası değil; gerçek uçuşta kamera bu eğimi görüntüde görür.
 
 - **Neden S1 ikiye ayrıldı?** Sürüm 1'de "hedef önünde → ileri gider" yazıyordu; bu yanlıştı. Drone hedefe, aşağı bakış açısı takip açısına (30°) eşit olacak mesafede durmak ister. Hedef 30°'den sığ görünüyorsa uzaktadır → ileri; dik görünüyorsa yakındır → geri.
 - **Neden S2'de burun dönmeye devam eder?** Script hep "hedef sağda" der. Drone döndükçe hedef yine sağda görünür. Bu kodun hatası değil, testin doğası. S2'de yalnızca dönüş yönü kontrol edilir; yaw'ın hedefte doğru durması S6'da ölçülür.
@@ -636,6 +652,26 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | D4 | Pi yavaş gönderirse (2 Hz'den yavaş) | — | Her mesajda önceki numara unutulmuş olur; bilerek bırakıldı | Eski/tekrar mesaj yine yaş kontrolüyle (`CHECK_AGE`, 0,5 s) atılır | Kod içi |
 | D5 | EKF yön (heading) sıfırlamasında tutulan yaw | kaydır · kaydırma | Kaydırılmadı (karar 4 yalnızca konumu kapsıyor) | Açık soru; kullanıcıya sorulacak (§11) | Açık |
 
+**Görev grubu 4 (SITL açık çevrim, test göndericisi)** — ayrıntı `implementation/grup-4-sitl-acik-cevrim.md` Bölüm 2, 3, 6:
+
+| # | Konu | Seçenekler | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|---|
+| U4.1 | Test göndericisinin bağlantı varsayılanı | Kararda yazan `udpout:127.0.0.1:14540` · a) `udpin:0.0.0.0:14540` · b) `udpout:127.0.0.1:14580` | a (seçenek adı aynı, değer düzeltildi) | PX4 SITL onboard kanalı 14580'i dinler, 14540'a gönderir (`px4-rc.mavlink:4-5, 26`); kararda yazan değerle mesaj PX4'e ulaşmazdı. PX4 ilk paketi gönderenin adresini sabit tutar (`mavlink_receiver.cpp:3203-3218`); b'de yeniden başlatılan script yeni porttan gönderir, kapalı çevrim konum alamaz | Kod içi (kullanıcıya bildirildi, onayı soruldu) |
+| U4.2 | Gönderenin MAVLink kimliği | — | Sistem 1, bileşen 191 (`MAV_COMP_ID_ONBOARD_COMPUTER`); HEARTBEAT göndermez | Pi drone'un parçası; PX4 `DEBUG_FLOAT_ARRAY` için kimlik aramıyor | Kod içi |
+| U4.3 | `--los` varsayılanı | — | (0,8; 0; 0,6) | spec Bölüm 3 örneği (S1b) | Kod içi |
+| U4.4 | Senaryoların zaman çizelgesi ve bozuk değerler | — | `kes`: 10 s'de 1,0 s, 20 s'de 3,0 s kesinti · `hedef-yok`: 0,5 s ve 3,0 s · bozma türleri: 10–20 s her 5. mesaj, 20–23 s hepsi · ad `AF_TEST`, NaN / +sonsuz, 0,7 kat, aynı / 10 geri sıra no, yaş 600 ms, 5°, 11° (dosyanın başındaki sabitler; yeni komut satırı seçeneği yok) | Tek koşuda iki varyant (kısa/uzun); seçenek listesi sabit tutuldu | Kod içi |
+| U4.5 | Sıra no | — | Her **gönderilen** mesajda +1 (bozuk dahil); kesintide artmaz | Pi'nin davranışına en yakın | Kod içi |
+| U4.6 | Hedefsiz moda giriş (S4-d) | yeni seçenek · script'i çalıştırmamak | Script çalıştırılmaz | Seçenek listesine ad eklememek için | Kod içi |
+| U4.7 | Kapalı çevrim hayali hedef | — | Başlangıçta burnun 20 m önünde, yerde, duruyor (`HEDEF_ILERI_M`, `HEDEF_HIZ_NED` sabitleri); tutum `ATTITUDE` (roll, pitch, yaw); konum/tutum 0,5 s'den eskiyse mesaj gönderilmez | S6/S7'nin hedef yeri, hızı ve yolu henüz sorulmadı | Kod içi (S6/S7 için kullanıcıya sorulacak) |
+| U4.8 | `--los` birim vektöre çevrilsin mi? | çevir · aynen gönder | Aynen | `norm` gibi bozuk değerler de elle verilebilsin | Kod içi |
+| U4.9 | Script çalıştırılabilir | — | `chmod +x` | ruff 0.16.9 varsayılan kuralı (EXE001) | Kod içi |
+| U4.10 | Kalkış ve mod değişimi (başsız SITL'de RC yok) | a) simüle joystick ile Position · b) Takeoff modu | a: MAVLink `MANUAL_CONTROL`, Position'da kalkış (spec'ten sapma yok); mod değişimi `MAV_CMD_DO_SET_MODE` (1, 4, 11) — QGC'nin gönderdiği komut | Test edilen kural ("bu modda kalkış/arm yok") spec'teki yoldan sınanır | Kod içi |
+| U4.11 | RC anahtarı nasıl verilir? | — | `RC_CHANNELS_OVERRIDE` + bir oturumda `COM_RC_IN_MODE` 0, `RC_CHAN_CNT` 8, `RC_MAP_*`, `COM_FLTMODE1` 2, `COM_FLTMODE6` 100 | Joystick'in mod anahtarı yok; PX4 anahtarı yalnızca RC'den okur (`ManualControl.cpp:170-172`) | Kod içi |
+| U4.12 | Test akışı ve ölçüm script'leri | repoya al · geçici tut | Geçici (scratchpad); ölçüm pyulog 1.2.4 Python arayüzüyle | Bu grubun dosyaları yalnızca `af_los_gonder.py` ve dokümanlar; kalıcı analiz script'i Grup 6. Repoya alınması kullanıcıya soruldu (§11) | Kod içi |
+| U4.13 | S5 `ufuk`/`uzak` için ek oturum | — | Temel LOS 30° ile tekrar (`21_10_47.ulg`) | İlk koşuda açık çevrim eğim etkisi sonucu karıştırdı | Kod içi |
+| U4.14 | Oturum sonu | — | Pilot kapanmadan önce `logger stop`; süreçler PID ile | Pilot kapanınca "Manual control lost" → RTL oluyordu; `px4-shutdown` takılıyor (Grup 1) | Kod içi |
+| U4.15 | Sözlükteki RC anahtarı cümlesi | — | "`COM_FLTMODEx` bizim mod numarasıyla" → "değer 100 = External Mode 1 = `nav_state` 23" (sözlük, spec Bölüm 9 alıntısı, §4.8) | SITL'de 23 değil 100 çalıştı (`ManualControl.cpp:595`); yazım düzeltmesi, karar değil | Kod içi |
+
 ---
 
 ## 6. Varsayımlar (ortak spec'ler yazılınca güncellenecek)
@@ -740,6 +776,13 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 Grup 1'in 3 sorusu (QGC grup adı, lisans başlığı, `module.yaml` dili) ve Grup 2'nin 6 sorusu cevaplandı; seçilenler §5.1'de.
 
 Uygulamadan açık kalan:
+- **Grup 4'ten 5 soru** (`implementation/grup-4-sitl-acik-cevrim.md` Bölüm 9):
+  1. **Sıra no sürekli aynı gelirse** (donmuş Pi): Karar 5b-a gereği her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor; spec S5'teki "uzun bozuk veri hedef kaybı yoluna girer" cümlesiyle çelişiyor. Seçenekler: şimdiki gibi · unutma süresi daha uzun (ör. 1,5 s) · aynı numara hiç kabul edilmesin.
+  2. **`AF_YAW_MIN_D` = 1 m** hedef neredeyse altındayken yaw'ı sakin tutmaya yetmeyebilir (S3'te dönme).
+  3. **Yaw hız sınırı:** PX4'ün 200°/s'si mi, ayrı bir sınır mı?
+  4. **Test göndericisi bağlantı adresi** `udpin:0.0.0.0:14540` uygun mu?
+  5. **Test akışı script'i** `tez/sitl/` altına alınsın mı (ad sizin)?
+- **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor).
 - **EKF yön (heading) sıfırlaması:** KAYIP_BEKLE / HOLD_ISTENDI'de tutulan yaw, PX4'ün yön tahmini sıçrarsa (`delta_heading`) kaydırılmıyor; drone o kadar dönebilir. Karar 4 yalnızca konumu kapsıyor. PX4 `mc_pos_control` yalnızca bir kez, gelen setpoint'i kaydırıyor (`MulticopterPositionControl.cpp:709-711`). Kullanıcıya sorulacak (§5.1 D5).
 
 Bekleyen dış bağımlılıklar:
@@ -759,7 +802,7 @@ Bekleyen dış bağımlılıklar:
    1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi) — **bitti (2026-11-10)**, not: `implementation/grup-1-iskelet-mod-kaydi.md`
    2. guidance, alpha-beta ve log mesajı — **bitti (2026-11-10)**, not: `implementation/grup-2-guidance-filtre-log.md`
    3. kısa birim testi — **bitti (2026-11-10)**, not: `implementation/grup-3-birim-testi.md`
-   4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı)
+   4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı) — **bitti (2026-11-11)**, not: `implementation/grup-4-sitl-acik-cevrim.md`
    5. Hold geçişi, S4'ün tamamı
    6. S6–S7, analiz script'i ve sözlüğün son eşitlemesi (log mesajı Grup 2'ye taşındı ve yazıldı)
 
@@ -813,3 +856,4 @@ Bekleyen dış bağımlılıklar:
 | 4 | 2026-11-10 | Görev grubu 2 (guidance, filtre, log mesajı): §4.5 gerçekleşen hâliyle (9 kontrol, geometri, filtre, kural → kırpma → ivme sınırı, durumlar, setpoint), §4.8 log mesajı yazıldı ve SITL'de 50 Hz görüldü, 6C flash %98,22 → %98,48 (+4 936 B), kullanıcıya 5 soru (yanlış adlı mesajın ham kaydı, `perf` sayaçları, uzun boşlukta filtre, EKF sıfırlamasında tutma noktası, sıra no'da "önceki") |
 | 5 | 2026-11-10 | Görev grubu 3 (kısa birim testi): `AutoFollowGuidanceTest.cpp`, 7 test (geometri 12,0 m, kural −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s zaman aşımı, hedef yok), hepsi geçti; kod değişmedi, hata bulunmadı; §4.9'a sonuç tablosu; flash değişmedi (%98,48) |
 | 6 | 2026-11-10 | Grup 2 düzeltme turu (kullanıcının Grup 2 sonrası kararları): filtre `AF_DATA_TOUT` boyunca geçerli veri yoksa sıfırlanır (3), EKF konum sıfırlamasında tutulan nokta `delta_xy` / `delta_z` kadar kaydırılır (4), sıra no hafızası `AF_DATA_TOUT` sonra unutulur (5b-a), spec'teki `perf` cümlesi düzeltildi (2-a); 1-a, 5a, 6 kod değişikliği yok. 2 test eklendi (9/9 geçti); 6C flash +160 B (%98,48). Yeni §5.1 "Uygulamada verilen kararlar": Grup 1–3 ve bu turun bütün uygulama kararları; §4.5 ve §11 güncellendi |
+| 7 | 2026-11-11 | Görev grubu 4 (SITL açık çevrim): test göndericisi `tez/sitl/af_los_gonder.py` (bağlantı varsayılanı `udpin:0.0.0.0:14540` olarak düzeltildi); ön kontroller (mod 23, arm ve geçiş kuralları, giriş/çıkışta setpoint, RC anahtarı ve çubuğu, MAVLink 2) ve S1a–S5 sonuçları §4.9'da (ULog adlarıyla); modül kodu değişmedi; §5.1'e Grup 4 uygulama kararları (U4.1–U4.15); §11'e 5 yeni soru; RC anahtarı cümlesi düzeltildi (`COM_FLTMODEx` = 100) |
