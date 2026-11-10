@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 1 (shape-spec sonu), 2026-11-09
+> **Sürüm:** 2 (write-spec sonu), 2026-11-10
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Henüz **kod yazılmadı**. Bu rapor, iki günlük planlama (shape-spec) sonunda kararlaştırılan sistemi anlatır. Uygulama ve test sonuçları geldikçe yeni sürümler eklenecek (bkz. "Belge geçmişi").
+> **Durum:** Henüz **kod yazılmadı**. Sürüm 1 iki günlük planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları anlatır. Uygulama ve test sonuçları geldikçe yeni sürümler eklenecek (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -13,6 +13,8 @@ Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıkt�
 | Dosya | İçerik |
 |---|---|
 | `rapor.md` (bu dosya) | Bütün hikâye ve oluşan sistem |
+| `spec.md` | Resmî spesifikasyon: kodun ne yapacağı, `dosya:satır` kanıtlarıyla |
+| `log-sozlugu.md` | Bizim verdiğimiz bütün adların sözlüğü: mod, modül, parametreler, log alanları, durumlar, dosyalar |
 | `planning/requirements.md` | Gereksinimler: write-spec'in girdisi, geçerli kararların resmî listesi |
 | `planning/karar-gunlugu.md` | Her soru, seçenek, cevap ve gerekçe, kronolojik sırayla |
 | `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
@@ -46,6 +48,7 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | Hedef kaybı | Kademeli (D): 0.5 s veri yoksa yerinde bekle, 1.0 s daha gelmezse Hold |
 | Log | Kendi mesajımız `auto_follow_status`, her zaman kaydedilir, log sözlüğü yazılır |
 | Test | Kısa birim testi + Gazebo SITL'de S1–S7 senaryoları, sonuçlar pyulog ile ölçülür |
+| Güvenlik | Bu modda arm yasak, kalkış Position'da; yerde arm'lıyken moda geçiş engellenecek; modül açılışta kendiliğinden başlar |
 | Adlar | Mod `AUTO FOLLOW`, parametreler `AF_*` |
 
 ---
@@ -113,6 +116,12 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 18. Zaman damgası konusunda bulgu: `DEBUG_VECT` zaman bilgisini taşıyamıyor. Girdi `DEBUG_FLOAT_ARRAY`'e çevrildi.
 19. Kullanıcı write-spec'e geçmeden her şeyin kaydedilmesini istedi: `requirements.md` güncellendi ve bu rapor yazıldı.
 
+**Oturum 3: 2026-11-10** (write-spec)
+
+20. Spec-writer ajanı `spec.md`'yi yazdı, şema kopyalarını güncelledi.
+21. Claude ajanın bulgularını PX4 kaynağında kontrol etti; belgelerdeki hatalar (A), yeni bulgular (B) ve öneriler (C) kullanıcıya sunuldu.
+22. Kullanıcının cevaplarıyla `spec.md`, `requirements.md`, karar günlüğü ve bu rapor güncellendi; bütün adların sözlüğü `log-sozlugu.md` yazıldı.
+
 ### 3.3 Commit'ler (dal `ozellik/m15-takip-kodu`, push yok)
 
 | Commit | Ne |
@@ -133,7 +142,10 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `a9791e8014` | Süreler, eşikler, formül, log, parametre adları |
 | `696289b889` | `AUTO_FOLLOW_TARGET` uyarısı |
 | `f2c68b3433` | Girdi mesajı `DEBUG_FLOAT_ARRAY` |
-| *(bu sürüm)* | `requirements.md` güncellemesi ve bu rapor |
+| `676c4ced10` | `requirements.md` güncellemesi ve bu rapor (sürüm 1) |
+| `71361a82ba` | Rapor başlığı biçim düzeltmesi |
+| `164b6131f0` | `spec.md` (taslak; öneriler onay bekliyordu) |
+| *(bu sürüm)* | Write-spec turu kararları, sözlük, rapor sürüm 2 |
 
 ---
 
@@ -184,8 +196,9 @@ flowchart TD
 - `auto_follow` açılışta PX4'e "ben **AUTO FOLLOW** adında bir modum" der. PX4 ona dış modlara ayrılmış **23–30** aralığından bir mod numarası verir (`msg/versioned/VehicleStatus.msg:59-66`). Bu mod QGC'nin mod listesinde görünür ve RC anahtarına atanabilir.
 - Mod aktifken PX4 kendi uçuş görevlerini (FlightTask) **çalıştırmaz** (`src/modules/flight_mode_manager/FlightModeManager.cpp:139-144`). Bu yüzden konum kontrolcüsüne istek (`trajectory_setpoint`) vermek bizim modülün işi.
 - PX4 her 300 ms'de modüle "çalışabilir misin?" diye sorar; modül 50 ms içinde cevap vermelidir (`HealthAndArmingChecks/checks/externalChecks.hpp:69-70`). Modül donarsa PX4 bunu fark eder ve kendi failsafe'ini çalıştırır.
-- **Modül her zaman "çalışabilirim" der** (`can_arm_and_run = true`), hedef yokken bile. "Çalışamam" derse PX4 drone'u Hold'a değil **eve dönüşe (RTL)** gönderir (`src/modules/commander/failsafe/failsafe.cpp:698-702`); hedef bir an görünmedi diye drone eve uçmamalı. Hedefin yokluğunu modül kendisi yönetir (4.4).
-- Moda **QGC'den** ya da **RC anahtarından** geçilir. Araç arm edilmemişken de geçilebilir; PX4 disarm araçta her mod değişikliğine zaten izin veriyor (`src/modules/commander/UserModeIntention.cpp:54-55`). Bu, kullanıcının "masa testinde arm etmeden moda geçebilmeliyim" isteğini karşılıyor.
+- **Modül açılışta kendiliğinden başlar.** PX4 arm iken yeni mod kaydını kabul etmiyor (`ModeManagement.cpp:371-380`); uçuş sırasında mod listesi değişmesin diye. Bu yüzden modül arm'dan önce başlamalı. Çözüm: PX4'ün her multikopter açılışında çalıştırdığı `rc.mc_apps` dosyasına bir satır (SITL'de ve 6C'de aynı dosya; `mc_nn_control` da böyle başlıyor, `rc.mc_apps:40-43`). Bu kilitli bir dosya; Hüseyin'in onayı gerekiyor (7. yol).
+- **Modül "çalışabilirim" der** (`can_arm_and_run = true`), hedef yokken bile. "Çalışamam" derse PX4 drone'u Hold'a değil **eve dönüşe (RTL)** gönderir (`src/modules/commander/failsafe/failsafe.cpp:698-702`); hedef bir an görünmedi diye drone eve uçmamalı. Hedefin yokluğunu modül kendisi yönetir (4.4). Tek istisna adayı: drone yerde arm'lıyken ve mod henüz açık değilken "çalışamam" demek; böylece PX4 yerdeyken moda geçişi reddeder (4.7). Mod açık değilken RTL tehlikesi yoktur.
+- Moda **QGC'den** ya da **RC anahtarından** geçilir. **Bu modda arm etmek yasak** (kalkış Position modunda yapılır; bu modda kalkış mantığı yok). Araç arm edilmemişken ise moda geçilebilir; PX4 disarm araçta her mod değişikliğine zaten izin veriyor (`src/modules/commander/UserModeIntention.cpp:54-55`). Bu, kullanıcının "masa testinde arm etmeden moda geçebilmeliyim" isteğini karşılıyor.
 - **Neden bu yol seçildi?** Değerlendirilen diğer yollar:
   - **Yeni FlightTask:** kilitli birçok PX4 dosyasını değiştirmeyi gerektirir.
   - **Offboard:** kod Pi'ye taşınır; issue ve misyonla çelişir.
@@ -218,7 +231,7 @@ stateDiagram-v2
   HOLD: HOLD İSTENDİ<br/>PX4 Hold moduna geçer, AUTO FOLLOW biter
 
   PASIF --> TAKIP: pilot modu açtı ve geçerli veri var
-  PASIF --> KAYIP: pilot modu açtı ama hedef yok
+  PASIF --> KAYIP: pilot modu açtı ama hedef yok (Hold girişten 1.5 s sonra)
   TAKIP --> KAYIP: 0.5 s geçerli veri yok (AF_DATA_TOUT) ya da Pi "hedef yok" dedi
   KAYIP --> TAKIP: 1.0 s dolmadan geçerli veri geldi
   KAYIP --> HOLD: 1.0 s doldu (AF_LOST_T)
@@ -234,7 +247,7 @@ stateDiagram-v2
   Toplamda son geçerli mesajdan 1.5 s sonra drone Hold'dadır. Pi "hedef yok" derse ilk 0.5 s beklenmez, KAYIP-BEKLE hemen başlar.
 - **Takibe dönüş:** Hold'dan sonra drone, hedef görünse bile takibe **kendiliğinden dönmez**. Pilot QGC'den modu yeniden seçer (tek tık) ya da RC anahtarını başka konuma alıp geri getirir. Anahtarı yerinde bırakmak yetmez, çünkü PX4 yalnızca anahtar **konumu değişince** mod isteği gönderiyor (`src/modules/manual_control/ManualControl.cpp:176-177`).
 - **Hold nasıl istenir:** Modül `VEHICLE_CMD_SET_NAV_STATE` komutunu gönderir (`src/modules/commander/Commander.cpp:936-944`).
-- **Hedef görünmezken moda girilirse:** Aynı kural geçerli; 1.5 s içinde hedef gelmezse Hold. Pratikte mod, hedef görünürken açılır.
+- **Hedef görünmezken moda girilirse:** KAYIP-BEKLE ile başlanır, ama süre **giriş anından** sayılır: 0.5 + 1.0 = 1.5 s içinde geçerli hedef gelmezse Hold. (Sürüm 1'deki şema yanlışlıkla 1.0 s gösteriyordu.) Pratikte mod, hedef görünürken açılır.
 - **Neden bu davranış (D)?** Değerlendirilen dört seçenek:
   - **A:** Moddan hiç çıkma, hedef gelince devam et.
   - **B:** Hemen Hold'a geç, pilot yeniden açar.
@@ -356,10 +369,13 @@ Hepsi QGC'den değiştirilebilir, kod yeniden derlenmez. Ön ek `AF_` (PX4 v1.17
 | 0.5 s geçerli veri yok ya da Pi "hedef yok" dedi | KAYIP-BEKLE: drone yerinde bekler (mevcut konum, hız 0, son yaw) |
 | 1.0 s daha veri yok | Hold istenir; takip kendiliğinden başlamaz |
 | Hedef görünmezken moda girildi | Aynı kural, 1.5 s içinde hedef yoksa Hold |
-| Drone'un kendi konumu geçersiz (ör. GPS yok) | Hedef hesaplanmaz, takip yapılmaz |
+| Drone'un kendi konumu geçersiz (ör. GPS yok) | Hedef hesaplanmaz, takip yapılmaz; yatay hız 0 istenir |
 | Hız isteği | En fazla 2 m/s, en fazla 3 m/s² ivmeyle değişir |
 | Modül donarsa | PX4 cevap alamadığını fark eder ve kendi failsafe'ini çalıştırır |
 | Pilot | Her an başka moda geçebilir. İlk uçuşta RC'de Position moduna ayrılmış bir anahtar konumu olmalı |
+| Bu modda arm | Yasak. Önce Position'da arm edilip kalkılır, AUTO FOLLOW havada açılır |
+| Yerde arm'lıyken moda geçiş | Engellenecek (kullanıcı: "AUTO FOLLOW'da kalkış yok"); yöntem kullanıcıya soruldu |
+| Hold isteği reddedilirse | Yerinde beklemeye devam eder; 1 s arayla en fazla 3 kez yeniden ister |
 
 - **(doğrulanacak):** RC çubuğuna dokununca external moddan çıkılıp çıkılmadığı.
 - **İlk uçuş önerisi:** `AF_LOST_T` kısa (1 s), `AF_VEL_MAX` düşük (2 m/s), `AF_K_FF` = 0.
@@ -372,7 +388,7 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 
 - **Log mesajı:** Kendi uORB mesajımız `msg/AutoFollowStatus.msg` → topic `auto_follow_status`. Alanlar logda adlarıyla görünür (PlotJuggler ve Flight Review'da da).
 - **Her logda her zaman kaydedilir:** PX4'ün varsayılan log listesine eklenir; kullanıcı ayrıca bir ayar açmaz.
-- **İçerik** (kesin alan adları write-spec'te sorulacak):
+- **İçerik** (alan adları kararlaştı, önek yok; tam liste ve anlamları `log-sozlugu.md`):
   - Pi'den gelen ham veri (LOS x/y/z, yaş, sıra no, hedef var),
   - doğrulama sonucu ve atılan mesaj sayaçları,
   - filtrenin girdisi (ölçülen hedef konumu) ve çıktısı (kestirilen konum ve hız),
@@ -382,14 +398,14 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
   - AUTO FOLLOW'un mod numarası.
 - **`DEBUG_FLOAT_ARRAY` yalnızca taşıyıcı.** Logda bakılan, `auto_follow_status`'un adlı alanları. Ham `debug_array` logda yalnızca debug ayarı açıksa ve `data[0]`… diye görünür; ihtiyaç yok.
 - **Zaten kendiliğinden kaydedilenler:** `trajectory_setpoint`, `vehicle_status` (mod değişimleri), `vehicle_command` (Hold isteği), `vehicle_local_position`, `vehicle_attitude`, `vehicle_control_mode`, `actuator_motors` (`src/modules/logger/logged_topics.cpp:131-150, 214`).
-- **Log sözlüğü:** `log-sozlugu.md`. Her alan için ad, anlam, birim, frame ve hangi durumda ne değer aldığı yazılır. Kod değişince aynı commit'te güncellenir.
+- **Sözlük:** `log-sozlugu.md`. Kullanıcının isteğiyle yalnız log alanları değil, **bizim verdiğimiz bütün adlar** orada: mod, modül ve komutları, parametreler, girdi mesajı, log alanları, durumlar, doğrulama sonuçları, dosyalar. Her ad için anlam, birim, frame ve hangi durumda ne değer aldığı yazılır. Kod değişince aynı commit'te güncellenir.
 - **Logların yeri:**
   - **Gerçek uçuş:** 6C'deki SD kart, `/fs/microsd/log/<tarih>/<saat>.ulg` (`logger.cpp:1296`).
   - **SITL:** laptop, `build/px4_sitl_default/rootfs/log/<tarih>/<saat>.ulg`. Bu klasör `make clean` ile ya da 7 klasör sınırı dolunca silinir (`SDLOG_DIRS_MAX` = 7, `ROMFS/px4fmu_common/init.d-posix/rcS:183`). Bu yüzden her testten sonra **`~/Desktop/AUTO-FOLLOW LOG/`** klasörüne kopyalanır.
   - Log dosyaları repoya girmez (kural 9); spec'e yalnızca adları yazılır.
 - **Masa testinde log almak** (kod gerekmez; kullanıcı kendisi yapar):
   1. SD kart takılı olsun.
-  2. QGC → Vehicle Setup → Parameters → `SDLOG_MODE` = 2 ("from boot until shutdown").
+  2. QGC → Vehicle Setup → Parameters → `SDLOG_MODE`'u kullanıcı kendisi seçer. Bilgi: 1 = açılıştan disarm'a kadar (masada arm/disarm yapılırsa kayıt orada durur), 2 = açılıştan kapanışa kadar.
   3. Kartı yeniden başlat; bu parametre yeniden başlatmadan devreye girmez (`logger/module.yaml:31`).
   4. Testten sonra logu Analyze Tools → Log Download ile indir ve `AUTO-FOLLOW LOG`'a koy.
   5. Uçuştan önce `SDLOG_MODE` = 0'a dön ve kartı yeniden başlat. Varsayılan 0 = "yalnızca arm iken"; kullanıcı bunu varsayılan bırakmak istedi.
@@ -412,18 +428,26 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 - Testler firmware'e girmez, flash'ı etkilemez.
 
 **2) SITL testleri (Gazebo, `gz_x500`)**
-- Drone kalkar, AUTO FOLLOW'a alınır ve geçici test script'i (`tez/sitl/af_los_gonder.py`, pymavlink 2.4.50) Pi gibi `AF_LOS` mesajı gönderir.
+- Drone **Position** modunda kalkar, havada AUTO FOLLOW'a alınır ve geçici test script'i (`tez/sitl/af_los_gonder.py`, pymavlink 2.4.50) Pi gibi `AF_LOS` mesajı gönderir.
+
+Örnek değerler: irtifa 10 m, takip açısı 30° → istenen mesafe 15.6 m.
 
 | # | Script ne gönderir | Drone'dan beklenen | Çevrim |
 |---|---|---|---|
-| S1 | "Hedef önünde" | İleri gider (`AF_K_FF` = 0) | Açık |
-| S2 | "Hedef sağında" | Burnunu sağa çevirir | Açık |
-| S3 | "Hedef çok yakında" | Geri gider ya da durur | Açık |
-| S4 | Göndermeyi keser | 0.5 s sonra yerinde bekler, 1.0 s sonra Hold | Açık |
-| S5 | Bozuk veri (NaN, yanlış ad, yukarı bakan yön, tekrar eden sıra no) | Atar, sayaç artar, etkilenmez | Açık |
+| S1a | "Hedef uzakta" (aşağı bakış 18°, takip açısından sığ) | İleri gider; kural ~6 m/s ister, 2 m/s'de kırpılır | Açık |
+| S1b | "Hedef yakında" (aşağı bakış 37°, takip açısından dik) | ~1.8 m/s geri gider | Açık |
+| S2 | "Hedef sağında" | Burnunu sağa çevirir; açık çevrimde dönmeye devam eder (beklenen) | Açık |
+| S3 | "Hedef neredeyse tam altta" (80°) | Geri gider; kural ~7 m/s ister, 2 m/s'de kırpılır | Açık |
+| S4 | Göndermeyi keser / "hedef yok" der / hedef yokken mod açılır | 0.5 s sonra yerinde bekler, 1.0 s sonra Hold (hedefsiz girişte girişten 1.5 s) | Açık |
+| S5 | Bozuk veri (NaN, yanlış ad, yukarı bakan yön, tekrar eden sıra no, eski, çok uzak) | Atar, sayaç artar, etkilenmez | Açık |
 | S6 | Yerde duran hayali insan | Takip açısının verdiği mesafeye gelip durur | Kapalı |
 | S7 | Yürüyen hayali insan, `AF_K_FF` > 0 | Geride kalmadan takip eder | Kapalı |
 
+- **Neden S1 ikiye ayrıldı?** Sürüm 1'de "hedef önünde → ileri gider" yazıyordu; bu yanlıştı. Drone hedefe, aşağı bakış açısı takip açısına (30°) eşit olacak mesafede durmak ister. Hedef 30°'den sığ görünüyorsa uzaktadır → ileri; dik görünüyorsa yakındır → geri.
+- **Neden S2'de burun dönmeye devam eder?** Script hep "hedef sağda" der. Drone döndükçe hedef yine sağda görünür. Bu kodun hatası değil, testin doğası. S2'de yalnızca dönüş yönü kontrol edilir; yaw'ın hedefte doğru durması S6'da ölçülür.
+- **Ön kontroller** (her test oturumunun başında): modül açılışta başladı mı, QGC'de `AUTO FOLLOW` görünüyor mu, disarm iken moda geçiliyor mu, bu modda arm reddediliyor mu, yerde arm'lıyken moda geçiş reddediliyor mu, QGC ve RC anahtarıyla giriş/çıkış, Hold'dan sonra anahtar aç-kapa ile yeniden giriş.
+- **Hangi test SITL'siz?** Yalnızca birim testi. Açık çevrim testleri de Gazebo'da yapılır ama basittir: script sabit bir yön gönderir.
+- RC kaybı ve modül donması testleri bu spec'te yok; m16 adayı.
 - **Açık çevrim:** Script sabit bir yön gönderir. Hedef drone'la birlikte kayıyormuş gibi davranır.
 - **Kapalı çevrim:** Script yerde hayali bir insan tutar, drone'un konumunu okur ve o insana göre gerçek yönü hesaplar. Mesafe tutma ancak böyle gerçekten test edilir.
 - **Neden S1–S5'te `AF_K_FF` = 0?** Sabit yön gönderilince filtre "hedef de benim hızımla gidiyor" sanır; hedef hızı eklenirse drone hızlandıkça hedef de hızlanmış görünür ve drone `AF_VEL_MAX`'a kadar kaçar.
@@ -439,11 +463,12 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 | `msg/AutoFollowStatus.msg` | Log mesajı | **Kilitli**, onay gerekli |
 | `msg/CMakeLists.txt` | Mesaj listesine bir satır (`:39`) | **Kilitli**, onay gerekli |
 | `src/modules/logger/logged_topics.cpp` | `auto_follow_status`'u her zaman kaydeden bir satır | **Kilitli**, onay gerekli |
+| `ROMFS/px4fmu_common/init.d/rc.mc_apps` | Açılışta `auto_follow start` satırı | **Kilitli**, onay gerekli |
 | `tez/sitl/af_los_gonder.py` | Geçici test göndericisi | İzinli (`tez/*`) |
 | `tez/analiz/af_log_analiz.py` | Log değerlendirme script'i | İzinli |
 | `agent-os/specs/2026-11-08-m15-takip-kodu/` (`log-sozlugu.md`, `rapor.md`, …) | Dokümanlar | İzinli |
 
-- Kilitli yolların `tez/pin/allowed-paths.txt`'e eklenmesi için **repo sorumlusu Hüseyin'e tek bir talep** iletilecek. Ekleme ayrı ve açık bir PR ile yapılır; Claude listeyi kendisi genişletmez. Kullanıcı: "Kilitli dosyalara böyle durumlarda dokunuruz, sıkıntı yok."
+- Kilitli **yedi** yolun `tez/pin/allowed-paths.txt`'e eklenmesi için **repo sorumlusu Hüseyin'e tek bir talep** iletilecek. `rc.mc_apps` reddedilirse geri dönüş: SITL'de modül elle başlatılır, 6C'de SD karttaki `etc/extras.txt` kullanılır. Ekleme ayrı ve açık bir PR ile yapılır; Claude listeyi kendisi genişletmez. Kullanıcı: "Kilitli dosyalara böyle durumlarda dokunuruz, sıkıntı yok."
 - **Log mesajı için neden kilitli dosya:** PX4'ün SD karttaki `logger_topics.txt` dosyasıyla kilitli dosyaya dokunmadan ek topic loglanabileceği önce düşünüldü. Ama bu dosya varsa PX4 **yalnızca içindekileri** logluyor ve varsayılan listeyi tamamen kapatıyor (`logged_topics.cpp:531-540`). Doğru yol, `logged_topics.cpp`'ye bir satır eklemek.
 - **Geri dönüş:** Hüseyin log mesajı için gereken yolları reddederse PX4'ün hazır `debug_array` mesajı kullanılır; alanlar logda `data[0]`… diye görünür, adlar sözlükten okunur.
 - **Flash:** 6C'nin flash'ı ~%98 dolu. Derleme çıktısındaki kullanım spec'e yazılır. Taşarsa Hüseyin'e haber verilir; modül kapatarak yer açılmaz (o iş m14). Not: `CONSTRAINED_FLASH` ayarı açılırsa `DEBUG_FLOAT_ARRAY` işleyicisi derlemeden çıkar (`mavlink_receiver.cpp:284-305`), yani m14'te dikkat edilmeli.
@@ -486,6 +511,15 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 | 12b | `AUTO_FOLLOW_TARGET` | adı değiştir · uyarı yaz | Uyarı (sözlük ve rapor) + log'a mod no | Çalışma anında çakışma yok | Karar |
 | 13 | Yükseklik | i · ii · iii | iii (hedef yüksekliği + zemin ofseti) | Mesafe hatasını düzeltir | Karar |
 | 14 | Kapsam ve toparlama | — | 14.1–14.5 öneri gibi; 14.3 yerine bu rapor | Masaüstü dosyası kişisel çalışma | Öneri kabul + Karar |
+| A1 | Senaryo listesi | spec-shaper'ın S6/S7'si (RC kaybı, modül) · konuşulan tablo | Konuşulan tablo; RC kaybı ve modül donması m16 adayı | "En konuştuğumuz hale getir" | Karar |
+| A2 | S1 beklentisi | — | S1a (uzak → ileri) / S1b (yakın → geri) | İleri/geri, açıya bağlı | Karar |
+| A3 | Hedefsiz girişte süre | — | Girişten 1.5 s sonra Hold | Karar 5a ile tutarlı | Karar |
+| A5 | Masa testinde `SDLOG_MODE` | 1 · 2 | Kullanıcı kendisi seçer | "Kendim ayarlayacağım" | Karar |
+| B2 | Modülün açılışta başlaması | a) elle / SD kart · b) `rc.mc_apps` satırı | b (7. kilitli yol) | Unutulma riski yok, kendiliğinden | Karar |
+| B4 | Yerde arm'lıyken moda geçiş | a) PX4'e "çalışamam" bildir · b) girişte Hold iste | Engellenecek; yöntem açık | "AUTO FOLLOW'da kalkış yok" | Karar (yöntem açık) |
+| C1 | Bu modda arm | serbest · yasak | Yasak; disarm iken geçiş serbest | "Arm değilken bu moda geçebileyim" | Karar |
+| C2 | Davranış ayrıntıları (filtre, ivme sınırı başlangıcı, Hold reddi, konum geçersiz, parametre sınırları, `AF_ALPHA` 0.5 / `AF_BETA` 0.17) | — | Spec'teki öneriler | — | Öneri kabul |
+| C3 | Log alan adları ve sözlük | önekli · öneksiz | Öneksiz; bütün adlar için ayrıntılı sözlük | "Her şeyi detaylı kaydet" | Karar |
 
 Ayrıntılı gerekçeler ve kullanıcının kendi sözleri: `planning/karar-gunlugu.md`.
 
@@ -523,6 +557,10 @@ Bunlar kararları doğrudan etkileyen bulgular; hepsi PX4 v1.17.0 kaynağında d
 13. **Follow Me = `nav_state` 19, dış modlar = 23–30** (`VehicleStatus.msg:55, 59-66`).
 14. **Hız (xy) + konum (z) karışımı geçerli** (`PositionControl.cpp:224-250`).
 15. **PX4'ün otomatik modlarındaki yatay ivme sınırı 3 m/s²** (`multicopter_autonomous_params.c:88`).
+16. **PX4 arm iken yeni mod kaydını reddediyor** (`ModeManagement.cpp:371-380`); modül arm'dan önce başlamalı.
+17. **`rc.mc_apps` her multikopter açılışında çalışıyor**, SITL'de de 6C'de de (`init.d-posix/rcS:289`, `init.d/rcS:485`, `rc.vehicle_setup:20-24`).
+18. **Arm'lı araçta mod geçişi, modun "çalışabilirim" cevabına bakıyor** (`UserModeIntention.cpp:58-59`, `externalChecks.cpp:158-160, 188-190`); ret QGC'de mesaj ve uyarı sesiyle görünüyor (`Commander.cpp:2620-2638`).
+19. **`DEBUG_FLOAT_ARRAY`'in veri kısmı MAVLink 2 ek alanı** (`common.xml:7630-7631`); MAVLink 1 ile değerler 0 gelir.
 
 ---
 
@@ -536,6 +574,12 @@ Bunlar kararları doğrudan etkileyen bulgular; hepsi PX4 v1.17.0 kaynağında d
 4. **Girdi mesajı ilk başta `DEBUG_VECT` seçilmişti.** Zaman damgasını taşıyamadığı sonradan görüldü; `DEBUG_FLOAT_ARRAY`'e geçildi.
 5. **V1–V6 varsayım metinleri ilk soru listesinden sonra dosyalara yazılmamıştı.** Spec-shaper bulamadı; ana konuşmadan tamamlandı.
 6. **Görev talimatını içeren prompt dosyası `/tmp` altındaydı** ve yeniden başlatmada kaybolabilirdi. İçeriği Claude'un kalıcı hafızasına alındı.
+7. **`requirements.md`'de S6/S7 konuşulandan farklıydı** (RC kaybı / modül sağlığı). Spec-shaper eski taslak şemadan almıştı; konuşulan tabloya döndürüldü.
+8. **S1'in beklentisi yanlıştı** ("hedef önünde → ileri"). İleri/geri açıya bağlı; S1a/S1b olarak düzeltildi.
+9. **Hedefsiz girişte süre** bu raporun şemasında 1.0 s görünüyordu; karar 1.5 s idi. Düzeltildi.
+10. **İş sırasında S4'ün Hold testi, Hold kodundan önce** yazılmıştı. Sıra düzeltildi.
+11. **Masa testi için `SDLOG_MODE` = 2 yazılmıştı**; kullanıcı değeri kendisi seçmek istiyordu. Öneri kaldırıldı.
+12. **Spec-writer ajanı, talimata rağmen `git status` çalıştırdı** (yalnızca okuma; zarar yok).
 
 ---
 
@@ -543,11 +587,11 @@ Bunlar kararları doğrudan etkileyen bulgular; hepsi PX4 v1.17.0 kaynağında d
 
 | Kim | Ne | Neden önemli |
 |---|---|---|
-| **Hüseyin** | 4.10'daki kilitli yollar için onay (tek talep) | Onay olmadan CI'daki `verify-pin` kırmızı kalır |
+| **Hüseyin** | 4.10'daki **yedi** kilitli yol için onay (tek talep; `rc.mc_apps` dahil) | Onay olmadan CI'daki `verify-pin` kırmızı kalır |
 | **Hüseyin** | `tech-stack.md`'de "entegrasyon yaklaşımı: external mode" güncellemesi | Ürün planını yalnızca o günceller |
 | **Hüseyin** | İstenirse "her özelleştirmenin log sözlüğü olsun" ekip standardı (ayrı m00) | Herkes için bağlayıcı olsun diye |
 | **Hüseyin** | Vision `model-training` dalında `.pt` model dosyaları var (Vision PR #5) | Kural 9: model ağırlığı repoya girmemeli |
-| **Yusuf Ortatepe (Vision)** | `AF_LOS` biçimi: LOS x/y/z, yaş (ms), sıra no, hedef var/yok | Bizim girdimiz |
+| **Yusuf Ortatepe (Vision)** | `AF_LOS` biçimi: LOS x/y/z, yaş (ms), sıra no, hedef var/yok. MAVLink 2: ✓ doğrulandı (2026-11-10) | Bizim girdimiz |
 | **Yusuf Ortatepe (m10)** | Eksen yönleri ve işaretleri | V6 |
 | **Ahmet (m06)** | Kamera eğimi → `AF_TRK_ANG`; gerçekçi simülasyon | Takip açısı ve testlerin taşınacağı yer |
 | **Yusuf Kurt** | WhatsApp grubuna log kuralları notu | Ekip bilgilensin |
@@ -565,6 +609,7 @@ Repo taraması sonucu (2026-11-08): Hiçbir repoda Pi'den yön gönderen kod yok
 - Gerçek uçuş → **m22**, **m25**
 - Flash'ta yer açma → **m14**
 - Ekip için log sözlüğü standardı → ayrı **m00**
+- RC kaybı ve modül donması SITL testleri → **m16** adayı
 
 Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı izleyerek m16'nın bir kısmını da kapsıyor (karar 1).
 
@@ -572,26 +617,26 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 
 ## 11. Açık konular
 
-- Mod kaydının teknik ayrıntıları: gereken sensörler, kontrol bayrakları ve "bu modda arm etme" ayarı. Öneriler var, write-spec'te teyit edilecek.
-- Masa testi: GPS yokken ne görülmek isteniyor?
-- Log mesajının alan adları: write-spec'te log sözlüğüyle birlikte sorulacak.
-- RC çubuğuna dokununca external moddan çıkılıyor mu? (doğrulanacak)
-- Şemalardaki TBD'lerin güncellenmesi: onaylandı, write-spec'te yapılacak.
+- **`rc.mc_apps` satırının koşulu:** koşulsuz mu, açma/kapama parametresiyle mi? (Parametreyle olursa adı kullanıcı verir.)
+- **Yerde arm'lıyken moda geçiş engelinin yöntemi:** (a) PX4'e "şu an çalışamam" bildirmek · (b) girişte yerdeyse Hold istemek.
+- **RC çubuğuna dokununca Position'a geçilsin mi?** (doğrulanacak; SITL'de denenecek)
+- **Kodun iç düzeni:** hesapların `AutoFollowGuidance` kütüphanesinde saf fonksiyonlar olması (birim testi için).
+- **Masa testi:** GPS yokken neler gözlenecek (spec A3'te öneri listesi).
 - Şemaların PNG'ye çevrilmesi: ertelendi; araç kurulmadan önce sorulacak.
 
 ---
 
 ## 12. Sonraki adımlar
 
-1. **Kullanıcı onay verirse** `/agent-os:write-spec`: açık konular konuşulur, log alanları ve sözlük netleşir, şema kopyaları güncellenir.
-2. `/agent-os:create-tasks`.
-3. Uygulama, önerilen iş sırasıyla:
-   1. iskelet (moda kaydolan modül, SITL ve 6C derlemesi)
+1. Yukarıdaki açık konular cevaplanınca `spec.md` son haline gelir.
+2. **Kullanıcı onay verirse** `/agent-os:create-tasks`: görev listesi.
+3. Uygulama, iş sırasıyla:
+   1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi)
    2. guidance ve alpha-beta
    3. kısa birim testi
-   4. SITL S1–S5
-   5. Hold geçişi
-   6. S6–S7, log mesajı ve sözlük
+   4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı)
+   5. Hold geçişi, S4'ün tamamı
+   6. S6–S7, log mesajı ve sözlük güncellemesi
 
    Her görev grubundan sonra ne yapıldığı, neden yapıldığı ve nasıl test edildiği bu rapora ve spec klasörüne sade dille yazılır.
 4. Yetişmeyenler "m16'ya kalanlar" listesine; PR açıklamasına `Closes Auto-Follow/Auto-Follow#6`.
@@ -622,7 +667,13 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 | **QGC** | QGroundControl, yer kontrol yazılımı |
 | **Flash** | Pixhawk'ta firmware'in durduğu kalıcı bellek (~%98 dolu) |
 | **PWM / ESC** | Motor sürücüsüne giden sinyal / motor sürücüsü |
-| **Açık / kapalı çevrim test** | Sabit veri gönderen test / drone'un tepkisine göre veri üreten test |
+| **Açık / kapalı çevrim test** | Sabit veri gönderen test / drone'un tepkisine göre veri üreten test (ikisi de Gazebo'da) |
+| **Birim testi** | Drone'suz ve Gazebo'suz, bilgisayarda saniyeler içinde biten hesap testi |
+| **Arming check** | PX4'ün modüle düzenli sorduğu "çalışabilir misin?" sorusu ve cevabı |
+| **Land detector (`landed`)** | PX4'ün "drone yerde mi?" kararını veren parçası |
+| **`rc.mc_apps`** | PX4'ün her multikopter açılışında çalıştırdığı başlatma dosyası |
+| **MAVLink 2 ek alanı** | Yalnızca MAVLink 2'de taşınan mesaj kısmı; MAVLink 1 ile 0 gelir |
+| **Bizim verdiğimiz adlar** | Hepsi `log-sozlugu.md`'de |
 
 ---
 
@@ -631,3 +682,4 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 | Sürüm | Tarih | Ne eklendi |
 |---|---|---|
 | 1 | 2026-11-09 | Shape-spec sonu: süreç, bütün kararlar, oluşan sistem (henüz kod yok) |
+| 2 | 2026-11-10 | Write-spec turu: S1–S7 düzeltmesi (S1a/S1b), açılışta başlatma (`rc.mc_apps`, 7. kilitli yol), bu modda arm yasağı, yerdeyken geçiş engeli kararı, hedefsiz girişte 1.5 s, `SDLOG_MODE` kullanıcıya bırakıldı, öneriler kabul, bütün adların sözlüğü |

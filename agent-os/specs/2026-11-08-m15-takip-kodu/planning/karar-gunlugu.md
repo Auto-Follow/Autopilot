@@ -350,3 +350,110 @@ Güncel liste `../rapor.md` Bölüm 11'de ve `requirements.md` Bölüm 10'da. K�
 - Vision ile girdi biçimi,
 - m06'dan kamera eğimi,
 - Hüseyin'den kilit listesi onayı.
+
+---
+
+## Write-spec turu (2026-11-10)
+
+Spec-writer ajanı `spec.md`'yi yazdı ve iki şema kopyasını güncelledi (commit `164b6131f0`, taslak). Claude, ajanın bulgularını PX4 kaynağında kontrol etti. Sonra belgelerdeki hataları, yeni bulguları ve onay bekleyen önerileri üç grupta kullanıcıya sundu: **A** belgelerdeki hatalar, **B** yeni bulgular, **C** öneriler. Aşağıda her maddenin sorusu, kullanıcının cevabı ve sonucu var.
+
+### A. Belgelerdeki hatalar
+
+- **A1 — S6/S7 iki belgede farklıydı.**
+  - Sorun: Spec-shaper `requirements.md` §3.12'ye eski taslak şemadan S6 = "RC kaybı", S7 = "modül sağlığı" yazmıştı. Kullanıcıyla konuşulan ve raporda (§4.9) duran tabloda ise S6 = yerde duran hayali insan, S7 = yürüyen hayali insan.
+  - Claude'un önerisi: konuşulan tablo esas olsun. RC kaybı ve modül donması testleri süre kısıtı yüzünden m16'ya kalsın.
+  - Kullanıcı: "En konuştuğumuz hale getir."
+  - **Karar:** S1–S7, konuşulan tablodur. Eski taslaktaki "kayıt ve başlatma" ile "mod seçimi ve çıkış" başlıklarındaki kontroller yeni senaryo olmadı; her test oturumunun başındaki **ön kontroller** olarak yazıldı. RC kaybı ve modül donması testleri bu spec'te yok; m16 adayı olarak kapsam dışına yazıldı.
+- **A2 — S1'in beklentisi yanlış kurulmuştu.**
+  - Sorun: "Hedef önünde → ileri gider" her zaman doğru değil. Drone'un ileri mi geri mi gideceği hedefin göründüğü açıya bağlı. Aşağı bakış açısı takip açısından (30°) sığsa hedef uzaktadır ve drone ileri gider. Dikse hedef yakındır ve drone geri gider. Raporun kendi örneğinde 37° → 1.8 m/s geri.
+  - Kullanıcı: "Dediğin gibi olsun."
+  - **Karar:**
+    - S1a: uzak hedef, 18° → ileri; hız 2 m/s'de kırpılır.
+    - S1b: yakın hedef, 37° → ~1.8 m/s geri.
+    - S3'ün beklentisi de netleşti: hedef neredeyse tam altta (80°) → geri, hız 2 m/s'de kırpılır. Eski metin "geri gider ya da durur" belirsizdi.
+- **A3 — Hedefsiz girişte süre.**
+  - Sorun: Raporun durum şeması 1.0 s gösteriyordu, karar ise 1.5 s idi.
+  - Kullanıcı: "Okey."
+  - **Karar:**
+    - Zaman referansı `max(son geçerli mesaj, giriş anı)`.
+    - Girişte geçerli veri yoksa KAYIP_BEKLE ile başlanır.
+    - Hold zamanı giriş + 0.5 + 1.0 = 1.5 s.
+- **A4 — İş sırası çakışıyordu.**
+  - Sorun: S4'ün Hold kısmının testi, Hold kodundan önceki adıma yazılmıştı.
+  - Kullanıcı: "Okey."
+  - **Karar:** 4. adımda S4'ün yalnızca KAYIP_BEKLE kısmı test edilir. Hold kısmı 5. adımdan (Hold geçişi) sonra test edilir.
+- **A5 — Masa testinde `SDLOG_MODE` değeri.**
+  - Sorun: Raporda 2 yazıyordu, oysa kullanıcı önce "0/1 oynarım" demişti.
+  - Kullanıcı: "Bunu ben loglardan kendim ayarlayacağım."
+  - **Karar:** Belgeler değer önermez. Seçenekler yalnızca bilgi olarak yazılır: 1 = açılıştan disarm'a, 2 = açılıştan kapanışa. "Kart yeniden başlatılmalı" notu kalır.
+
+### B. Yeni bulgular
+
+- **B1 — MAVLink 2.**
+  - Bulgu: `DEBUG_FLOAT_ARRAY`'in `data` alanı bir MAVLink 2 ek alanıdır (`common.xml:7630-7631`). MAVLink 1 ile gelirse değerler 0 olur.
+  - Kullanıcı Vision tarafıyla görüştü: "pymavlink'te MAVLink 2.0 kullanıyormuş."
+  - **Durum:** Kullanıcının bildirimiyle doğrulandı. Masa ve SITL testinde `los_frd` alanlarının sıfır gelmediği de kontrol edilecek.
+- **B2 — Modülün açılışta başlatılması.**
+  - Bulgu: PX4, arm iken yeni mod kaydını reddediyor (`ModeManagement.cpp:371-380`). Bunun amacı, uçuş sırasında mod listesinin değişmesini engellemek.
+  - Kullanıcı: "Arm etmeden önce başlatma işi saçma, onu çözelim. Galiba B seçeneği; eğer çözüm oysa B olsun."
+  - Claude'un kontrolü:
+    - `rc.mc_apps` her multikopter açılışında, arm'dan önce çalışıyor.
+    - SITL: `init.d-posix/rcS:289` → `rc.vehicle_setup:20-24` → `rc.mc_apps`.
+    - 6C: `init.d/rcS:485` → aynı yol.
+    - `mc_nn_control` da böyle başlıyor (`rc.mc_apps:40-43`).
+    - Sonuç: Satır eklenince modül her açılışta kendiliğinden başlar; kullanıcının bir şey yapması gerekmez. B gerçekten çözüm.
+  - **Karar: B2-b.**
+    - `ROMFS/px4fmu_common/init.d/rc.mc_apps`'e bir satır eklenir.
+    - Bu **yedinci kilitli yol**; Hüseyin'e giden talebe eklenir.
+    - Hüseyin reddederse geri dönüş (a): SITL'de elle, 6C'de SD kartta `etc/extras.txt`.
+    - Satırın koşulsuz mu, açma/kapama parametresiyle mi olacağı açık; kullanıcıya soruldu (spec A13).
+- **B3 — Açık çevrimde burun dönmeye devam eder.**
+  - Kullanıcının sorusu: "Açık çevrim dediğin SITL olmadan kısa bir doğrulama testi değil mi? Öyleyse sorun yok; hızlıca yapıp SITL testlerine geçmemiz gerek."
+  - Cevap: SITL'siz kısa test **birim testi**dir (10.1). Açık çevrim testleri de SITL'de yapılır, ama basittir: script sabit bir yön gönderir.
+  - Plan değişmez: kısa birim testi → SITL açık çevrim (S1–S5) → SITL kapalı çevrim (S6–S7).
+- **B4 — Yerde arm'lıyken moda geçiş.**
+  - Kullanıcı: "AUTO FOLLOW'da herhangi bir kalkış yok. Arm'lıyken ve yerdeyken moda geçmese daha iyi olur; oraya bir güvenlik adımı getirmemiz gerek."
+  - **Karar:** Güvenlik adımı eklenecek.
+  - Claude'un kaynak kontrolü:
+    - Arming check cevabında `can_arm_and_run = false` gelirse PX4 o modu "çalışamaz" işaretler (`externalChecks.cpp:158-160, 188-190`).
+    - Arm'lı araçta mod geçişi `canRun`'a bakar (`UserModeIntention.cpp:58-59`). Bu durumda geçiş reddedilir; QGC'de "Switching to … is currently not available" yazar ve uyarı sesi çalar (`Commander.cpp:2620-2638`).
+    - Disarm iken geçiş yine serbesttir (`UserModeIntention.cpp:54-55`).
+    - Mod aktifken `can_arm_and_run = false` olursa RTL'e düşülür (`failsafe.cpp:698-702`). Bu yüzden koşul yalnızca mod aktif **değilken** kullanılmalı.
+  - Yöntem seçenekleri kullanıcıya sunuldu (spec A14):
+    - (a) yerdeyken ve mod aktif değilken PX4'e "şu an çalışamam" bildirmek,
+    - (b) girişte yerdeyse modülün hemen Hold istemesi.
+  - Öneri (a). Cevap bekleniyor.
+
+### C. Öneriler
+
+- **C1 — Mod kaydı ayrıntıları.**
+  - Kullanıcı: "Bu modda arm etmek yasak olsun, ancak arm değilken bu moda geçebileyim."
+  - **Karar:** `mode_req_prevent_arming = true`. Disarm iken moda geçiş serbest; PX4 bunu zaten sağlıyor, kod gerekmez.
+  - Mod gereksinimleri (açısal hız, tutum, yerel irtifa, yerel konum) ve kontrol bayrakları öneri kabul.
+  - RC çubuğuyla müdahale (spec A2) cevaplanmadı; yeniden soruldu.
+- **C2 — Davranış ayrıntıları.**
+  - Kullanıcı: "Okey."
+  - **Karar (öneri kabul):**
+    - Filtre yatayda çalışır; ilk ölçümde hedef hızı 0 kabul edilir; EKF reset'te filtre sıfırlanır.
+    - `AF_ALPHA` 0.5, `AF_BETA` 0.17.
+    - İvme sınırı moda girişte drone'un o anki hızından başlar.
+    - Hold reddedilirse hover sürer; istek 1 s arayla en fazla 3 kez tekrarlanır.
+    - Drone kendi konumunu kaybederse yatay hız 0 istenir.
+    - Parametrelerin birimleri ve min/max değerleri spec'teki gibi.
+    - Log mesajı mod kapalıyken (PASIF) de 50 Hz yayınlanır.
+- **C3 — Log alanlarının adları.**
+  - Kullanıcı: "Buradaki isimler gayet güzel, ama bizim yazdığımız, isimlerini verdiğimiz her şeyi detaylı kaydet; detaylı sözlük hazırlanacak."
+  - **Karar:**
+    - Log alan adları spec tablosundaki gibi; önek yok.
+    - Durum adları PASIF / TAKIP / KAYIP_BEKLE / HOLD_ISTENDI.
+    - Bizim verdiğimiz **bütün adlar** için ayrıntılı sözlük yazılır: mod, modül ve komutları, dosyalar, girdi mesajı, parametreler, log mesajı ve alanları, durumlar, doğrulama sonuçları, script'ler.
+    - Sözlük, adı önceden onaylı `log-sozlugu.md` dosyasıdır; kapsamı genişletildi. İlk sürümü bu turda yazıldı. Kod yazıldıkça aynı commit'te güncellenir.
+
+### Bu turdan sonra açık kalanlar (kullanıcıya soruldu)
+
+- spec A13: `rc.mc_apps` satırı koşulsuz mu, açma/kapama parametresiyle mi? Parametreyle olursa adı kullanıcı verir.
+- spec A14: yerde arm'lıyken geçiş engelinin yöntemi, (a) ya da (b).
+- spec A2: RC çubuğuyla müdahale (çubuk oynayınca Position'a geçiş).
+- Henüz sunulmamış iki öneri:
+  - kodun iç düzeni: hesaplar `AutoFollowGuidance` kütüphanesinde, zamanı argüman alan saf fonksiyonlar (birim testi için);
+  - masa testinde gözlenecekler listesi (spec A3).

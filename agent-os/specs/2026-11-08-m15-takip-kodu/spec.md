@@ -2,7 +2,7 @@
 
 - **Görev:** https://github.com/Auto-Follow/Auto-Follow/issues/6 · yol haritası m15 (devamı m13, m16) · son teslim **2026-11-15**
 - **Repo / dal:** Autopilot (PX4 v1.17.0, kilitli) · `ozellik/m15-takip-kodu` · spec klasörü `agent-os/specs/2026-11-08-m15-takip-kodu/`
-- **Kaynaklar (bu spec yeni karar içermez):** `planning/requirements.md` (geçerli kararlar), `planning/karar-gunlugu.md` (KG; gerekçeler, son kayıt geçerli), `rapor.md` (sade anlatım), `planning/visuals/`. Eski taslaklar `2026-10-15-m15-target-follow-flight-mode/` ve `2026-10-18-m15-fc-only-flow-diagrams/` **taslaktı, yerini bu spec aldı**; dosyalarına dokunulmaz.
+- **Kaynaklar (bu spec yeni karar içermez):** `planning/requirements.md` (geçerli kararlar), `planning/karar-gunlugu.md` (KG; gerekçeler, son kayıt geçerli; write-spec turundaki cevaplar KG "Write-spec turu (2026-11-10)"), `rapor.md` (sade anlatım), `planning/visuals/`. Eski taslaklar `2026-10-15-m15-target-follow-flight-mode/` ve `2026-10-18-m15-fc-only-flow-diagrams/` **taslaktı, yerini bu spec aldı**; dosyalarına dokunulmaz.
 - **Etiketler:** **Karar** = kullanıcı seçti · **Karar (öneri kabul)** = kullanıcı önerimizi kabul etti, sorun çıkarsa ilk bakılacak yer · **Varsayım** = ortak spec (m3–5) gelene kadar geçici · **Öneri — kullanıcı onayı bekliyor** = bu spec'te ilk kez önerilen, henüz onaylanmamış · **Açık** = karar yok · **(doğrulanacak)** = kaynakta kanıtlanamadı, SITL/donanımda görülecek.
 - `dosya:satır` gösterimleri bu repodaki PX4 v1.17.0 içindir; çatı dosyaları `../agent-os/...` ile başlar.
 
@@ -23,8 +23,8 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Modül/komut `auto_follow`, klasör `src/modules/auto_follow/`, açma satırı `CONFIG_MODULES_AUTO_FOLLOW=y`; hem `boards/px4/sitl/default.px4board` hem `boards/px4/fmu-v6c/default.px4board`'a eklenir (6C'ye de girer).
 - Kayıt adı (QGC/RC'de görünen) **`AUTO FOLLOW`**; ad sabit kalır, çünkü PX4 slotu adın hash'iyle hatırlar (`COM_MODE${i}_HASH`, `src/modules/commander/module.yaml:5-16`). PX4 modu 23–30 aralığından bir `nav_state`'e atar (`msg/versioned/VehicleStatus.msg:59-66`).
 - Yazım deseni `ModuleBase` + `ModuleParams` + `px4::ScheduledWorkItem` (`src/examples/work_item/WorkItemExample.hpp:55`); iş kuyruğu `nav_and_controllers` (`mc_nn_control.cpp:65`); `ScheduleOnInterval` ile **sabit 50 Hz** (parametre değil, Karar). Gerekçe: veri kesilse de modül dönmeli ki kesintiyi fark etsin.
-- Kayıt yalnızca araç **disarm** iken kabul edilir (`src/modules/commander/ModeManagement.cpp:371-378`, `COM_MODE_ARM_CHK` varsayılan 0, `commander_params.c:1048`); modül boot'ta, arm edilmeden başlatılmalıdır. Başlatma noktası **Açık** (Açık konular A8).
-- Arming check'e cevapta `can_arm_and_run = true` her zaman (Karar 5-a): `false` olursa PX4 Hold'a değil **RTL**'e düşer (`src/modules/commander/failsafe/failsafe.cpp:698-702`). `mode_req_*` listesi ve kontrol bayrakları **Açık** (A1).
+- Kayıt yalnızca araç **disarm** iken kabul edilir (`src/modules/commander/ModeManagement.cpp:371-378`, `COM_MODE_ARM_CHK` varsayılan 0, `commander_params.c:1048`); modül boot'ta, arm edilmeden başlatılmalıdır. **Karar (2026-11-10, B2-b):** `ROMFS/px4fmu_common/init.d/rc.mc_apps`'e bir başlatma satırı eklenir. Bu dosya her multikopter açılışında arm'dan önce çalışır (SITL `ROMFS/px4fmu_common/init.d-posix/rcS:289`, 6C `ROMFS/px4fmu_common/init.d/rcS:485` → `rc.vehicle_setup:20-24`); `mc_nn_control` da böyle başlar (`rc.mc_apps:40-43`). Yedinci kilitli yoldur, Hüseyin onayı gerekir. Satırın koşulsuz mu yoksa bir açma/kapama parametresiyle mi (`MC_NN_EN` örneği, `mc_nn_control_params.c:47`) olacağı **Açık** (A13).
+- Arming check'e cevapta `can_arm_and_run = true` (Karar 5-a): mod aktifken `false` olursa PX4 Hold'a değil **RTL**'e düşer (`src/modules/commander/failsafe/failsafe.cpp:698-702`). Tek istisna adayı: yerde arm'lıyken moda geçişi engellemek (Karar B4: güvenlik adımı gerekli; yöntem **Açık**, A14). `mode_req_*` listesi ve kontrol bayrakları **Karar (öneri kabul, C1)**, A1. `mode_req_prevent_arming = true` **Karar** (C1: bu modda arm yasak, disarm iken moda geçiş serbest).
 - Mod aktifken PX4 FlightTask çalıştırmaz (`src/modules/flight_mode_manager/FlightModeManager.cpp:139-144`); `trajectory_setpoint`'i yalnızca `auto_follow` yayınlar.
 - Disarm araçta moda geçiş PX4'te zaten serbesttir (`src/modules/commander/UserModeIntention.cpp:54-55`); masa testi gereksinimi kod gerektirmez.
 
@@ -35,7 +35,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Geçmeyen örnek **atılır**, nedeniyle **sayılır** (`perf_counter` PC_COUNT, `src/lib/perf/perf_counter.h:49`, ve log mesajındaki sayaçlar), **hız sınırlı** `PX4_WARN` ile yazılır; guidance'a asla girmez (`../agent-os/standards/global/validation.md:7`, `error-handling.md:8`).
 - `debug_array` ortak bir topic'tir ve kuyruğu tektir (`msg/DebugArray.msg` kuyruk sabiti tanımlamaz); başka yayıncılar olabileceği için ad süzgeci zorunludur. Ad en fazla 9 karakter (`DebugArray.msg:4`, son bayt NUL, `mavlink_receiver.cpp:2825`).
 - `CONSTRAINED_FLASH` açılırsa `DEBUG_FLOAT_ARRAY` işleyicisi derlemeden çıkar (`mavlink_receiver.cpp:284-305`, `:2748-2833`): m14 yapılırken bilinmeli.
-- Not (bu yazımda bulundu): MAVLink tanımında `data` alanı bir **extension** alanıdır (`src/modules/mavlink/mavlink/message_definitions/v1.0/common.xml:7630-7631`); gönderen taraf **MAVLink 2** kullanmalıdır (doğrulanacak; A5).
+- Not (bu yazımda bulundu): MAVLink tanımında `data` alanı bir **extension** alanıdır (`src/modules/mavlink/mavlink/message_definitions/v1.0/common.xml:7630-7631`); gönderen taraf **MAVLink 2** kullanmalıdır. Vision tarafı pymavlink'in MAVLink 2 kullandığını bildirdi (kullanıcı, 2026-11-10, B1); masa/SITL testinde `los_frd` alanlarının sıfır gelmediği kontrol edilir.
 
 **3. Geometri ve mesafe (Karar 6 "ortak adım", 13-(iii), formül Karar 2026-11-09)**
 - LOS, varış anındaki `vehicle_attitude.q` (FRD → NED, `msg/versioned/VehicleAttitude.msg:10`) ile NED'e çevrilir: `LOS_NED = R(q) · LOS_FRD` (V3; gecikme telafisi yok).
@@ -49,16 +49,16 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Girdi: ölçülen hedef NED konumu; çıktı: kestirilen hedef konumu ve **hedef hızı**. Katsayılar `AF_ALPHA`, `AF_BETA`.
 - Adımlar: tahmin `x̂ ← x̂ + v̂·Δt`; yeni ölçümde artık `r = ölçüm − x̂`, düzeltme `x̂ ← x̂ + α·r`, `v̂ ← v̂ + (β/Δt)·r`.
 - PX4'ün `TargetEstimator`'ı kullanılmaz: GPS'li `follow_target` topic'ine bağlı bir work item'dır (`src/modules/flight_mode_manager/tasks/AutoFollowTarget/follow_target_estimator/TargetEstimator.hpp:112, 210`); yalnızca fikir kaynağıdır.
-- Öneri — kullanıcı onayı bekliyor: filtre yatayda (x, y) çalışır (hedef zeminde); tahmin her 50 Hz çevrimde, düzeltme yalnızca kabul edilen ölçümde yapılır; Δt ölçümlerin tahmini çekim anları (`varış − yaş`) arasından alınır; ilk ölçümde konum ölçüme, hız 0'a kurulur; EKF reset sayaçları (`VehicleLocalPosition.msg:21, 23`) değişirse filtre sıfırlanır.
+- Karar (öneri kabul, C2): filtre yatayda (x, y) çalışır (hedef zeminde); tahmin her 50 Hz çevrimde, düzeltme yalnızca kabul edilen ölçümde yapılır; Δt ölçümlerin tahmini çekim anları (`varış − yaş`) arasından alınır; ilk ölçümde konum ölçüme, hız 0'a kurulur; EKF reset sayaçları (`VehicleLocalPosition.msg:21, 23`) değişirse filtre sıfırlanır.
 - Kullanıcının vurgusu: filtrenin girdisi ve çıktısı loga yazılır ve analiz edilir (Bölüm 9).
 
 **5. Guidance yasası ve sınırlar (Karar 6-a, 6.1b, 6.4 öneri kabul, 6.2 öneri kabul)**
 - İstenen mesafe: `d_ist = h / tan(AF_TRK_ANG)` (aynı `h` ile). Örnek: h = 9.0 m, 30° → 15.6 m.
-- Yasa (yatay, hedef yönünde): `v_yasa = AF_K_FF · v̂_hedef + AF_K_DIST · (d_kest − d_ist) · û`; `û` drone'dan kestirilen hedefe yatay birim yön, `d_kest` kestirilen hedefe yatay mesafe (Öneri — kullanıcı onayı bekliyor: guidance'ta filtre çıktısı kullanılır).
-- Kırpma: `|v| ≤ AF_VEL_MAX`. İvme sınırı: komut her çevrimde en fazla `AF_ACC_MAX · Δt` değişir. Sıra: yasa → kırpma → ivme sınırı (öneri).
+- Yasa (yatay, hedef yönünde): `v_yasa = AF_K_FF · v̂_hedef + AF_K_DIST · (d_kest − d_ist) · û`; `û` drone'dan kestirilen hedefe yatay birim yön, `d_kest` kestirilen hedefe yatay mesafe (Karar (öneri kabul, C2): guidance'ta filtre çıktısı kullanılır).
+- Kırpma: `|v| ≤ AF_VEL_MAX`. İvme sınırı: komut her çevrimde en fazla `AF_ACC_MAX · Δt` değişir. Sıra: yasa → kırpma → ivme sınırı (Karar (öneri kabul, C2)).
 - Örnek devamı: `d_kest − d_ist = 12.0 − 15.6 = −3.6 m` → `v = 0.5 · (−3.6) = −1.8 m/s`, yani hedeften uzaklaşarak geri (2 m/s sınırının altında).
 - `AF_K_FF = 0` ilk testlerde: sabit yönle (açık çevrim) sanal hedef drone'la birlikte kayar ve `AF_K_FF > 0` drone'u `AF_VEL_MAX`'a kadar kaçırır (pozitif geri besleme). `AF_K_FF > 0` yalnızca kapalı çevrimde denenir.
-- Öneri — kullanıcı onayı bekliyor: moda girişte ivme sınırlayıcı drone'un o anki yatay hızından başlatılır (geçişte sıçrama olmasın).
+- Karar (öneri kabul, C2): moda girişte ivme sınırlayıcı drone'un o anki yatay hızından başlatılır (geçişte sıçrama olmasın).
 - Nihai yasa ve ince ayar m13'tür; bu spec ilk yasayı yazar.
 
 **6. Yaw ve irtifa (Karar 7-a mutlak yaw, 6.3, 6.4)**
@@ -68,15 +68,15 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Yaw hız sınırı parametresi kararlaştırılmadı; PX4'ün kendi sınırı geçerlidir (`MC_YAWRATE_MAX`, `src/modules/mc_att_control/mc_att_control_params.c:147`) (doğrulanacak).
 
 **7. Durum makinesi ve hedef kaybı: D (Karar; kullanıcı "önemli" dedi; süreler Karar 2026-11-09)**
-- Durumlar (adlar Öneri — kullanıcı onayı bekliyor, bkz. Bölüm 9): **PASIF** (mod kapalı; setpoint yok, veri işlenebilir) · **TAKIP** (geçerli veri var, guidance çalışır) · **KAYIP_BEKLE** (hover: kayıp anındaki konum, hız 0, son yaw, giriş irtifası) · **HOLD_ISTENDI** (Hold istendi).
+- Durumlar (adlar **Karar**, C3; ayrıntı `log-sozlugu.md`): **PASIF** (mod kapalı; setpoint yok, veri işlenebilir) · **TAKIP** (geçerli veri var, guidance çalışır) · **KAYIP_BEKLE** (hover: kayıp anındaki konum, hız 0, son yaw, giriş irtifası) · **HOLD_ISTENDI** (Hold istendi).
 - Geçişler: TAKIP → KAYIP_BEKLE: `AF_DATA_TOUT` (0.5 s) boyunca geçerli veri yok **ya da** Pi `hedef yok` dedi · KAYIP_BEKLE → TAKIP: `AF_LOST_T` dolmadan geçerli veri geldi (takip kendiliğinden sürer) · KAYIP_BEKLE → HOLD_ISTENDI: `AF_LOST_T` (1.0 s) doldu · HOLD_ISTENDI/TAKIP/KAYIP_BEKLE → PASIF: `nav_state` artık bizim mod değil.
 - Zaman çizelgesi:
   - Veri kesilirse: `son geçerli mesaj ──0.5 s──▶ KAYIP_BEKLE ──1.0 s──▶ Hold` (toplam 1.5 s).
   - Pi "hedef yok" derse: `bayrak = 0 ──▶ KAYIP_BEKLE (hemen) ──1.0 s──▶ Hold`.
-  - Hedef görünmezken moda girilirse (Karar 5-a): 1.5 s içinde geçerli hedef gelmezse Hold. Öneri — kullanıcı onayı bekliyor: zaman referansı `max(son geçerli mesaj, giriş anı)`; girişte geçerli veri yoksa durum KAYIP_BEKLE, Hold zamanı `giriş + AF_DATA_TOUT + AF_LOST_T`.
+  - Hedef görünmezken moda girilirse (Karar 5-a): 1.5 s içinde geçerli hedef gelmezse Hold. **Karar (A3, 2026-11-10):** zaman referansı `max(son geçerli mesaj, giriş anı)`; girişte geçerli veri yoksa durum KAYIP_BEKLE, Hold zamanı `giriş + AF_DATA_TOUT + AF_LOST_T` = giriş + 1.5 s.
 - Hold isteği: `vehicle_command` ile `VEHICLE_CMD_SET_NAV_STATE` (`msg/versioned/VehicleCommand.msg:114`), `param1 = NAVIGATION_STATE_AUTO_LOITER` (`VehicleStatus.msg:40`), hedef sistem/bileşen `vehicle_status.system_id/component_id` (`VehicleStatus.msg:118-119`; süzgeç `Commander.cpp:746-747`); işleme `Commander.cpp:936-944`. `source_component < 1000` olmalı ki istek "User" sayılsın (`Commander.cpp:1559-1562`) (doğrulanacak).
 - Hold'dan sonra takibe **kendiliğinden dönülmez** (C reddedildi). Pilot QGC'den tek tıkla ya da RC anahtarını başka konuma alıp geri getirerek döner; anahtarı yerinde bırakmak yetmez (`src/modules/manual_control/ManualControl.cpp:176-177`).
-- Öneri — kullanıcı onayı bekliyor: Hold reddedilirse (`TEMPORARILY_REJECTED`) hover sürer, `vehicle_command_ack` izlenir, istek 1 s arayla en fazla 3 kez tekrarlanır.
+- Karar (öneri kabul, C2): Hold reddedilirse (`TEMPORARILY_REJECTED`) hover sürer, `vehicle_command_ack` izlenir, istek 1 s arayla en fazla 3 kez tekrarlanır.
 - İlk uçuşlarda `AF_LOST_T` kısa tutulur (davranış pratikte B olur); her uçuşta kullanılan değer test planına yazılır.
 
 **8. Setpoint çıkışı (Karar 7-a)**
@@ -85,18 +85,18 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Mod aktif değilken setpoint yayınlanmaz.
 - Moda girişte ilk çevrimde setpoint yayınlanır; aksi halde `mc_pos_control` kendi yedek setpoint'ini üretir (`src/modules/mc_pos_control/MulticopterPositionControl.cpp:443-449`).
 - **Standartla çelişki notu:** Çatı standardı hata anında "setpoint üretmeyi bırak" diyor (`../agent-os/standards/global/error-handling.md:4`). PX4'te ise yayın kesilince `mc_pos_control` **son isteği uygulamaya devam eder** (`trajectory_setpoint` yalnızca güncellenince okunur, `MulticopterPositionControl.cpp:438`; yedek setpoint yalnızca konum kontrolünün açıldığı ilk an için, `:443-449`). Bu yüzden modül susmaz, **aktif olarak hover** yayınlar. Standardın değişmesi ayrı bir iştir (çatı profili).
-- Öneri — kullanıcı onayı bekliyor (eski taslaktan): yerel konum geçersizken tutma konumu anlamsızdır; bu durumda `position[0..1]` NaN, `velocity[0..1] = 0` yayınlanır, asıl tepkiyi PX4'ün `mode_req_local_position` fallback'i verir (A10).
+- Karar (öneri kabul, C2; eski taslaktan): yerel konum geçersizken tutma konumu anlamsızdır; bu durumda `position[0..1]` NaN, `velocity[0..1] = 0` yayınlanır, asıl tepkiyi PX4'ün `mode_req_local_position` fallback'i verir (A10).
 
 **9. Loglama ve log sözlüğü (Karar L2-b, L1 güncel, L3, L4, Karar 4)**
-- Kendi uORB mesajımız `msg/AutoFollowStatus.msg` → topic **`auto_follow_status`**; modül **her çevrimde** doldurup yayınlar. `src/modules/logger/logged_topics.cpp`'deki varsayılan listeye (`add_default_topics`, `:46`) bir `add_topic` satırıyla **her zaman** kaydedilir; kullanıcı ayar açmaz. Öneri — kullanıcı onayı bekliyor: aralık verilmez (her yayın, 50 Hz) ve mesaj PASIF'te de yayınlanır (masa testinde ham girdi görülsün).
+- Kendi uORB mesajımız `msg/AutoFollowStatus.msg` → topic **`auto_follow_status`**; modül **her çevrimde** doldurup yayınlar. `src/modules/logger/logged_topics.cpp`'deki varsayılan listeye (`add_default_topics`, `:46`) bir `add_topic` satırıyla **her zaman** kaydedilir; kullanıcı ayar açmaz. Karar (öneri kabul, C2): aralık verilmez (her yayın, 50 Hz) ve mesaj PASIF'te de yayınlanır (masa testinde ham girdi görülsün).
 - Debug biti gerekmez: ham girdi bu mesaja kopyalanır; ham `debug_array` yalnızca debug profilinde loglanır (`logged_topics.cpp:289-294`).
 - **`logger_topics.txt` düzeltmesi:** SD karttaki `etc/logging/logger_topics.txt` varsa PX4 **yalnızca o dosyadakileri** loglar, varsayılan listeyi kapatır (`logged_topics.cpp:531-540`). Bu yüzden doğru yol `logged_topics.cpp`'ye satır eklemektir; o dosya kullanılmaz.
 - Zaten varsayılan loglananlar: `trajectory_setpoint` (200 ms, `:131`), `vehicle_command`, `vehicle_control_mode`, `vehicle_local_position`, `vehicle_status` (`:131-150`), `actuator_motors` (`:214`).
 - **Geri dönüş:** Hüseyin `msg/` ve `logged_topics.cpp` yollarını reddederse PX4'ün hazır `debug_array` mesajı + sözlük kullanılır; alanlar logda `data[i]` görünür, adlar sözlük ve analiz script'inden gelir.
-- `SDLOG_MODE` varsayılan kalır (0 = yalnızca arm iken; `src/modules/logger/module.yaml:16-31`, değişiklik yeniden başlatma ister `:31`; SITL varsayılanı 1, `ROMFS/px4fmu_common/init.d-posix/rcS:180`). Masa testinde kullanıcı kendisi değiştirir.
-- **Log sözlüğü** `log-sozlugu.md` (spec klasörü): her alan için ad, anlam, birim, frame, hangi durumda ne değer aldığı; **kodla aynı commit'te** güncellenir. Sözlükte şu uyarı yer alır:
+- `SDLOG_MODE` varsayılan kalır (0 = yalnızca arm iken; `src/modules/logger/module.yaml:16-31`, değişiklik yeniden başlatma ister `:31`; SITL varsayılanı 1, `ROMFS/px4fmu_common/init.d-posix/rcS:180`). Masa testinde değeri kullanıcı kendisi seçip değiştirir (Karar A5, 2026-11-10: belgeler değer önermez; bilgi için 1 = açılıştan disarm'a, 2 = açılıştan kapanışa).
+- **Sözlük** `log-sozlugu.md` (spec klasörü). Karar C3 (2026-11-10): kapsamı yalnız log alanları değil, **bizim verdiğimiz bütün adlar** (mod, modül ve komutları, dosyalar, girdi mesajı, parametreler, log mesajı ve alanları, durumlar, doğrulama sonuçları, script'ler). Her ad için anlam, birim, frame, hangi durumda ne değer aldığı; **kodla aynı commit'te** güncellenir. İlk sürümü write-spec turunda yazıldı. Sözlükte şu uyarı yer alır:
   > ⚠️ PX4'ün kendi `AUTO_FOLLOW_TARGET` modu (Follow Me, `nav_state` = 19, `msg/versioned/VehicleStatus.msg:55`; kod `FlightTaskAutoFollowTarget`, parametreler `FLW_TGT_*`) bizim **AUTO FOLLOW** ile **ilgili değildir**. Bizimki 23–30 aralığından numara alır; hangisi olduğu `auto_follow_status`'ta yazar. Bazı log araçları 19'u "Auto Follow" diye gösterebilir. Kodda hiçbir şeye `AutoFollowTarget` / `follow_target` adı verilmez; RC anahtarı (`COM_FLTMODEx`) bizim mod numarasıyla ayarlanır.
-- **Log alanları — Öneri — kullanıcı onayı bekliyor** (PX4 msg geleneği: alanlar küçük harf snake_case, birim yorumda; sabitler BÜYÜK_HARF; ön ek kullanılıp kullanılmayacağı kullanıcıya sorulur):
+- **Log alanları — Karar (C3, 2026-11-10: adlar tablodaki gibi, önek yok)** (PX4 msg geleneği: alanlar küçük harf snake_case, birim yorumda; sabitler BÜYÜK_HARF):
 
 | Alan | Tip | Birim | Anlam |
 |---|---|---|---|
@@ -137,17 +137,17 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 
 **10. Parametreler (adlar Karar 2026-11-09; değerler Karar (öneri kabul))**
 - `module.yaml`'da `description`, `type`, `default`, `min`, `max`, `unit`, `decimal` ile tanımlanır (`../agent-os/standards/px4/uorb-params.md:10`); kodda `DEFINE_PARAMETERS`, `parameter_update` ile güncellenir. Hepsi QGC'den değişir, derleme gerekmez. PX4 v1.17.0'da `AF_` önekli parametre yok (kaynakta tarandı). Çevrim hızı parametre değildir (50 Hz).
-- Birim, min/max ve `AF_ALPHA`/`AF_BETA` varsayılanı sütunları **Öneri — kullanıcı onayı bekliyor** (açılar kullanıcıya derece gösterilir, kodda radyana çevrilir).
+- Birim, min/max ve `AF_ALPHA`/`AF_BETA` varsayılanı **Karar (öneri kabul, C2)** (açılar kullanıcıya derece gösterilir, kodda radyana çevrilir).
 
-| Parametre | Anlamı | Varsayılan | Birim (öneri) | Min–max (öneri) |
+| Parametre | Anlamı | Varsayılan | Birim | Min–max |
 |---|---|---|---|---|
 | `AF_TRK_ANG` | Takip açısı (kamera eğimi, m06'dan) | 30 (SITL) | deg | 5–85 |
 | `AF_K_DIST` | Mesafe kazancı K | 0.5 | 1/s | 0–2 |
 | `AF_K_FF` | Hedef hızı katsayısı c (0 = kapalı) | 0 | — | 0–1.5 |
 | `AF_VEL_MAX` | En büyük yatay hız | 2 | m/s | 0.1–5 |
 | `AF_ACC_MAX` | Hız komutu değişim sınırı (`MPC_ACC_HOR` varsayılanı, `src/modules/mc_pos_control/multicopter_autonomous_params.c:88`) | 3 | m/s² | 0.5–5 |
-| `AF_ALPHA` | Filtre konum katsayısı | Açık; öneri 0.5 (yalnızca başlangıç, SITL'de seçilecek) | — | 0–1 |
-| `AF_BETA` | Filtre hız katsayısı | Açık; öneri 0.17 (β ≈ α²/(2−α), Benedict–Bordner) | — | 0–1 |
+| `AF_ALPHA` | Filtre konum katsayısı | 0.5 (başlangıç; SITL'de ayarlanır) | — | 0–1 |
+| `AF_BETA` | Filtre hız katsayısı | 0.17 (β ≈ α²/(2−α), Benedict–Bordner) | — | 0–1 |
 | `AF_DATA_TOUT` | Veri zaman aşımı | 0.5 | s | 0.1–5 |
 | `AF_LOST_T` | KAYIP_BEKLE'den Hold'a | 1.0 | s | 0–30 |
 | `AF_YAW_MIN_D` | Bu yatay mesafenin altında yaw sabit | 1 | m | 0–10 |
@@ -161,20 +161,24 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 
 **11. Testler (Karar 10.1, 10.2, 10.3, L4)**
 - **Birim testi (kısa):** `AutoFollowGuidanceTest.cpp`, GoogleTest `px4_add_unit_gtest` (`cmake/px4_add_gtest.cmake:40`), çalıştırma `make tests TESTFILTER=AutoFollowGuidance` (`Makefile:406-407`; CI'da çalışmaz, yerelde koşulur). Kapsam: mesafe/yön (Bölüm 3 örneği → 12.0 m), yasa ve sınırlar (örnek → −1.8 m/s, kırpma, ivme sınırı), bozuk veri (NaN/Inf, norm, sıra no, ad), zaman aşımı/durum geçişleri (0.5 s, +1.0 s, hedef yok). Öneri — kullanıcı onayı bekliyor: doğrulama ve durum makinesi zamanı argüman alan saf fonksiyonlar olarak `AutoFollowGuidance` içinde tutulur ki testlenebilsin.
-- **SITL:** Gazebo Harmonic, `make px4_sitl gz_x500` (mümkünse `HEADLESS=1`); her testten önce/sonra `build/px4_sitl_default/rootfs/parameters*.bson` sıfırlanır (`../agent-os/standards/testing/test-writing.md:13-15`). Drone kalkar (öneri: Position modunda, bkz. A1), sonra AUTO FOLLOW'a alınır.
+- **SITL:** Gazebo Harmonic, `make px4_sitl gz_x500` (mümkünse `HEADLESS=1`); her testten önce/sonra `build/px4_sitl_default/rootfs/parameters*.bson` sıfırlanır (`../agent-os/standards/testing/test-writing.md:13-15`). Drone **Position** modunda kalkar (AUTO FOLLOW'da kalkış yok ve arm yasak, C1/B4), sonra havada AUTO FOLLOW'a alınır.
 - **Geçici gönderici** `tez/sitl/af_los_gonder.py` (pymavlink 2.4.50, `tez/env/requirements-lock.txt:25`; SITL onboard bağlantısı UDP 14540/14580, `ROMFS/px4fmu_common/init.d-posix/px4-rc.mavlink:4-5, 26`): Pi'nin `AF_LOS` mesajını Bölüm 2 yerleşimiyle taklit eder. **Açık çevrim** = sabit yön; **kapalı çevrim** = script yerde hayali bir hedef tutar, drone'un konumunu/tutumunu okur ve gerçek LOS'u hesaplar. Açık çevrimde `AF_K_FF = 0`.
-- **Senaryolar** (başlıklar `requirements.md` §3.12'den; `rapor.md` §4.9'daki açık/kapalı çevrim durumları alt adım olarak yerleştirildi — eşleme Öneri — kullanıcı onayı bekliyor, bkz. A12):
+- **Senaryolar — Karar (A1, A2, 2026-11-10):** kullanıcıyla konuşulan tablo (`rapor.md` §4.9) esastır; S1, açıya göre ikiye ayrıldı. Örnek değerler: irtifa 10 m, `AF_TGT_HGT` 1.0 → h = 9.0 m; `AF_TRK_ANG` 30° → istenen mesafe 15.6 m. S1–S5 açık çevrim, `AF_K_FF = 0`.
 
 | # | Ne verilir | Beklenen sonuç | Ölçüm (pyulog) |
 |---|---|---|---|
-| S1 Kayıt ve başlatma | Boot, disarm iken `auto_follow` başlatılır | QGC listesinde `AUTO FOLLOW`; `mode_nav_state` 23–30; `can_set_nav_states_mask`'ta bit (`VehicleStatus.msg:72`); yeniden başlatmada aynı numara | `auto_follow_status.mode_nav_state`, `vehicle_status` |
-| S2 Nominal takip | a) açık çevrim, uzak hedef (δ < `AF_TRK_ANG`) · b) LOS (0.8, 0, 0.6), 10 m · c) açık çevrim, sağdaki hedef · d) kapalı çevrim, duran hayali insan · e) kapalı çevrim, yürüyen hayali insan, `AF_K_FF > 0` | a) ileri, sabit hız ≤ 2 m/s · b) geri ~1.8 m/s · c) burun sağa döner; açık çevrimde sabit body LOS yüzünden dönüş sürer (doğrulanacak; yaw değerlendirmesi kapalı çevrimde) · d) `range_est → range_desired`, yaw hatası küçük · e) geride kalmadan takip | `range_est − range_desired`, `vel_cmd`, `yaw_cmd − heading`, `trajectory_setpoint` |
-| S3 Mod seçimi ve çıkış | QGC ve RC ile giriş/çıkış; disarm iken geçiş; Hold sonrası yeniden giriş; RC çubuk hareketi | Girişte ilk çevrimde setpoint; çıkışta setpoint durur; disarm iken geçiş kabul; yeniden giriş anahtar aç-kapa ile; çubuk davranışı gözlenir (doğrulanacak, A2) | `vehicle_status.nav_state`, `manual_control_switches`, `auto_follow_status.state` |
-| S4 Hedef kaybı | Gönderim kesilir · varyant: 1.0 s dolmadan geri gelir · varyant: `data[5] = 0` · varyant: hedefsiz moda giriş | 0.5 s sonra KAYIP_BEKLE (hover), +1.0 s sonra `nav_state = 4` (toplam ≈ 1.5 s) · takip kendiliğinden sürer · hemen KAYIP_BEKLE, 1.0 s sonra Hold · 1.5 s sonra Hold | Son geçerli örnek → `nav_state = 4` süresi; `state`, `lost_time` |
+| S1a Hedef uzakta | Açık çevrim, sabit LOS (0.951, 0, 0.309): δ ≈ 18° < `AF_TRK_ANG` | d ≈ 27.7 m > 15.6 m → **ileri**; yasa ≈ +6.0 m/s ister, `AF_VEL_MAX` 2 m/s'de kırpılır; ivme ≤ 3 m/s² | `range_meas`, `range_desired`, `vel_cmd_law`, `vel_cmd`, `trajectory_setpoint` |
+| S1b Hedef yakında | Açık çevrim, LOS (0.8, 0, 0.6): δ ≈ 36.9° > `AF_TRK_ANG` | d = 12.0 m < 15.6 m → **geri** ~1.8 m/s (kırpma yok) | Aynı |
+| S2 Hedef sağda | Açık çevrim, LOS (0, 0.8, 0.6) | Burun sağa döner. Sabit body LOS yüzünden dönüş sürer (beklenen, B3); yaw doğruluğu S6'da ölçülür | `yaw_cmd`, `vehicle_attitude` yönü |
+| S3 Hedef neredeyse tam altta | Açık çevrim, LOS (0.174, 0, 0.985): δ = 80° | d ≈ 1.6 m → geri; yasa ≈ −7.0 m/s ister, 2 m/s'de kırpılır; d > `AF_YAW_MIN_D` (1 m) olduğundan yaw donmaz | `vel_cmd_law`, `vel_cmd`, `yaw_frozen` |
+| S4 Hedef kaybı | Gönderim kesilir · varyant: 1.0 s dolmadan geri gelir · varyant: `data[5] = 0` · varyant: hedefsiz moda giriş | 0.5 s sonra KAYIP_BEKLE (hover), +1.0 s sonra `nav_state = 4` (toplam ≈ 1.5 s) · takip kendiliğinden sürer · hemen KAYIP_BEKLE, 1.0 s sonra Hold · girişten 1.5 s sonra Hold. Hold kısmı iş sırasında 5. adımdan sonra koşulur (A4) | Son geçerli örnek → `nav_state = 4` süresi; `state`, `time_since_valid`, `lost_time` |
 | S5 Girdi doğrulama | Yanlış ad, NaN/Inf, norm dışı, tekrar/geri sıra no, yaş > 0.5 s, ufka yakın (δ < 10°), menzil > 40 m | Atılır, ilgili `reject_*` sayacı artar, drone etkilenmez | `check_result`, `reject_*_count`, `vel_cmd` |
-| S6 RC kaybı | RC girdisi kesilir | PX4 varsayılanı gözlenir: `COM_RCL_EXCEPT` = 0 (`commander_params.c:633`), `COM_RC_LOSS_T` 0.5 s (`:139`), `NAV_RCL_ACT` = 2 Return (`:616`) (doğrulanacak) | `vehicle_status`, `failsafe_flags` |
-| S7 Modül sağlığı | Uçuşta `auto_follow stop` / donma | Arming check cevapsız kalır → unresponsive → RTL (`failsafe.cpp:698-702`; zaman sabitleri `HealthAndArmingChecks/checks/externalChecks.hpp:69-72`) (doğrulanacak) | `nav_state = 5` süresi, yatay sapma |
+| S6 Duran hayali insan | Kapalı çevrim: script yerde duran bir hedef tutar ve gerçek LOS'u hesaplar | `range_est → range_desired` (15.6 m); burun hedefte; salınım yok | `range_est − range_desired`, `yaw_cmd − yön`, `vel_cmd` |
+| S7 Yürüyen hayali insan | Kapalı çevrim, hedef yürür, `AF_K_FF > 0` | Geride kalmadan takip; mesafe hatası S6'ya yakın | `target_vel_ned`, `range_est − range_desired`, `vel_cmd` |
 
+- **Ön kontroller** (her test oturumunun başında; yeni senaryo değildir, eski taslaktaki "kayıt" ve "mod seçimi" başlıklarından): modül açılışta kendiliğinden başladı (B2) · QGC listesinde `AUTO FOLLOW`, `mode_nav_state` 23–30, `can_set_nav_states_mask`'ta bit (`VehicleStatus.msg:72`), yeniden başlatmada aynı numara · disarm iken moda geçiş kabul, bu modda arm reddedilir (C1) · yerde arm'lıyken moda geçiş engellenir (B4, yöntem A14) · QGC ve RC anahtarıyla giriş/çıkış; girişte ilk çevrimde setpoint, çıkışta setpoint durur · Hold'dan sonra anahtar aç-kapa ile yeniden giriş · RC çubuğu davranışı (A2).
+- **SITL'siz test yalnızca birim testidir** (yukarıda). Açık çevrim testleri de SITL'dedir ama basittir: script sabit yön gönderir (B3).
+- RC kaybı ve modül donması testleri bu spec'te yoktur (A1) → m16 adayı.
 - Her senaryo için spec klasörüne yazılır: **ne verildi, drone ne yaptı, ULog adı**. Değerlendirme `tez/analiz/af_log_analiz.py` (pyulog 1.2.4, `tez/env/requirements-lock.txt:27`); göz kararı test sayılmaz. Kesin başarı eşikleri yol haritası m01'e aittir; şimdilik öneri.
 - Her testten sonra ULog (`build/px4_sitl_default/rootfs/log/<tarih>/<saat>.ulg`) **`~/Desktop/AUTO-FOLLOW LOG/`** klasörüne kopyalanır (`SDLOG_DIRS_MAX` = 7, `ROMFS/px4fmu_common/init.d-posix/rcS:183`); loglar repoya girmez.
 - m06 (gerçekçi simülasyon, Ahmet Kazalcı) hazır olunca testler oraya taşınır.
@@ -182,7 +186,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 **12. Dokümantasyon (KG "Kullanıcının notu", Karar 14.3, L2)**
 - Her görev grubunun sonunda spec klasörüne kod okumadan anlaşılacak dille: ne yapıldı, neden, nasıl test edildi, hangi sorunlar çıktı ve nasıl çözüldü.
 - `rapor.md` her görev grubundan sonra güncellenir (yeni sürüm satırı "Belge geçmişi"ne).
-- `log-sozlugu.md` kodla **aynı commit'te** güncellenir ve `AUTO_FOLLOW_TARGET` uyarısını içerir.
+- `log-sozlugu.md` bizim verdiğimiz bütün adları kapsar (C3), kodla **aynı commit'te** güncellenir ve `AUTO_FOLLOW_TARGET` uyarısını içerir.
 - `planning/karar-gunlugu.md` iş boyunca güncel tutulur; her yeni karar oraya ve `requirements.md`'ye işlenir.
 - Commit düzeni (çatı kural 10–11): görev grubu başına commit `2026-11-08-m15-takip-kodu: Görev grubu <N> — <ne>`; PR başlığı `[M15] ...`; PR açıklamasında yeni PX4 dosya yolları, 6C flash kullanımı, `tech-stack.md:44` için "karar: external mode, güncellenmeli" notu ve `Closes Auto-Follow/Auto-Follow#6`. Push kullanıcı istemeden yapılmaz.
 
@@ -245,15 +249,17 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 | `msg/AutoFollowStatus.msg` | Log mesajı |
 | `msg/CMakeLists.txt` | Mesaj listesine bir satır (`msg_files`, `msg/CMakeLists.txt:39`) |
 | `src/modules/logger/logged_topics.cpp` | `auto_follow_status`'u her zaman kaydeden `add_topic` satırı |
+| `ROMFS/px4fmu_common/init.d/rc.mc_apps` | Açılışta `auto_follow start` satırı (Karar B2-b) |
 
-- **Ajan `tez/pin/allowed-paths.txt`'i asla düzenlemez**; ekleme Hüseyin'in onayıyla ayrı, açık bir PR'dır. Son üç yol reddedilirse `debug_array` + sözlük geri dönüşü uygulanır ve o üç yol gerekmez.
-- Başlatma noktası için ROMFS'ta bir dosya gerekirse (A8) bu listeye **yedinci yol** eklenir; kendiliğinden eklenmez, önce sorulur.
+- **Ajan `tez/pin/allowed-paths.txt`'i asla düzenlemez**; ekleme Hüseyin'in onayıyla ayrı, açık bir PR'dır. Log mesajı yolları (`msg/AutoFollowStatus.msg`, `msg/CMakeLists.txt`, `logged_topics.cpp`) reddedilirse `debug_array` + sözlük geri dönüşü uygulanır ve o üç yol gerekmez. `rc.mc_apps` reddedilirse geri dönüş A8-(a): SITL'de elle, 6C'de SD karttaki `etc/extras.txt`.
+- Yedinci yol (`rc.mc_apps`) B2-b kararıyla talebe girdi; talep Hüseyin'e **yedi yol** olarak gider. Ajan listeye kendiliğinden eklemez.
 - Commit/PR öncesi `tez/pin/verify_pin.sh --worktree`; zorunlu CI `verify-pin`, `derleme-sitl`, `derleme-fmu-v6c`.
 - **Flash:** Pixhawk 6C ~%98 dolu (~40 KB boş; `../agent-os/product/tech-stack.md:43`). Kod küçük tutulur (`double`, dinamik bellek, büyük tablo yok; `../agent-os/standards/px4/modules.md:10`). `make px4_fmu-v6c_default` çıktısındaki flash kullanımı spec'e ve PR'a yazılır. `region FLASH overflowed` olursa **Hüseyin'e haber verilir; başka modül kapatılarak yer açılmaz** (o iş m14).
 
 ## Out of Scope
 
 - Hold'dan sonra takibe kendiliğinden dönüş (seçenek C) ve ayrıntılı failsafe / mod çıkış akışının tamamı → m16
+- RC kaybı ve modül donması SITL testleri → m16 adayı (A1)
 - Nihai guidance yasası, ince ayar ve gecikme telafisi (gerekirse) → m13 / m16
 - Pi tarafı, ICD, kalıcı yön göndericisi → Vision (m3–5, m12)
 - Gerçekçi simülasyon, kamera ve hareketli insan modeli / dünyası → m06
@@ -270,18 +276,20 @@ Her biri kullanıcıya seçenek + kanıt + öneri olarak sunulur; öneriler **Ö
 
 | # | Konu | Durum ve öneri |
 |---|---|---|
-| A1 | **Mod kaydı ayrıntıları** | Öneri: `mode_req_angular_velocity`, `mode_req_attitude`, `mode_req_local_alt`, `mode_req_local_position` = true; `mode_req_global_position`, `mode_req_home_position`, `mode_req_mission`, `mode_req_manual_control` = false (`msg/versioned/ArmingCheckReply.msg:31-41`, `mc_nn_control.cpp:185-193` ile aynı). Kontrol bayrakları (`msg/versioned/VehicleControlMode.msg:8-19`): position, velocity, altitude, climb_rate, acceleration, attitude, rates, allocation, termination = true; manual, offboard = false; auto için A2. `mode_req_prevent_arming` = **true** önerilir (kalkış Position'da yapılır; yerde arm edilip bu modda kalınmaz). Bu, masa testinde **moda geçişi engellemez**: disarm iken geçiş her zaman serbest (`UserModeIntention.cpp:54-55`), yasak yalnızca arm etmeyi durdurur (`HealthAndArmingChecks/checks/modeCheck.cpp:196-205`). Not: `can_arm_and_run = true` olduğundan armed + yerde moda geçiş reddedilmez; PX4 bu modda kalkış istemez (`want_takeoff` yalnızca offboard'da, `MulticopterPositionControl.cpp:464-486`) (doğrulanacak). |
-| A2 | **RC override** (doğrulanacak) | Kaynak: çubuk ile Position'a geçiş yalnızca `flag_control_auto_enabled` ya da `flag_control_offboard_enabled` açıksa olur (`Commander.cpp:2939-2960`; `COM_RC_OVERRIDE` varsayılan 1 = bit 0 auto, `commander_params.c:430-446`). Seçenek a) auto = false (`mc_nn_control` gibi): çubuk modu değiştirmez, pilot mod anahtarını kullanır. b) auto = true: çubuk hareketi Position'a geçirir. Öneri: (b), yan etkileri SITL S3'te doğrulanarak (FlightTask zaten çalışmaz `FlightModeManager.cpp:139-144`; HEARTBEAT `base_mode`'u değişir `streams/HEARTBEAT.hpp:98-100`). Her iki durumda ilk uçuşta RC'de Position'a ayrılmış bir anahtar konumu olmalı. |
+| A1 | **Mod kaydı ayrıntıları** | **Karar (C1, 2026-11-10).** `mode_req_angular_velocity`, `mode_req_attitude`, `mode_req_local_alt`, `mode_req_local_position` = true; `mode_req_global_position`, `mode_req_home_position`, `mode_req_mission`, `mode_req_manual_control` = false (`msg/versioned/ArmingCheckReply.msg:31-41`, `mc_nn_control.cpp:185-193` ile aynı); kontrol bayrakları (`msg/versioned/VehicleControlMode.msg:8-19`): position, velocity, altitude, climb_rate, acceleration, attitude, rates, allocation, termination = true; manual, offboard = false; auto için A2 (öneri kabul). `mode_req_prevent_arming` = **true** (kullanıcı: "bu modda arm etmek yasak olsun ancak arm değilken bu moda geçebileyim"): disarm iken geçiş her zaman serbest (`UserModeIntention.cpp:54-55`), yasak yalnızca arm etmeyi durdurur (`HealthAndArmingChecks/checks/modeCheck.cpp:196-205`). Yerde arm'lıyken geçiş: A14. |
+| A2 | **RC override** (doğrulanacak) | Kaynak: çubuk ile Position'a geçiş yalnızca `flag_control_auto_enabled` ya da `flag_control_offboard_enabled` açıksa olur (`Commander.cpp:2939-2960`; `COM_RC_OVERRIDE` varsayılan 1 = bit 0 auto, `commander_params.c:430-446`). Seçenek a) auto = false (`mc_nn_control` gibi): çubuk modu değiştirmez, pilot mod anahtarını kullanır. b) auto = true: çubuk hareketi Position'a geçirir. Öneri: (b), yan etkileri SITL S3'te doğrulanarak (FlightTask zaten çalışmaz `FlightModeManager.cpp:139-144`; HEARTBEAT `base_mode`'u değişir `streams/HEARTBEAT.hpp:98-100`). Her iki durumda ilk uçuşta RC'de Position'a ayrılmış bir anahtar konumu olmalı. **2026-11-10:** kullanıcı C1'in bu kısmını cevaplamadı; yeniden soruldu. |
 | A3 | **Masa testi (GPS yok)** | Kapalı ortamda yerel konum geçersiz → örnekler `CHECK_POSITION` ile atılır → mod aktifse 1.5 s sonra Hold istenir (disarm iken de). Öneri — masada gözlenecekler: mod kaydı ve QGC'de `AUTO FOLLOW`; disarm iken moda geçiş; `AF_LOS` alımı (`listener debug_array`, `listener auto_follow_status`: ham LOS, yaş, sıra no, bayrak, `check_result`, sayaçlar); durum geçişleri ve Hold isteği; `auto_follow status`. Geometri ve guidance SITL'de değerlendirilir. Log için kullanıcı `SDLOG_MODE`'u değiştirir ve kartı yeniden başlatır. |
-| A4 | **Log alan adları** | Bölüm 9 tablosu; ön ek (ör. Betaflight'taki `trk` gibi) kullanılıp kullanılmayacağı ve durum/sonuç sabit adları kullanıcıya sorulur. |
-| A5 | **Vision ile `AF_LOS` anlaşması** | Yusuf Ortatepe ile: yerleşim (`data[0..5]`), MAVLink 2 zorunluluğu (extension alanı), ad 9 karakter sınırı, sıra no float32 kesinliği, frekans 10–30 Hz, `array_id` kullanımı (öneri: 0, FC kontrol etmez). Eksenler m10 ile (V6). MAVLink tanımı mesaj için "üretimde kullanmayın" notu taşır (`common.xml:7626`); ICD'de değerlendirilir. |
+| A4 | **Log alan adları** | **Karar (C3, 2026-11-10):** Bölüm 9 tablosu, önek yok; durum adları PASIF / TAKIP / KAYIP_BEKLE / HOLD_ISTENDI. Bütün adlar `log-sozlugu.md`'de. |
+| A5 | **Vision ile `AF_LOS` anlaşması** | MAVLink 2: Vision doğruladı (pymavlink MAVLink 2 kullanıyor, B1). Kalanlar Yusuf Ortatepe ile: yerleşim (`data[0..5]`),
 | A6 | **Kamera eğimi → `AF_TRK_ANG`** | Ahmet'in m06 kamera montaj dokümanından; SITL için 30°. |
-| A7 | **Kilit listesi talebi** | 6 yol tek talep olarak Hüseyin'e (bkz. "Kilitli yollar ve flash"). |
-| A8 | **Modülün boot'ta başlatılması** (bu yazımda bulundu, kaynaklarda yok) | Kayıt yalnızca disarm iken kabul edilir. Seçenekler: a) SITL'de pxh kabuğundan `auto_follow start`, 6C'de SD kartta `/fs/microsd/etc/extras.txt` (`ROMFS/px4fmu_common/init.d/rcS:25, 599-603`): kilitli dosyaya dokunmaz; b) `ROMFS/px4fmu_common/init.d/rc.mc_apps`'e satır (`mc_nn_control` böyle başlar, `rc.mc_apps:40-43`): yedinci kilitli yol; c) SITL airframe `.post` dosyası (`init.d-posix/rcS:363`): yine ROMFS yolu. Öneri: m15'te (a); otomatik SITL testi için gerekirse (b) Hüseyin'e sorulur. |
-| A9 | **`AF_ALPHA` / `AF_BETA` varsayılanı ve tüm min/max/birimler** | `module.yaml` derlenebilir bir varsayılan ister; Bölüm 10 tablosundaki öneriler onay bekliyor. |
-| A10 | **Hold reddi, hedefsiz giriş, konum geçersizken setpoint** | Bölüm 7–8'deki öneriler onay bekliyor. |
+| A7 | **Kilit listesi talebi** | 7 yol (B2-b ile `rc.mc_apps` eklendi) tek talep olarak Hüseyin'e (bkz. "Kilitli yollar ve flash"). |
+| A8 | **Modülün boot'ta başlatılması** | **Karar (B2-b, 2026-11-10):** `ROMFS/px4fmu_common/init.d/rc.mc_apps`'e satır (yedinci kilitli yol). Kanıt: kayıt yalnızca disarm iken kabul edilir (`ModeManagement.cpp:371-380`); `rc.mc_apps` her multikopter açılışında çalışır (SITL `init.d-posix/rcS:289`, 6C `init.d/rcS:485`, → `rc.vehicle_setup:20-24`). Hüseyin reddederse geri dönüş (a): SITL'de pxh'tan `auto_follow start`, 6C'de `/fs/microsd/etc/extras.txt` (`init.d/rcS:25, 599-603`). Satırın koşulu: A13. |
+| A9 | **`AF_ALPHA` / `AF_BETA` varsayılanı ve tüm min/max/birimler** | **Karar (öneri kabul, C2):** Bölüm 10 tablosu. |
+| A10 | **Hold reddi, hedefsiz giriş, konum geçersizken setpoint** | **Karar (A3, C2):** Bölüm 7–8. |
 | A11 | **Kalıcı gönderici** | Vision (m12) ve m06 ile konuşulacak; geçiciyi biz yazıyoruz. |
-| A12 | **S1–S7 tanım farkı** | `requirements.md` §3.12 ve `rapor.md` §4.9 farklı S1–S7 tanımlıyor. Öneri: requirements başlıkları esas, rapor'daki açık/kapalı çevrim durumları S2/S4/S5 alt adımları (Bölüm 11). Onaylanınca `rapor.md` buna göre güncellenir. |
+| A12 | **S1–S7 tanım farkı** | **Karar (A1, A2, 2026-11-10):** konuşulan tablo (`rapor.md` §4.9) esas; S1 → S1a/S1b; eski "kayıt" ve "mod seçimi" başlıkları ön kontrol; RC kaybı ve modül sağlığı m16 adayı (Bölüm 11). |
+| A13 | **`rc.mc_apps` satırının koşulu** | a) koşulsuz `auto_follow start`: en basit; modülü kapatmak için yeniden derleme gerekir · b) bir açma/kapama parametresiyle (`mc_nn_control` örneği `if param compare -s MC_NN_EN 1`, `rc.mc_apps:40-43`; `MC_NN_EN` varsayılanı 1, `mc_nn_control_params.c:47`): sorun olursa QGC'den kapatılıp yeniden başlatılır; yeni bir parametre adı gerekir (kullanıcı verir). Kullanıcıya soruldu. |
+| A14 | **Yerde arm'lıyken moda geçişi engelleme (B4)** | Karar: güvenlik adımı gerekli (kullanıcı: "AUTO FOLLOW'da kalkış yok; arm'lıyken ve yerdeyken moda geçmese daha iyi"). Seçenekler: a) PX4'e "şu an çalışamam" bildirmek: yalnızca drone yerdeyken (`vehicle_land_detected.landed`, `msg/VehicleLandDetected.msg:8`) **ve mod aktif değilken** `can_arm_and_run = false`. PX4 arm'lı araçta geçişi kendisi reddeder (`UserModeIntention.cpp:58-59`, `externalChecks.cpp:158-160, 188-190`), QGC'de "Switching to … is currently not available" + uyarı sesi (`Commander.cpp:2620-2638`). Disarm iken geçiş yine serbest; mod aktifken koşul devreye girmediği için RTL riski yok · b) modül içinde: girişte yerdeyse hemen Hold iste (geçiş kısa süre olur, Hold'un yerde davranışı doğrulanacak). Öneri (a). Kullanıcıya soruldu. |
 
 ## Kabul kriterleri
 
@@ -302,11 +310,11 @@ Bu spec'in kararlarından:
 
 ## Uygulama sırası (Karar 14.5, öneri kabul)
 
-1. **İskelet:** mod kaydı, arming check, 50 Hz çevrim, parametreler; SITL ve 6C derlemesi, flash kullanımı kaydı. (Kilit listesi onayı gelmeden `verify-pin` kırmızı kalır.)
+1. **İskelet:** mod kaydı, arming check (yerde arm'lıyken geçiş engeli dahil, A14), açılışta başlatma satırı (`rc.mc_apps`), 50 Hz çevrim, parametreler; SITL ve 6C derlemesi, flash kullanımı kaydı. (Kilit listesi onayı gelmeden `verify-pin` kırmızı kalır.)
 2. **Guidance + alpha-beta:** doğrulama, geometri, filtre, yasa, sınırlar, yaw/irtifa, setpoint.
 3. **Kısa birim testi** (`AutoFollowGuidanceTest.cpp`).
-4. **SITL S1–S5** (S4'ün KAYIP_BEKLE kısmı; Hold kısmı 5. adımdan sonra koşulur — öneri, A12 ile birlikte onaylanır).
+4. **SITL ön kontroller + S1–S5** (S4'ün yalnız KAYIP_BEKLE kısmı; Hold kısmı 5. adımdan sonra — Karar A4).
 5. **Hold geçişi** (`VEHICLE_CMD_SET_NAV_STATE`), S4'ün tamamı.
-6. **S6–S7 + log mesajı ve sözlüğü** (`auto_follow_status`, `log-sozlugu.md`, `af_log_analiz.py`).
+6. **S6–S7 + log mesajı ve sözlük** (`auto_follow_status`, `log-sozlugu.md` güncellemesi, `af_log_analiz.py`).
 
 Her adımdan sonra kontroller geçince commit, görev grubu notu ve `rapor.md` güncellemesi. Yetişmeyenler "m16'ya kalanlar" listesine yazılır.

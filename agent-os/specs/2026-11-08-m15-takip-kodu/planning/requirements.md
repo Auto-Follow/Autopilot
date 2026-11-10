@@ -2,7 +2,8 @@
 
 - **Görev:** https://github.com/Auto-Follow/Auto-Follow/issues/6 (yol haritası madde 15; devamı 13 ve 16). Son teslim **2026-11-15**.
 - **Repo / dal:** Autopilot, `ozellik/m15-takip-kodu`. Spec klasörü: `agent-os/specs/2026-11-08-m15-takip-kodu/`.
-- **Durum:** Shape-spec tamamlandı (2026-11-09). Aynı gün shape-spec sonrası konuşmada açık kalan maddeler karara bağlandı ve bu dosyaya işlendi (KG "Shape-spec sonrası, write-spec öncesi"). Sonraki aşama: `write-spec`; **kullanıcı onay vermeden başlamaz.**
+- **Durum (2026-11-10):** write-spec yapıldı (`../spec.md`); kullanıcının write-spec turundaki cevapları §3.14'te ve KG "Write-spec turu (2026-11-10)"de. Sonraki aşama `create-tasks`; **kullanıcı onay vermeden başlamaz.**
+- **Önceki durum:** Shape-spec tamamlandı (2026-11-09). Aynı gün shape-spec sonrası konuşmada açık kalan maddeler karara bağlandı ve bu dosyaya işlendi (KG "Shape-spec sonrası, write-spec öncesi"). Sonraki aşama: `write-spec`; **kullanıcı onay vermeden başlamaz.**
 - **Bütün sistemi anlatan rapor:** `../rapor.md`.
 - **Kaynaklar (bu dosya bunlardan derlendi, yeni karar içermez):**
   - `planning/raw-idea.md`: görevin ilk tanımı ve issue #6 kabul kriterleri.
@@ -274,7 +275,7 @@ Bu karar `tur1-cevaplar.md`'deki ilk 8.2 kaydının ("hover yayınla, Hold iste�
 - **Kullanıcının sorusu:** "Logda her şeyi kendi isimleriyle göreceğiz değil mi?" Evet; `DEBUG_FLOAT_ARRAY` yalnızca taşıyıcıdır, logda bakılan `auto_follow_status`'un adlı alanlarıdır.
 - **Varsayılan olarak zaten loga girenler** (kod gerekmez): `trajectory_setpoint` (bizim isteğimiz), `vehicle_status` (mod değişimleri, Hold), `vehicle_command` (Hold isteği), `vehicle_local_position`, `vehicle_attitude`, `vehicle_control_mode`, `actuator_motors` (`src/modules/logger/logged_topics.cpp:131-150, 214`).
 - **L1 — Güncellendi (2026-11-09):** Debug bitini açmaya **gerek yok**. Ham girdi zaten `auto_follow_status`'a kopyalanıyor ve bu mesaj her zaman kaydediliyor. Ham `debug_array` yalnızca debug biti açıksa kaydedilir (`logged_topics.cpp:290-294`); ihtiyaç yok.
-- **L3 — Karar:** `SDLOG_MODE` varsayılan kalır (0 = yalnızca arm iken log, `src/modules/logger/module.yaml:16-30`). Kullanıcı: "Masa testi yapacağımda parametreden 0/1 ayarlarım; bu zaten normal PX4 parametresi." Not: Bu parametre değiştikten sonra kart **yeniden başlatılmalı** (`logger/module.yaml:31`, `reboot_required: true`). SITL'de varsayılan 1'dir (`ROMFS/px4fmu_common/init.d-posix/rcS:180`).
+- **L3 — Karar:** `SDLOG_MODE` varsayılan kalır (0 = yalnızca arm iken log, `src/modules/logger/module.yaml:16-30`). Kullanıcı: "Masa testi yapacağımda parametreden 0/1 ayarlarım; bu zaten normal PX4 parametresi." Not: Bu parametre değiştikten sonra kart **yeniden başlatılmalı** (`logger/module.yaml:31`, `reboot_required: true`). SITL'de varsayılan 1'dir (`ROMFS/px4fmu_common/init.d-posix/rcS:180`). **2026-11-10 (A5):** kullanıcı: "bunu ben kendim ayarlayacağım"; belgeler değer önermez.
 - **Logların yeri** (kullanıcının gereksinimi: gerçek uçuşta 6C'nin SD kartı, simülasyonda laptop). PX4 bunu kendisi yapıyor, kod gerekmez:
   - Gerçek uçuş: `/fs/microsd/log/<tarih>/<saat>.ulg` (`src/modules/logger/logger.cpp:1296`).
   - SITL: `build/px4_sitl_default/rootfs/log/<tarih>/<saat>.ulg`.
@@ -286,18 +287,22 @@ Bu karar `tur1-cevaplar.md`'deki ilk 8.2 kaydının ("hover yayınla, Hold iste�
 Kullanıcının çerçevesi: "Arkadaşım gerçek uçuş ortamına yakın bir simülasyon hazırlıyor; o bitince tamamen oraya geçeceğiz. O bitene kadar her şey bizde: kod yazımı bitince Gazebo'da en basit testten başlayıp oluşabilecek tüm durumları test edeceğiz."
 
 - **10.1 — Birim testi (Karar: kısa tutulur).** Bilgisayarda, drone'suz, saniyeler içinde biten otomatik testler (GoogleTest, `../agent-os/standards/testing/test-writing.md:6-10`). Yalnızca temel hesaplar sınanır: mesafe/yön hesabı, hız yasası ve sınırları, bozuk veri, zaman aşımı. Süre kısıtlı olduğu için hemen SITL'e geçilir.
-- **10.2 — SITL senaryoları S1–S7 (Karar).** Gazebo Harmonic'te, en basitten karmaşığa. Senaryo başlıkları `visuals/02-px4-detayli-akis.md`'deki (D) bloğundan alınmıştır (taslak; içerik write-spec'te bu spec'in kararlarına ve yeni adlara göre güncellenir):
+- **10.2 — SITL senaryoları S1–S7 (Karar; tablo 2026-11-10'da düzeltildi).** Gazebo Harmonic'te, en basitten karmaşığa. **Düzeltme notu:** Bu dosyanın ilk sürümünde başlıklar eski taslak şemanın (D) bloğundan alınmış ve S6 = "RC kaybı", S7 = "modül sağlığı" yazılmıştı. Kullanıcıya sunulan ve konuşulan tablo farklıydı; kullanıcı "en konuştuğumuz hale getir" dedi (KG "Write-spec turu", A1). Geçerli tablo (ayrıntılı beklentiler ve ölçümler `../spec.md` Bölüm 11):
 
-  | # | Başlık | Bu spec'teki beklenti |
-  |---|---|---|
-  | S1 | Kayıt ve başlatma | Modül açılışta modu kaydeder, mod listede görünür |
-  | S2 | Nominal takip | Sentetik yönle drone hedefe göre hız ve yaw üretir |
-  | S3 | Mod seçimi ve çıkış | QGC ve RC ile giriş/çıkış; disarm iken geçiş |
-  | S4 | Hedef kaybı | Veri kesilir → hover → `T_kayip` sonra Hold; `T_kayip` dolmadan veri dönerse takip sürer |
-  | S5 | Girdi doğrulama ve güvenli taraf | Yanlış ad, NaN/Inf, norm dışı, eski, ufka yakın yön atılır ve sayılır |
-  | S6 | RC kaybı | PX4 varsayılan davranışı gözlenir (doğrulanacak) |
-  | S7 | Modül sağlığı ve fallback | Modül durur/donarsa PX4'ün davranışı gözlenir (doğrulanacak) |
+  | # | Script ne gönderir | Beklenen | Çevrim |
+  |---|---|---|---|
+  | S1a | Hedef uzakta (sığ açı, ör. 18°) | İleri gider, hız 2 m/s'de kırpılır | Açık |
+  | S1b | Hedef yakında (dik açı, ör. 37°) | ~1.8 m/s geri gider | Açık |
+  | S2 | Hedef sağda | Burun sağa döner (sabit yönde dönüş sürer, beklenen) | Açık |
+  | S3 | Hedef neredeyse tam altta (ör. 80°) | Geri gider, hız 2 m/s'de kırpılır | Açık |
+  | S4 | Gönderimi keser / "hedef yok" / hedefsiz moda giriş | 0.5 s sonra yerinde bekler, 1.0 s sonra Hold (hedefsiz girişte girişten 1.5 s) | Açık |
+  | S5 | Bozuk veri | Atar, sayaç artar, etkilenmez | Açık |
+  | S6 | Yerde duran hayali insan | Takip açısının verdiği mesafeye gelip durur | Kapalı |
+  | S7 | Yürüyen hayali insan, `AF_K_FF` > 0 | Geride kalmadan takip eder | Kapalı |
 
+  - S1, A2 kararıyla ikiye ayrıldı: drone'un ileri mi geri mi gideceği, hedefin aşağı bakış açısının takip açısından (30°) sığ mı dik mi olduğuna bağlı.
+  - Eski taslaktaki "kayıt ve başlatma" ile "mod seçimi ve çıkış" başlıkları senaryo değil, her test oturumunun başındaki **ön kontroller** oldu.
+  - RC kaybı ve modül donması testleri bu spec'te yok; m16 adayı.
   - **Açık çevrim** = sabit yön gönderilir. **Kapalı çevrim** = script yerde hayali bir hedef tutar ve drone'un konumuna göre gerçek yönü hesaplar. İlk sabit-yön testleri c = 0 ile yapılır; c > 0 testleri kapalı çevrimle yapılır (3.6.2).
   - Her senaryo için yazılacaklar: **ne verildi, drone ne yaptı, ULog adı** (kabul kriteri).
   - Standart gereği: mümkünse `HEADLESS=1`; her testten sonra SITL parametre dosyası sıfırlanır (`../agent-os/standards/testing/test-writing.md:13-15`).
@@ -316,6 +321,25 @@ Kullanıcının çerçevesi: "Arkadaşım gerçek uçuş ortamına yakın bir si
   - **Sıra numarası:** Tekrar eden ya da geri giden mesaj atılır ve sayılır.
 - **m15'te yapılmayan:** Gecikme telafisi, yani LOS'u NED'e çevirirken görüntünün çekildiği andaki tutumu kullanmak (son ~0.5 s'lik tutum geçmişi gerekir). Önce loglardaki gerçek gecikmeye bakılır; büyükse m13/m16'da eklenir. İhtiyaç tahminle değil veriyle belirlenir. V3 bu yüzden "varış anındaki tutum" olarak kalır.
 - Pi tarafı biçimi farklı gönderirse (ör. yaş yerine mutlak saat), yalnızca girdiyi okuyan kısım değişir.
+
+### 3.14 Write-spec turu kararları (2026-11-10)
+
+Ayrıntı, kullanıcının sözleri ve kanıtlar: KG "Write-spec turu (2026-11-10)".
+
+| # | Konu | Karar |
+|---|---|---|
+| A1 | S1–S7 | Konuşulan tablo (3.12); RC kaybı ve modül donması testleri m16 adayı |
+| A2 | S1 beklentisi | S1a (uzak → ileri) / S1b (yakın → geri) |
+| A3 | Hedefsiz moda giriş | Zaman referansı `max(son geçerli, giriş)`; KAYIP_BEKLE ile başlanır; girişten 1.5 s sonra Hold |
+| A4 | İş sırası | S4'ün Hold kısmı, Hold kodu yazıldıktan sonra test edilir |
+| A5 | Masa testinde `SDLOG_MODE` | Kullanıcı kendisi seçer; belgeler değer önermez |
+| B1 | MAVLink 2 | Vision doğruladı: pymavlink MAVLink 2 kullanıyor |
+| B2 | Açılışta başlatma | `ROMFS/px4fmu_common/init.d/rc.mc_apps`'e satır; **7. kilitli yol** (Hüseyin onayı). Satırın koşulu açık (spec A13) |
+| B3 | Açık çevrim testi | Plan değişmedi: SITL'siz test yalnızca birim testi; açık çevrim de SITL'de ama basit |
+| B4 | Yerde arm'lıyken moda geçiş | Engellenecek (güvenlik adımı). Yöntem açık (spec A14) |
+| C1 | Arm | Bu modda arm yasak (`mode_req_prevent_arming = true`); disarm iken moda geçiş serbest; mod gereksinimleri ve kontrol bayrakları öneri kabul. RC çubuğu (spec A2) yeniden soruldu |
+| C2 | Davranış ayrıntıları | Öneri kabul: filtre yatayda, ilk ölçümde hız 0, EKF reset'te sıfırlama; `AF_ALPHA` 0.5, `AF_BETA` 0.17; ivme sınırı o anki hızdan başlar; Hold reddinde hover + 1 s arayla en fazla 3 tekrar; konum geçersizken yatay hız 0; parametre birim/min/max; log mesajı PASIF'te de 50 Hz |
+| C3 | Adlar | Log alan adları spec tablosundaki gibi, önek yok; durum adları PASIF / TAKIP / KAYIP_BEKLE / HOLD_ISTENDI. Bizim verdiğimiz **bütün adlar** için ayrıntılı sözlük: `../log-sozlugu.md` |
 
 ---
 

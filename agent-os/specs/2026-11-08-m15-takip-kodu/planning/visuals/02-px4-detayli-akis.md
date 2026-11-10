@@ -2,6 +2,8 @@
 
 > **Güncelleme notu (2026-11-09):** Bu dosya, eski taslak `agent-os/specs/2026-10-15-m15-target-follow-flight-mode/diagrams/02-px4-detayli-akis.md`'nin kopyasıdır ve bu spec'in kararlarına göre güncellendi (kullanıcı onayı, `requirements.md` §11). Kararlaşan TBD'ler kararla değiştirildi (girdi `DEBUG_FLOAT_ARRAY` / `AF_LOS` varsayımı, yükseklik formülü, hız tabanlı guidance + alpha-beta, `trajectory_setpoint`, süreler `AF_DATA_TOUT` / `AF_LOST_T`, SITL girdisi `tez/sitl/af_los_gonder.py`). TBD kalanlar: kilit listesi onayı, ICD zaman biçimi, hareketli insan modeli ve dünyası (m06). Eski taslak adlar (`tez_follow`, `TEZ_FOL_*`, `TEZ_LOS`, `CONFIG_MODULES_TEZ_FOLLOW`) AUTO FOLLOW / `auto_follow` / `AF_*` / `AF_LOS` / `CONFIG_MODULES_AUTO_FOLLOW` oldu. Kullanıcı onayı bekleyen öneriler "(öneri)" ve `spec.md` "Açık konular" numarasıyla işaretlidir. **Asıl şema eski klasörde değişmeden durur.**
 >
+> **Güncelleme notu (2026-11-10, write-spec turu):** (A) bloğunda başlatma noktası karara bağlandı (`rc.mc_apps` satırı, 7. kilitli yol; B2-b), "bu modda arm yasak" kesinleşti (C1), yerde arm'lıyken geçiş engeli eklendi (B4, yöntem `spec.md` A14). (D) bloğundaki S1–S7, kullanıcıyla konuşulan tabloya döndürüldü (A1, A2): eski "kayıt" ve "mod seçimi" senaryoları ön kontrol oldu, RC kaybı ve modül donması testleri m16 adayı. Ayrıntı `spec.md` Bölüm 11.
+>
 > Eski not (tarihsel): Bu şema FC'ye özel olarak güncellendi, bkz. `agent-os/specs/2026-10-18-m15-fc-only-flow-diagrams/`.
 
 Bu şema, FC'ye MAVLink `DEBUG_FLOAT_ARRAY` (`name = AF_LOS`) ile gelen body FRD LOS ile bir insanı takip eden **AUTO FOLLOW** uçuş modunun (`auto_follow` modülü) PX4 v1.17.0 içinde nasıl kurulacağını gösterir. Modül FC içinde çalışır, kendini `mc_nn_control` gibi uORB üzerinden external mode olarak kaydeder, `trajectory_setpoint` yayınlar ve uçuşu PX4'ün mevcut kontrolcülerine bırakır. Zincir, kontrolcülerden sonra MAIN PWM çıkışına kadar gösterilir. Modülün kodu bu spec'te (`2026-11-08-m15-takip-kodu`) yazılır. Buradaki her PX4 topic'i, alanı, parametresi ve dosya yolu bu repodaki v1.17.0 kaynağından alınmıştır; `auto_follow`, `AF_*`, `AF_LOS` ve `auto_follow_status` kullanıcı kararıyla verilen yeni adlardır.
@@ -61,7 +63,7 @@ Her blok, ilgili katmanları aşağıdaki başlıklarla `subgraph` olarak ayır�
 | 2 | Yükseklik kaynağı | **Kapandı (Karar 13-iii):** yükseklik farkı = `-vehicle_local_position.z` − `AF_GND_OFS` − `AF_TGT_HGT` | B |
 | 3 | Nihai guidance yasası | **Kapandı (bu spec için):** hız tabanlı yasa + alpha-beta filtresi; nihai yasa ve ince ayar m13 | B |
 | 4 | Setpoint tipi | **Kapandı (Karar 7-a):** `trajectory_setpoint` = yatay hız (`velocity[0..1]`) + irtifa (`position[2]`) + mutlak yaw | B |
-| 5 | Ön koşul onayı | **TBD kalır:** `tez/pin/allowed-paths.txt` için 6 yol, Hüseyin onayı, ayrı PR: `src/modules/auto_follow/`, `boards/px4/sitl/default.px4board`, `boards/px4/fmu-v6c/default.px4board`, `msg/AutoFollowStatus.msg`, `msg/CMakeLists.txt`, `src/modules/logger/logged_topics.cpp` | A |
+| 5 | Ön koşul onayı | **TBD kalır:** `tez/pin/allowed-paths.txt` için 7 yol, Hüseyin onayı, ayrı PR: `ROMFS/px4fmu_common/init.d/rc.mc_apps` (B2-b), `src/modules/auto_follow/`, `boards/px4/sitl/default.px4board`, `boards/px4/fmu-v6c/default.px4board`, `msg/AutoFollowStatus.msg`, `msg/CMakeLists.txt`, `src/modules/logger/logged_topics.cpp` | A |
 | 6 | Süre parametreleri | **Kapandı (Karar):** `AF_DATA_TOUT` = 0.5 s (sonra KAYIP_BEKLE), `AF_LOST_T` = 1.0 s (sonra Hold); Pi "hedef yok" derse KAYIP_BEKLE hemen başlar | C |
 | 7 | Hareketli insan modeli ve tez dünyası | **TBD kalır (m06):** Gazebo'daki hareketli insan modelinin ve tez dünyasının dosya konumu. `Tools/simulation/gz` kilitli, izinli yollar `tez/*`, `gz_env.sh.in`, `px4-rc.gzsim` | D |
 | 8 | SITL'de LOS girdisi | **Kapandı:** geçici gönderici `tez/sitl/af_los_gonder.py` (pymavlink 2.4.50), açık ve kapalı çevrim | D |
@@ -90,11 +92,11 @@ Modül, `mc_nn_control` `Run()` sırasını izler: çıkış kontrolü → kayı
 ```mermaid
 flowchart TB
     subgraph aBuild ["Derleme ve başlatma"]
-        aPre("TBD: Ön koşul onayı (allowed-paths, 6 yol)<br/>src/modules/auto_follow/, boards/px4/sitl/default.px4board,<br/>boards/px4/fmu-v6c/default.px4board, msg/AutoFollowStatus.msg,<br/>msg/CMakeLists.txt, src/modules/logger/logged_topics.cpp<br/>Hüseyin onayı, ayrı PR, henüz onaylanmadı")
+        aPre("TBD: Ön koşul onayı (allowed-paths, 7 yol)<br/>src/modules/auto_follow/, boards/px4/sitl/default.px4board,<br/>boards/px4/fmu-v6c/default.px4board, msg/AutoFollowStatus.msg,<br/>msg/CMakeLists.txt, src/modules/logger/logged_topics.cpp,<br/>ROMFS/px4fmu_common/init.d/rc.mc_apps<br/>Hüseyin onayı, ayrı PR, henüz onaylanmadı")
         aKconfig("CONFIG_MODULES_AUTO_FOLLOW=y (karar)<br/>boards/px4/fmu-v6c/default.px4board<br/>boards/px4/sitl/default.px4board")
-        aStartSitl("SITL başlatma noktası: Açık (spec A8, doğrulanacak)<br/>öneri: pxh kabuğundan auto_follow start (dosya değişmez)<br/>seçenek: airframe .post dosyası (ROMFS, kilitli yol)<br/>px4-rc.mavlink sonrasında çalışır")
-        aStartHw("Donanım başlatma noktası: Açık (spec A8, doğrulanacak)<br/>öneri: SD kart /fs/microsd/etc/extras.txt<br/>rcS içinde commander ve mavlink sonrasında çalışır")
-        aRcLocked("Not: upstream rc.mc_apps kilitli ve 6 yollu talepte yok.<br/>auto_follow buraya ancak 7. yol onaylanırsa eklenir (spec A8)")
+        aStartSitl("SITL: rcS (init.d-posix/rcS:289) → rc.vehicle_setup → rc.mc_apps<br/>Karar B2-b: rc.mc_apps içinde auto_follow start satırı<br/>(satırın koşulu açık, spec A13)")
+        aStartHw("6C: rcS (init.d/rcS:485) → rc.vehicle_setup → rc.mc_apps<br/>aynı satır; SITL ile 6C aynı dosyayı kullanır")
+        aRcLocked("Not: rc.mc_apps kilitli, 7. yol olarak talepte (B2-b).<br/>Hüseyin reddederse geri dönüş: SITL'de pxh'tan elle,<br/>6C'de SD kart /fs/microsd/etc/extras.txt (spec A8)")
         aBoot(["auto_follow start: boot'ta, disarm iken"])
     end
 
@@ -114,8 +116,8 @@ flowchart TB
         aCycleEnd(["return: sonraki çevrim"])
         aChkQ{"arming_check_request<br/>güncellendi mi?"}
         aRateNote("Not: istek her çevrimde kontrol edilir.<br/>~50 Hz (20 ms) çevrim, 50 ms cevap süresinin içinde kalır")
-        aReplyBuild("arming_check_reply hazırla (ReplyToArmingCheck deseni)<br/>request_id = istekteki request_id<br/>registration_id = arming_check_id<br/>can_arm_and_run = true (Karar 5-a, hedef yokken de)<br/>mode_req_* (öneri, spec A1):<br/>mode_req_attitude = true<br/>mode_req_local_position = true<br/>mode_req_local_alt = true<br/>mode_req_angular_velocity = true<br/>mode_req_prevent_arming = true (öneri: bu modda arm edilemez)<br/>mode_req_manual_control = false<br/>timestamp = hrt_absolute_time()")
-        aAirNote("Not: can_arm_and_run hep true; hedef kaybını modül kendi<br/>Hold isteğiyle yönetir. Disarm iken mod her zaman seçilebilir<br/>(masa testi). Arm engeli prevent_arming önerisine bağlı (spec A1).<br/>Moda giriş koşulları (C) bloğunda")
+        aReplyBuild("arming_check_reply hazırla (ReplyToArmingCheck deseni)<br/>request_id = istekteki request_id<br/>registration_id = arming_check_id<br/>can_arm_and_run = true (Karar 5-a, hedef yokken de);<br/>istisna adayı: yerde ve mod aktif değilken false (B4, spec A14)<br/>mode_req_* (Karar, öneri kabul, spec A1):<br/>mode_req_attitude = true<br/>mode_req_local_position = true<br/>mode_req_local_alt = true<br/>mode_req_angular_velocity = true<br/>mode_req_prevent_arming = true (öneri: bu modda arm edilemez)<br/>mode_req_manual_control = false<br/>timestamp = hrt_absolute_time()")
+        aAirNote("Not: can_arm_and_run hep true; hedef kaybını modül kendi<br/>Hold isteğiyle yönetir. Disarm iken mod her zaman seçilebilir<br/>(masa testi). Bu modda arm yasak: mode_req_prevent_arming = true (Karar C1).<br/>Moda giriş koşulları (C) bloğunda")
         aUnreg("Kayıt silme (UnregisterNeuralFlightMode deseni)<br/>kayıt gönderildiyse: name (kayıttaki adla birebir), arming_check_id, mode_id,<br/>mode_executor_id = -1 (executor yok)<br/>ardından exit_and_cleanup()")
     end
 
@@ -540,7 +542,7 @@ flowchart TB
         cAction("Commander::executeActionRequest<br/>ACTION_SWITCH_MODE (SOURCE_RC_MODE_SLOT)")
         cUmi("UserModeIntention::change(mode_id, ModeChangeSource::User)")
         cArmedQ{"armed mı?"}
-        cDisarmOk("Disarm: mod seçimine her zaman izin (masa testi)<br/>arm, mode_req_prevent_arming = true ise engellenir<br/>(öneri, spec A1: kalkış Position'da yapılır)")
+        cDisarmOk("Disarm: mod seçimine her zaman izin (masa testi)<br/>bu modda arm engellenir: mode_req_prevent_arming = true<br/>(Karar C1: kalkış Position'da yapılır)")
         cCanRunQ{"canRun(mode_id)?<br/>can_arm_and_run = true (Karar 5-a)<br/>mod responsive, mode_req_* sağlanıyor mu?"}
         cReject("Geçiş reddedilir: mode_req_* sağlanmıyor<br/>veya mod unresponsive<br/>printRejectMode, VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED<br/>mevcut mod korunur")
         cAccept("Armed: geçiş kabul (yerdeyken de, spec A1, doğrulanacak)<br/>nav_state = mode_id<br/>vehicle_control_mode = config_control_setpoints yapılandırması")
@@ -695,19 +697,20 @@ Bu blok, `auto_follow` kodu yazıldıktan sonra (bu spec) davranışın hangi s�
 - **Sıra:** Adım 1 GoogleTest → Adım 2 Gazebo Harmonic SITL → Adım 3 ULog + pyulog metrikleri → Adım 4 gerçek uçuş. Adım 2–3 her senaryo için ayrı bir SITL oturumunda tekrarlanır.
 - **Başarısızlık:** Her adımın kapısından bir geri dönüş oku çıkar. Düzeltmede kod değiştiyse Adım 1'den, yalnızca senaryo, script veya test parametresi değiştiyse SITL senaryosundan yeniden başlanır.
 - **Parametre dosyası:** Her SITL testinden önce silinir. Standart test sonrasında da sıfırlamayı ister, ikisi birlikte uygulanır. Test parametreleri `PX4_PARAM_<ad>` ortam değişkeniyle verilir, böylece her oturum aynı başlar.
-- **Kapı:** Gerçek uçuş yalnızca S1–S7 aynı (son) kod sürümüyle SITL'de geçtikten sonra yapılır. RC kaybı ve modül donması yalnızca SITL'de denenir (öneri).
+- **Kapı:** Gerçek uçuş yalnızca ön kontroller ve S1–S7 aynı (son) kod sürümüyle SITL'de geçtikten sonra yapılır. RC kaybı ve modül donması testleri bu spec'te yok (m16 adayı).
 
 Senaryoların kapsadığı maddeler:
 
 | Senaryo | Doğrulanan madde | Blok |
 |---|---|---|
-| S1 Kayıt ve başlatma | Başlatma noktası (Açık, `spec.md` A8), disarm iken kayıt, armed iken kayıt reddi, mod adı ve slotun sabit kalması | A |
-| S2 Nominal takip | Açık çevrim (`AF_K_FF` = 0) ve kapalı çevrim (`tez/sitl/af_los_gonder.py`), takip mesafesi ve yaw hatası, ilk çevrim setpoint'i, mod geçişinde `trajectory_setpoint` çakışması | B |
-| S3 Mod seçimi ve çıkış | QGC 5.1.4 mod adı ve `MAV_CMD_DO_SET_MODE`, RC anahtarıyla giriş ve çıkış, giriş koşulları, stick override, yeniden giriş | C |
-| S4 Hedef kaybı | `AF_DATA_TOUT` (0.5 s), `AF_LOST_T` (1.0 s), Pi "hedef yok" bayrağı, `VEHICLE_CMD_SET_NAV_STATE` ile Hold, `AF_LOST_T` dolmadan hedef geri gelince takibin sürmesi, hedefsiz giriş | C |
+| Ön kontroller | Açılışta başlama (`rc.mc_apps`), disarm iken kayıt, mod adı ve slotun sabit kalması, disarm iken geçiş, bu modda arm reddi, yerde arm'lıyken geçiş reddi (A14), QGC/RC ile giriş-çıkış, Hold sonrası yeniden giriş, stick davranışı (A2) | A, C |
+| S1a / S1b Hedef uzakta / yakında | Açık çevrim (`AF_K_FF` = 0): 18° → ileri (2 m/s kırpma), 37° → ~1.8 m/s geri; ilk çevrim setpoint'i | B |
+| S2 Hedef sağda | Açık çevrim: burun sağa döner, dönüş sürer (beklenen) | B |
+| S3 Hedef neredeyse tam altta | Açık çevrim, 80°: geri, 2 m/s kırpma, yaw donmaz | B |
+| S4 Hedef kaybı | `AF_DATA_TOUT` (0.5 s), `AF_LOST_T` (1.0 s), Pi "hedef yok" bayrağı, `VEHICLE_CMD_SET_NAV_STATE` ile Hold, `AF_LOST_T` dolmadan hedef geri gelince takibin sürmesi, hedefsiz giriş (girişten 1.5 s) | C |
 | S5 Girdi doğrulama ve güvenli taraf | `name` filtresi, `PX4_ISFINITE`, norm, sıra no, gerçek yaş, hedef bayrağı, aşağı açı (`AF_MIN_DEP`), menzil (`AF_MAX_RNG`), `xy_valid` false | B, C |
-| S6 RC kaybı | `COM_RCL_EXCEPT` bit 3, `NAV_RCL_ACT` | C |
-| S7 Modül sağlığı ve fallback | Uçuşta durdurma, donma, unresponsive → RTL zinciri, fallback sonrası otomatik dönüş, disarm iken kayıt silme | A, C |
+| S6 Duran hayali insan | Kapalı çevrim: takip mesafesi (15.6 m) ve yaw hatası | B |
+| S7 Yürüyen hayali insan | Kapalı çevrim, `AF_K_FF` > 0: geride kalmadan takip | B |
 | Adım 4 | TELEM2 (`MAV_1_CONFIG = 102`), başlatma (`extras.txt` önerisi, A8), TELEM2'den `AF_LOS` alımı (`debug_array`) | A, B |
 
 ```mermaid
@@ -728,7 +731,7 @@ flowchart TB
             dBuild("Derleme: make px4_sitl_default<br/>CONFIG_MODULES_AUTO_FOLLOW=y (karar)<br/>ön koşul onayı gerekir ((A) bloğu)")
             dReset("SITL parametre dosyasını sıfırla (her SITL testinden önce)<br/>build/px4_sitl_default/rootfs/parameters.bson ve<br/>parameters_backup.bson silinir<br/>test parametreleri PX4_PARAM_#60;ad#62;=#60;değer#62; ortam değişkeniyle (rcS)")
             dSession("Not: her senaryo yeni bir SITL oturumunda çalışır.<br/>Parametreler ve unresponsive geri dönüş sayacı<br/>(total_num_unresponsive, kayıt başına en fazla 3 geri dönüş)<br/>önceki testten devralınmaz. Standart test sonrasında da sıfırlama ister")
-            dSitl("Adım 2: Gazebo Harmonic SITL (gz-sim 8)<br/>HEADLESS=1 make px4_sitl gz_x500 (default dünya)<br/>auto_follow boot'ta, disarm iken başlatılır ((A) bloğu);<br/>başlatma noktası Açık (spec A8, öneri: pxh'den auto_follow start)<br/>kalkış Position'da, sonra AUTO FOLLOW")
+            dSitl("Adım 2: Gazebo Harmonic SITL (gz-sim 8)<br/>HEADLESS=1 make px4_sitl gz_x500 (default dünya)<br/>auto_follow boot'ta, disarm iken rc.mc_apps'ten başlar ((A) bloğu, B2-b)<br/>kalkış Position'da, sonra havada AUTO FOLLOW")
             dTarget("Not: özel airframe/model adı kararlaştırılmadı (eski taslak öneri adları geçersiz).<br/>make px4_sitl gz_#60;model#62; hedefi airframe dosya adından üretilir ve modeli<br/>kilitli Tools/simulation/gz/models altında arar; m15 testleri stok gz_x500 ile yapılır")
             dPerson("TBD: Hareketli insan modeli ve tez dünyasının konumu<br/>Tools/simulation/gz kilitli, oraya dosya eklenmez.<br/>İzinli yollar: tez/*, gz_env.sh.in (GZ_SIM_RESOURCE_PATH), px4-rc.gzsim.<br/>Konum kullanıcıya sorulacak")
             dBootQ{"Açılış kontrolü: auto_follow kayıtlı mı?<br/>vehicle_status.can_set_nav_states_mask<br/>içinde mode_id biti var mı?"}
@@ -736,25 +739,25 @@ flowchart TB
         end
 
         subgraph dScn ["SITL senaryoları (Adım 2–3, her biri ayrı oturum)"]
-            dLosIn[/"SITL LOS girdisi: tez/sitl/af_los_gonder.py (geçici, pymavlink 2.4.50)<br/>Pi'nin DEBUG_FLOAT_ARRAY (AF_LOS) mesajını taklit eder (UDP 14540)<br/>açık çevrim: sabit yön, AF_K_FF = 0<br/>kapalı çevrim: hayali hedef, drone konumuna göre gerçek LOS<br/>S2, S4 ve S5 bu girdiye ihtiyaç duyar; kalıcı gönderici Vision (m12)"/]
+            dLosIn[/"SITL LOS girdisi: tez/sitl/af_los_gonder.py (geçici, pymavlink 2.4.50)<br/>Pi'nin DEBUG_FLOAT_ARRAY (AF_LOS) mesajını taklit eder (UDP 14540)<br/>açık çevrim: sabit yön, AF_K_FF = 0<br/>kapalı çevrim: hayali hedef, drone konumuna göre gerçek LOS<br/>S1–S7 bu girdiye ihtiyaç duyar; kalıcı gönderici Vision (m12)"/]
             dRcSim("Pilot simülasyonu: pymavlink RC_CHANNELS_OVERRIDE → input_rc<br/>COM_RC_IN_MODE = 0 (SITL varsayılanı 1, mod anahtarı yalnızca RC kaynağında okunur)<br/>RC_MAP_ROLL/PITCH/YAW/THROTTLE ve RC_MAP_FLTMODE (varsayılan 0) atanır<br/>COM_FLTMODEx = 100 + (mode_id - 23)<br/>RC kaybı: override gönderimi kesilir")
             dQgc[/"QGC 5.1.4 (UDP 14550, doğrulanacak)<br/>mod listesinde #quot;AUTO FOLLOW#quot; görünür,<br/>seçimde MAV_CMD_DO_SET_MODE gönderir"/]
             dFailNote("Not: gz SITL'de failure komutu yalnızca motor arızası uygular<br/>(FailureInjector). failure gps / rc_signal etkisizdir.<br/>RC kaybı override kesilerek, konum kaybı başka yöntemle üretilir (doğrulanacak)")
             dPick{"Sıradaki<br/>senaryo?"}
-            dSc1("S1 Kayıt ve başlatma ((A) bloğu)<br/>boot'ta, disarm iken kayıt → mod listede (başlatma noktası A8)<br/>armed iken auto_follow start → kayıt reddi<br/>#quot;Not accepting registration requests while armed#quot;<br/>yeniden başlatmada aynı mode_id (COM_MODE${i}_HASH)")
-            dSc2("S2 Nominal takip ((B) bloğu)<br/>Position'da kalkış → moda giriş → açık çevrim (AF_K_FF = 0),<br/>sonra kapalı çevrim (duran / yürüyen hayali insan, AF_K_FF #62; 0)<br/>ilk çevrimde trajectory_setpoint, generateFailsafeSetpoint yok<br/>girişte ve çıkışta FlightTask ile auto_follow trajectory_setpoint'i<br/>bir çevrim üst üste yayınlayabilir: setpoint sıçraması yok mu (doğrulanacak)")
-            dSc3("S3 Mod seçimi ve çıkış ((C) bloğu)<br/>QGC ile giriş, RC anahtarıyla giriş ve çıkış → setpoint durur<br/>disarm iken seçilir ama arm reddedilir, armed + yerde geçiş reddi<br/>COM_RC_STICK_OV eşiğini aşan stick hareketi modu değiştirmez,<br/>karşılaştırma: Hold'da stick → Position (COM_RC_OVERRIDE bit 0)<br/>Hold sonrası yeniden giriş: anahtar başka slota alınıp geri getirilir")
+            dSc1("Ön kontroller + S1a / S1b ((A), (B), (C) blokları)<br/>ön kontrol: boot'ta kayıt, mod listede, disarm iken geçiş, bu modda arm reddi,<br/>yerde armed iken geçiş reddi (A14), QGC/RC ile giriş-çıkış, Hold sonrası yeniden giriş<br/>S1a: LOS 0.951/0/0.309 (18°) → ileri, 2 m/s kırpma<br/>S1b: LOS 0.8/0/0.6 (37°) → yaklaşık 1.8 m/s geri; AF_K_FF = 0")
+            dSc2("S2 Hedef sağda ((B) bloğu)<br/>açık çevrim, LOS 0/0.8/0.6 → burun sağa döner<br/>sabit body LOS yüzünden dönüş sürer (beklenen, B3)<br/>ilk çevrimde trajectory_setpoint, setpoint sıçraması yok mu (doğrulanacak)")
+            dSc3("S3 Hedef neredeyse tam altta ((B) bloğu)<br/>açık çevrim, LOS 0.174/0/0.985 (80°) → d yaklaşık 1.6 m<br/>geri, yasa yaklaşık -7 m/s ister, AF_VEL_MAX 2 m/s'de kırpılır<br/>d #62; AF_YAW_MIN_D olduğundan yaw donmaz")
             dSc4("S4 Hedef kaybı ((C) bloğu)<br/>AF_LOS kesilir → AF_DATA_TOUT (0.5 s) sonra KAYIP_BEKLE (hover)<br/>AF_LOST_T (1.0 s) sonra vehicle_command VEHICLE_CMD_SET_NAV_STATE<br/>(100001, param1 = 4) → vehicle_command_ack ACCEPTED → nav_state = 4 (doğrulanacak)<br/>alt durumlar: AF_LOST_T dolmadan geri gelir → takip sürer;<br/>data[5] = 0 → KAYIP_BEKLE hemen; hedefsiz giriş → 1.5 s sonra Hold<br/>TEMPORARILY_REJECTED → tekrar: SITL'de üretmek zor, Adım 1'de test edilir")
             dSc5("S5 Girdi doğrulama ve güvenli taraf ((B), (C) blokları)<br/>ikinci kaynaktan yanlış name'li DEBUG_FLOAT_ARRAY → atılır ve sayılır,<br/>debug_array tek instance olduğundan doğru örnek kaybı da ölçülür<br/>NaN/Inf, norm dışı, tekrar/geri sıra no, yaş #62; 0.5 s → atılır ve sayılır<br/>açı #60; AF_MIN_DEP veya menzil #62; AF_MAX_RNG → atılır; uzun sürerse hedef kaybı<br/>xy_valid false → yatay hız 0, ardından commander fallback (öneri, doğrulanacak)")
-            dSc6("S6 RC kaybı ((C) bloğu)<br/>COM_RCL_EXCEPT = 0: override kesilir → COM_RC_LOSS_T (0.5 s) →<br/>COM_FAIL_ACT_T (5 s) Hold → NAV_RCL_ACT = 2 Return (doğrulanacak)<br/>RC dönünce auto_follow'a otomatik dönülmez (OnModeChangeOrDisarm)<br/>COM_RCL_EXCEPT bit 3 set (8) → RC kaybı yok sayılır, takip sürer")
-            dSc7("S7 Modül sağlığı ve fallback ((A), (C) blokları)<br/>uçuşta auto_follow stop: armed iken unregister_ext_component işlenmez →<br/>cevaplar kesilir → unresponsive → RTL (RTL çalışamazsa Land → Descend → Terminate)<br/>donma (test komutu, öneri): son trajectory_setpoint yaklaşık 1–1.3 s uygulanır<br/>(4. cevapsız istek: 4 × 300 ms + 50 ms), bu sürede yatay sapma ölçülür<br/>cevaplar dönerse fallback kalkar → auto_follow'a otomatik dönüş (en fazla 3 kez)<br/>disarm iken stop: mod listeden çıkar, seçiliyse Hold")
+            dSc6("S6 Duran hayali insan ((B) bloğu)<br/>kapalı çevrim: script yerde duran hedef tutar, gerçek LOS'u hesaplar<br/>range_est → range_desired (15.6 m), burun hedefte, salınım yok")
+            dSc7("S7 Yürüyen hayali insan ((B) bloğu)<br/>kapalı çevrim, hedef yürür, AF_K_FF #62; 0<br/>geride kalmadan takip; mesafe hatası S6'ya yakın")
         end
 
         subgraph dStep3 ["Adım 3: ULog + pyulog metrikleri"]
             dLog("ULog kaydı (SITL: build/px4_sitl_default/rootfs/log/)<br/>her testten sonra ~/Desktop/AUTO-FOLLOW LOG/ klasörüne kopyalanır<br/>auto_follow_status her zaman kaydedilir; debug biti gerekmez (L1)<br/>SITL SDLOG_MODE = 1: log boot'tan başlar<br/>varsayılan sette: vehicle_status (nav_state, nav_state_user_intention),<br/>vehicle_command, vehicle_command_ack, failsafe_flags (mode_req_other),<br/>trajectory_setpoint, vehicle_local_position, manual_control_setpoint,<br/>manual_control_switches, input_rc ve PX4_WARN mesajları")
             dLogNote("Not: ULog'da trajectory_setpoint 200 ms aralıkla (5 Hz) kaydedilir,<br/>hiçbir SDLOG_PROFILE biti bunu artırmaz. arming_check_reply ve<br/>register_ext_component_reply hiç kaydedilmez. Tek çevrimlik olaylar için<br/>auto_follow_status ve auto_follow status komutu kullanılır.<br/>logger_topics.txt kullanılmaz: varsayılan listenin yerine geçer")
             dMetrics("Adım 3: pyulog metrikleri (tez/analiz/af_log_analiz.py, pyulog 1.2.4)<br/>takip mesafesi hatası: kestirilen mesafe - istenen mesafe (auto_follow_status)<br/>yaw hatası: heading - hedefe kerteriz açısı<br/>hedef kaybında Hold'a geçiş süresi: son geçerli AF_LOS → nav_state = 4,<br/>beklenen ≈ AF_DATA_TOUT + AF_LOST_T (1.5 s)<br/>stick hareketinde nav_state değişmedi mi (manual_control_setpoint.sticks_moving)<br/>RC anahtarıyla çıkış: manual_control_switches.mode_slot değişimi → nav_state != mode_id")
-            dMetricsMore("Ek metrikler (öneri)<br/>donma veya durdurma → nav_state = 5 (AUTO_RTL) süresi ve yatay sapma<br/>fallback sırasında nav_state_user_intention == mode_id, sonra otomatik dönüş<br/>reddedilen örnek sayıları (auto_follow_status, alan adları öneri)<br/>mod geçişinde vehicle_local_position_setpoint sıçraması")
+            dMetricsMore("Ek metrikler (öneri)<br/>reddedilen örnek sayıları (auto_follow_status reject_*_count, log-sozlugu.md)<br/>mod geçişinde vehicle_local_position_setpoint sıçraması")
             dThr("Not: geçme eşikleri (ör. mesafe hatası RMS, en büyük yaw hatası)<br/>yol haritası m01'de kesinleşir; şimdilik öneri. Karar yalnızca<br/>script çıktısıdır, PlotJuggler 3.17.2 yalnızca inceleme içindir")
             dMetQ{"Senaryonun tüm metrikleri<br/>eşik içinde mi?"}
             dMetFix("Başarısız: ULog incelenir,<br/>kod, senaryo veya test parametresi düzeltilir")
@@ -766,11 +769,11 @@ flowchart TB
 
         subgraph dStep4 ["Adım 4: Gerçek uçuş"]
             dHwBuild("Donanım derlemesi: make px4_fmu-v6c_default<br/>bellek kullanımı kontrol edilir (6C FLASH/RAM)<br/>airframe SYS_AUTOSTART = 4019 (x500_v2)")
-            dHwCfg("Bağlantı ve başlatma (doğrulanacak)<br/>TELEM2 /dev/ttyS3: MAV_1_CONFIG = 102, MAV_1_MODE = 2 (Onboard)<br/>auto_follow başlatma: Açık (spec A8; öneri /fs/microsd/etc/extras.txt)<br/>donanımda SDLOG_MODE = 0 (log arm ile başlar); masa testinde kullanıcı değiştirir")
-            dBench("Yer testi, pervanesiz (öneri)<br/>boot'ta disarm iken kayıt, QGC'de mod adı,<br/>AF_LOS alımı (listener debug_array, listener auto_follow_status,<br/>mavlink status), yerde armed iken moda geçiş ve arm engeli (spec A1)")
+            dHwCfg("Bağlantı ve başlatma (doğrulanacak)<br/>TELEM2 /dev/ttyS3: MAV_1_CONFIG = 102, MAV_1_MODE = 2 (Onboard)<br/>auto_follow başlatma: rc.mc_apps (B2-b)<br/>donanımda SDLOG_MODE = 0 (log arm ile başlar); masa testinde değeri kullanıcı seçer")
+            dBench("Yer testi, pervanesiz (öneri)<br/>boot'ta disarm iken kayıt, QGC'de mod adı,<br/>AF_LOS alımı (listener debug_array, listener auto_follow_status,<br/>mavlink status), yerde armed iken moda geçiş reddi (A14) ve arm engeli (C1)")
             dBenchQ{"Yer testi<br/>geçti mi?"}
             dHwCfgFix("Başarısız: parametre, kablo veya başlatma düzeltilir")
-            dFlight("Adım 4: Gerçek uçuş: X500 V2 + Pixhawk 6C<br/>Position'da kalkış → RC veya QGC ile moda giriş → insan takibi<br/>hedef kaybı → Hold, RC anahtarıyla çıkış, stick testi<br/>RC kaybı ve modül donması yalnızca SITL'de denenir (öneri)<br/>pilot her an RC mod anahtarıyla devralmaya hazırdır")
+            dFlight("Adım 4: Gerçek uçuş: X500 V2 + Pixhawk 6C<br/>Position'da kalkış → RC veya QGC ile moda giriş → insan takibi<br/>hedef kaybı → Hold, RC anahtarıyla çıkış, stick testi<br/>RC kaybı ve modül donması testleri m16 adayı<br/>pilot her an RC mod anahtarıyla devralmaya hazırdır")
             dFlightQ{"Uçuş metrikleri (aynı pyulog script'i)<br/>eşik içinde ve SITL ile tutarlı mı?"}
             dHwFix("Başarısız: uçuş sonlandırılır,<br/>fark yeni bir SITL senaryosu olarak eklenir")
         end
@@ -799,7 +802,7 @@ flowchart TB
     dRcSim -.- dFailNote
     dRcSim -- "MAVLink RC_CHANNELS_OVERRIDE" --> dPick
     dQgc -- "MAVLink MAV_CMD_DO_SET_MODE" --> dPick
-    dPick -- "S1" --> dSc1
+    dPick -- "ön kontrol, S1a/S1b" --> dSc1
     dPick -- "S2" --> dSc2
     dPick -- "S3" --> dSc3
     dPick -- "S4" --> dSc4
