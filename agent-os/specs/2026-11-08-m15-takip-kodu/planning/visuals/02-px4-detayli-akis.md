@@ -87,7 +87,7 @@ Blok yazım kuralları (Task Group 4-6 için, render edilmez):
 
 ## (A) Başlatma, mod kaydı ve arming check
 
-Modül, `mc_nn_control` `Run()` sırasını izler: çıkış kontrolü → kayıt isteği gönder → cevabı bekle (cevap gelince kontrol modunu yapılandır) → her çevrimde arming check isteğine cevap ver → (B) bloğuna geç. Kayıt **disarm iken** yapılmalıdır, bu yüzden modül boot'ta başlatılır (başlatma noktası Açık, `spec.md` A8). `can_arm_and_run = true` her zaman (Karar 5-a): hedef yokken de; `false` olursa PX4 Hold'a değil RTL'e düşer. `mode_req_*` listesi ve kontrol bayrakları öneridir (`spec.md` A1, A2).
+Modül, `mc_nn_control` `Run()` sırasını izler: çıkış kontrolü → kayıt isteği gönder → cevabı bekle (cevap gelince kontrol modunu yapılandır) → her çevrimde arming check isteğine cevap ver → (B) bloğuna geç. Kayıt **disarm iken** yapılmalıdır, bu yüzden modül boot'ta `rc.mc_apps`'ten, `AF_ENABLE` = 1 ise başlatılır (Karar B2-b, A13). `can_arm_and_run = true` (Karar 5-a): hedef yokken de; mod aktifken `false` olursa PX4 Hold'a değil RTL'e düşer. İstisna: yerdeyken ve mod aktif değilken `false` (Karar A14-a). `mode_req_*` listesi ve kontrol bayrakları karardır (`spec.md` A1, A2).
 
 ```mermaid
 flowchart TB
@@ -111,7 +111,7 @@ flowchart TB
         aReplyQ{"Kayıt cevabı<br/>(CheckModeRegistration)"}
         aRegFail("Kayıt başarısız: mod QGC/RC listesinde görünmez<br/>setpoint yayınlanmaz, PX4_ERR bir kez<br/>QGC uyarısı events ile (öneri)")
         aConfig("Kontrol modu yapılandırması (ConfigureNeuralFlightMode deseni)<br/>tip vehicle_control_mode_s<br/>source_id = mode_id<br/>timestamp = hrt_absolute_time()")
-        aFlags("config_control_setpoints bayrakları (öneri, spec A1;<br/>flag_control_auto_enabled için spec A2)<br/>true: flag_multicopter_position_control_enabled,<br/>flag_control_position_enabled, flag_control_velocity_enabled,<br/>flag_control_altitude_enabled, flag_control_climb_rate_enabled,<br/>flag_control_acceleration_enabled, flag_control_attitude_enabled,<br/>flag_control_rates_enabled, flag_control_allocation_enabled,<br/>flag_control_termination_enabled<br/>false: flag_control_manual_enabled, flag_control_auto_enabled,<br/>flag_control_offboard_enabled")
+        aFlags("config_control_setpoints bayrakları (Karar, spec A1, A2)<br/>true: flag_multicopter_position_control_enabled,<br/>flag_control_position_enabled, flag_control_velocity_enabled,<br/>flag_control_altitude_enabled, flag_control_climb_rate_enabled,<br/>flag_control_acceleration_enabled, flag_control_attitude_enabled,<br/>flag_control_rates_enabled, flag_control_allocation_enabled,<br/>flag_control_termination_enabled,<br/>flag_control_auto_enabled (A2: çubuk → Position)<br/>false: flag_control_manual_enabled, flag_control_offboard_enabled")
         aNnDiff("Not: mc_nn_control config'inde flag_multicopter_position_control_enabled = false<br/>yazar (pozisyon kontrolünü kapatır, actuator_motors yayınlar).<br/>auto_follow pozisyon kontrolünü açık tutar, trajectory_setpoint yayınlar")
         aCycleEnd(["return: sonraki çevrim"])
         aChkQ{"arming_check_request<br/>güncellendi mi?"}
