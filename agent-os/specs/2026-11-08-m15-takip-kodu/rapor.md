@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 2.1 (write-spec sonu), 2026-11-10
+> **Sürüm:** 3 (Görev grubu 1: iskelet), 2026-11-10
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Henüz **kod yazılmadı**. Sürüm 1 iki günlük planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları anlatır. Uygulama ve test sonuçları geldikçe yeni sürümler eklenecek (bkz. "Belge geçmişi").
+> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in sonucunu anlatır. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -20,6 +20,7 @@ Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıkt�
 | `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
 | `planning/raw-idea.md` | Görevin ilk tanımı |
 | `planning/visuals/` | İki akış şeması (Mermaid) |
+| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (ilki `grup-1-iskelet-mod-kaydi.md`) |
 
 ---
 
@@ -145,7 +146,10 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `676c4ced10` | `requirements.md` güncellemesi ve bu rapor (sürüm 1) |
 | `71361a82ba` | Rapor başlığı biçim düzeltmesi |
 | `164b6131f0` | `spec.md` (taslak; öneriler onay bekliyordu) |
-| *(bu sürüm)* | Write-spec turu kararları, sözlük, rapor sürüm 2 |
+| `6c24883e4f` | Write-spec turu kararları, sözlük, rapor sürüm 2 |
+| `70323c83cf`, `e8131d3c23` | Spec son cevaplar ve son hali (rapor 2.1) |
+| `f6394fc7b3`, `3594966ada` | Görev listesi (`tasks.md`) ve güncellemesi |
+| *(bu sürüm)* | Görev grubu 1: iskelet, mod kaydı, arming check, açılışta başlatma; rapor sürüm 3 |
 
 ---
 
@@ -474,6 +478,8 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 - **Log mesajı için neden kilitli dosya:** PX4'ün SD karttaki `logger_topics.txt` dosyasıyla kilitli dosyaya dokunmadan ek topic loglanabileceği önce düşünüldü. Ama bu dosya varsa PX4 **yalnızca içindekileri** logluyor ve varsayılan listeyi tamamen kapatıyor (`logged_topics.cpp:531-540`). Doğru yol, `logged_topics.cpp`'ye bir satır eklemek.
 - **Geri dönüş:** Hüseyin log mesajı için gereken yolları reddederse PX4'ün hazır `debug_array` mesajı kullanılır; alanlar logda `data[0]`… diye görünür, adlar sözlükten okunur.
 - **Flash:** 6C'nin flash'ı ~%98 dolu. Derleme çıktısındaki kullanım spec'e yazılır. Taşarsa Hüseyin'e haber verilir; modül kapatarak yer açılmaz (o iş m14). Not: `CONSTRAINED_FLASH` ayarı açılırsa `DEBUG_FLOAT_ARRAY` işleyicisi derlemeden çıkar (`mavlink_receiver.cpp:284-305`), yani m14'te dikkat edilmeli.
+- **Flash ölçümü (Grup 1 sonu):** modül yokken 1 926 408 B (%97,98), iskelet + 16 parametreyle **1 931 164 B / 1920 KB (%98,22)**; artış **+4 756 B**, boş kalan ~34 KB. Grup 2 (guidance, filtre, log mesajı) bunun üstüne eklenecek.
+- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. Kalan dosyalar (guidance, filtre, birim testi, log mesajı) sonraki gruplarda.
 
 ---
 
@@ -567,6 +573,10 @@ Bunlar kararları doğrudan etkileyen bulgular; hepsi PX4 v1.17.0 kaynağında d
 17. **`rc.mc_apps` her multikopter açılışında çalışıyor**, SITL'de de 6C'de de (`init.d-posix/rcS:289`, `init.d/rcS:485`, `rc.vehicle_setup:20-24`).
 18. **Arm'lı araçta mod geçişi, modun "çalışabilirim" cevabına bakıyor** (`UserModeIntention.cpp:58-59`, `externalChecks.cpp:158-160, 188-190`); ret QGC'de mesaj ve uyarı sesiyle görünüyor (`Commander.cpp:2620-2638`).
 19. **`DEBUG_FLOAT_ARRAY`'in veri kısmı MAVLink 2 ek alanı** (`common.xml:7630-7631`); MAVLink 1 ile değerler 0 gelir.
+20. **(Grup 1) Modül, "kaydımı sil" mesajını yayınlayıp hemen kapanırsa mesaj PX4'e ulaşmıyor.** Kapanan modülün yayını "yayınlanmıyor" sayılıyor ve okunamıyor (`platforms/common/uORB/Publication.hpp:65-72`, `uORBManager.hpp:453`). `mc_nn_control`'de de aynı kalıp var. Bizim modül PX4 modu listeden kaldırana kadar (en fazla 1 s) bekleyip öyle kapanıyor.
+21. **(Grup 1) SITL'de arm iken de mod kaydı kabul ediliyor:** SITL `COM_MODE_ARM_CHK`'yı 1 yapıyor (`init.d-posix/px4-rc.simulator:8`); gerçek kartta varsayılan 0 (`commander_params.c:1048`).
+22. **(Grup 1) Dış mod bitleri `valid_nav_states_mask`'ta kayıt olmasa da 1** (`ModeManagement.cpp:648-652`); "mod kayıtlı mı" bilgisi `can_set_nav_states_mask`'ta.
+23. **(Grup 1) SITL'de `shutdown` komutu takılıyor** ("Exiting NOW." sonrası süreç kapanmıyor); bizim modül kapalıyken de aynı. Test oturumları süreç kapatılarak bitiriliyor.
 
 ---
 
@@ -586,6 +596,9 @@ Bunlar kararları doğrudan etkileyen bulgular; hepsi PX4 v1.17.0 kaynağında d
 10. **İş sırasında S4'ün Hold testi, Hold kodundan önce** yazılmıştı. Sıra düzeltildi.
 11. **Masa testi için `SDLOG_MODE` = 2 yazılmıştı**; kullanıcı değeri kendisi seçmek istiyordu. Öneri kaldırıldı.
 12. **Spec-writer ajanı, talimata rağmen `git status` çalıştırdı** (yalnızca okuma; zarar yok).
+13. **(Grup 1) Eksik başlık dosyası:** ilk SITL derlemesi `SubscriptionInterval` başlığı eklenmediği için hata verdi; eklendi.
+14. **(Grup 1) `auto_follow stop` düzeltmesinde yanlış maske:** ilk hâlinde `valid_nav_states_mask`'a bakıldı; bu maske kayıt yokken de 1 kaldığı için modül her durdurmada 1 s bekledi. `can_set_nav_states_mask`'a geçildi.
+15. **(Grup 1) SITL'i kapatırken `pkill -f "gz sim"`** komutu çalıştıran kabuğun kendisini de eşledi; sonraki kapatmalarda PID kullanıldı. Dosya etkilenmedi.
 
 ---
 
@@ -623,7 +636,12 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 
 ## 11. Açık konular
 
-Kullanıcının karar vereceği konu kalmadı (2026-11-10). Bekleyen dış bağımlılıklar:
+Grup 1'de açılan, kullanıcının onayını bekleyen küçük konular (ayrıntı, seçenekler ve öneri: `implementation/grup-1-iskelet-mod-kaydi.md` Bölüm 7):
+- QGC'deki parametre **grubu adı** (şimdilik `AUTO FOLLOW`, öneri).
+- Yeni dosyalardaki lisans başlığının sahiplik satırı (şimdilik PX4 geleneği).
+- `module.yaml` açıklama dili (şimdilik İngilizce).
+
+Bekleyen dış bağımlılıklar:
 - Hüseyin: 7 kilitli yol için onay.
 - Vision: `AF_LOS` yerleşimi ve eksenler (m10).
 - Ahmet (m06): kamera eğimi → `AF_TRK_ANG`; gerçekçi simülasyon.
@@ -637,7 +655,7 @@ Kullanıcının karar vereceği konu kalmadı (2026-11-10). Bekleyen dış bağ�
 1. `spec.md` son haline geldi (2026-11-10).
 2. `/agent-os:create-tasks`: görev listesi (kullanıcı onayladı).
 3. Uygulama, iş sırasıyla:
-   1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi)
+   1. iskelet (moda kaydolan modül, açılışta başlatma, yerdeyken geçiş engeli, SITL ve 6C derlemesi) — **bitti (2026-11-10)**, not: `implementation/grup-1-iskelet-mod-kaydi.md`
    2. guidance ve alpha-beta
    3. kısa birim testi
    4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı)
@@ -690,3 +708,4 @@ Kullanıcının karar vereceği konu kalmadı (2026-11-10). Bekleyen dış bağ�
 | 1 | 2026-11-09 | Shape-spec sonu: süreç, bütün kararlar, oluşan sistem (henüz kod yok) |
 | 2.1 | 2026-11-10 | Son cevaplar: `AF_ENABLE` (varsayılan 0), yerde arm'lıyken geçiş engeli yöntemi (a), çubukla Position'a geçiş, masa testi notu |
 | 2 | 2026-11-10 | Write-spec turu: S1–S7 düzeltmesi (S1a/S1b), açılışta başlatma (`rc.mc_apps`, 7. kilitli yol), bu modda arm yasağı, yerdeyken geçiş engeli kararı, hedefsiz girişte 1.5 s, `SDLOG_MODE` kullanıcıya bırakıldı, öneriler kabul, bütün adların sözlüğü |
+| 3 | 2026-11-10 | Görev grubu 1 (iskelet): yazılan dosyalar, 6C flash ölçümü (%97,98 → %98,22, +4 756 B), SITL duman testi (mod 23, `AF_ENABLE` = 0 iken başlamıyor), `auto_follow stop` düzeltmesi, PX4'ten 4 yeni bulgu, onay bekleyen 3 küçük konu |

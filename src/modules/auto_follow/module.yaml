@@ -1,0 +1,171 @@
+module_name: auto_follow
+
+parameters:
+  - group: AUTO FOLLOW
+    definitions:
+
+      AF_ENABLE:
+        description:
+          short: Start AUTO FOLLOW on boot
+          long: |
+            1: auto_follow is started on boot and the AUTO FOLLOW mode is registered.
+            0: auto_follow is not started and the mode is not available.
+        type: int32
+        default: 0
+        min: 0
+        max: 1
+        reboot_required: true
+
+      AF_TRK_ANG:
+        description:
+          short: Tracking angle (camera tilt)
+          long: |
+            Desired depression angle to the target. Desired horizontal range is
+            height difference / tan(AF_TRK_ANG).
+        type: float
+        unit: deg
+        default: 30.0
+        min: 5.0
+        max: 85.0
+        decimal: 1
+
+      AF_K_DIST:
+        description:
+          short: Range gain
+          long: Horizontal velocity request per metre of range error.
+        type: float
+        unit: 1/s
+        default: 0.5
+        min: 0.0
+        max: 2.0
+        decimal: 2
+
+      AF_K_FF:
+        description:
+          short: Target velocity feed-forward factor
+          long: Share of the estimated target velocity added to the request (0 = off).
+        type: float
+        default: 0.0
+        min: 0.0
+        max: 1.5
+        decimal: 2
+
+      AF_VEL_MAX:
+        description:
+          short: Maximum horizontal velocity request
+        type: float
+        unit: m/s
+        default: 2.0
+        min: 0.1
+        max: 5.0
+        decimal: 1
+
+      AF_ACC_MAX:
+        description:
+          short: Maximum change rate of the velocity request
+        type: float
+        unit: m/s^2
+        default: 3.0
+        min: 0.5
+        max: 5.0
+        decimal: 1
+
+      AF_ALPHA:
+        description:
+          short: Alpha-beta filter position gain
+        type: float
+        default: 0.5
+        min: 0.0
+        max: 1.0
+        decimal: 2
+
+      AF_BETA:
+        description:
+          short: Alpha-beta filter velocity gain
+        type: float
+        default: 0.17
+        min: 0.0
+        max: 1.0
+        decimal: 2
+
+      AF_DATA_TOUT:
+        description:
+          short: Target data timeout
+          long: |
+            Without valid data for this time the mode waits in place.
+            Samples older than this are rejected.
+        type: float
+        unit: s
+        default: 0.5
+        min: 0.1
+        max: 5.0
+        decimal: 2
+
+      AF_LOST_T:
+        description:
+          short: Wait time before Hold after target loss
+        type: float
+        unit: s
+        default: 1.0
+        min: 0.0
+        max: 30.0
+        decimal: 1
+
+      AF_YAW_MIN_D:
+        description:
+          short: Yaw is held below this horizontal range
+        type: float
+        unit: m
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        decimal: 1
+
+      AF_TGT_HGT:
+        description:
+          short: Height of the tracked point on the target
+        type: float
+        unit: m
+        default: 1.0
+        min: 0.0
+        max: 2.5
+        decimal: 2
+
+      AF_GND_OFS:
+        description:
+          short: Target ground height relative to takeoff
+        type: float
+        unit: m
+        default: 0.0
+        min: -20.0
+        max: 20.0
+        decimal: 1
+
+      AF_NORM_TOL:
+        description:
+          short: Line-of-sight vector length tolerance
+        type: float
+        default: 0.1
+        min: 0.01
+        max: 0.5
+        decimal: 2
+
+      AF_MIN_DEP:
+        description:
+          short: Minimum depression angle
+        type: float
+        unit: deg
+        default: 10.0
+        min: 1.0
+        max: 60.0
+        decimal: 1
+
+      AF_MAX_RNG:
+        description:
+          short: Maximum horizontal range
+        type: float
+        unit: m
+        default: 40.0
+        min: 1.0
+        max: 200.0
+        decimal: 0

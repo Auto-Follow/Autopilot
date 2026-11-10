@@ -24,6 +24,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Kayıt adı (QGC/RC'de görünen) **`AUTO FOLLOW`**; ad sabit kalır, çünkü PX4 slotu adın hash'iyle hatırlar (`COM_MODE${i}_HASH`, `src/modules/commander/module.yaml:5-16`). PX4 modu 23–30 aralığından bir `nav_state`'e atar (`msg/versioned/VehicleStatus.msg:59-66`).
 - Yazım deseni `ModuleBase` + `ModuleParams` + `px4::ScheduledWorkItem` (`src/examples/work_item/WorkItemExample.hpp:55`); iş kuyruğu `nav_and_controllers` (`mc_nn_control.cpp:65`); `ScheduleOnInterval` ile **sabit 50 Hz** (parametre değil, Karar). Gerekçe: veri kesilse de modül dönmeli ki kesintiyi fark etsin.
 - Kayıt yalnızca araç **disarm** iken kabul edilir (`src/modules/commander/ModeManagement.cpp:371-378`, `COM_MODE_ARM_CHK` varsayılan 0, `commander_params.c:1048`); modül boot'ta, arm edilmeden başlatılmalıdır. **Karar (2026-11-10, B2-b):** `ROMFS/px4fmu_common/init.d/rc.mc_apps`'e bir başlatma satırı eklenir. Bu dosya her multikopter açılışında arm'dan önce çalışır (SITL `ROMFS/px4fmu_common/init.d-posix/rcS:289`, 6C `ROMFS/px4fmu_common/init.d/rcS:485` → `rc.vehicle_setup:20-24`); `mc_nn_control` da böyle başlar (`rc.mc_apps:40-43`). Yedinci kilitli yoldur, Hüseyin onayı gerekir. Satır `AF_ENABLE` parametresine bağlıdır (**Karar A13-b**, 2026-11-10): `if param compare -s AF_ENABLE 1` (`MC_NN_EN` kalıbı, `rc.mc_apps:40-43`). Varsayılan **0**: ilk yüklemede mod görünmez; kullanıcı 1 yapıp QGC'den reboot atar (güç kesmek gerekmez). SITL testlerinde `PX4_PARAM_AF_ENABLE=1` ile verilir.
+- Not (Görev grubu 1'de bulundu): SITL `COM_MODE_ARM_CHK`'yı 1 yapar (`ROMFS/px4fmu_common/init.d-posix/px4-rc.simulator:8`); yani **SITL'de arm iken de kayıt kabul edilir**. "Kayıt yalnızca disarm iken" kuralı gerçek kartta (6C, varsayılan 0) geçerlidir. Ayrıca `auto_follow stop`, kayıt silme mesajından sonra PX4 modu listeden kaldırana kadar (en fazla 1 s) bekler; hemen kapanırsa mesaj PX4'e ulaşmıyor (`platforms/common/uORB/Publication.hpp:65-72`). Ayrıntı `implementation/grup-1-iskelet-mod-kaydi.md`.
 - Arming check'e cevapta `can_arm_and_run = true` (Karar 5-a): mod aktifken `false` olursa PX4 Hold'a değil **RTL**'e düşer (`src/modules/commander/failsafe/failsafe.cpp:698-702`). Tek istisna adayı: yerde arm'lıyken moda geçişi engellemek (**Karar A14-a**: yalnızca drone yerdeyken, `vehicle_land_detected.landed`, ve mod aktif değilken `false`; PX4 geçişi kendisi reddeder). `mode_req_*` listesi ve kontrol bayrakları **Karar (öneri kabul, C1)**, A1. `mode_req_prevent_arming = true` **Karar** (C1: bu modda arm yasak, disarm iken moda geçiş serbest).
 - Mod aktifken PX4 FlightTask çalıştırmaz (`src/modules/flight_mode_manager/FlightModeManager.cpp:139-144`); `trajectory_setpoint`'i yalnızca `auto_follow` yayınlar.
 - Disarm araçta moda geçiş PX4'te zaten serbesttir (`src/modules/commander/UserModeIntention.cpp:54-55`); masa testi gereksinimi kod gerektirmez.
@@ -256,6 +257,12 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 - Yedinci yol (`rc.mc_apps`) B2-b kararıyla talebe girdi; talep Hüseyin'e **yedi yol** olarak gider. Ajan listeye kendiliğinden eklemez.
 - Commit/PR öncesi `tez/pin/verify_pin.sh --worktree`; zorunlu CI `verify-pin`, `derleme-sitl`, `derleme-fmu-v6c`.
 - **Flash:** Pixhawk 6C ~%98 dolu (~40 KB boş; `../agent-os/product/tech-stack.md:43`). Kod küçük tutulur (`double`, dinamik bellek, büyük tablo yok; `../agent-os/standards/px4/modules.md:10`). `make px4_fmu-v6c_default` çıktısındaki flash kullanımı spec'e ve PR'a yazılır. `region FLASH overflowed` olursa **Hüseyin'e haber verilir; başka modül kapatılarak yer açılmaz** (o iş m14).
+- **Flash ölçümleri** (`make px4_fmu-v6c_default`, FLASH bölgesi 1920 KB = 1 966 080 B; ayrıntı `implementation/` notlarında):
+
+| Ne zaman | Kullanılan | Yüzde | Boş | Artış |
+|---|---|---|---|---|
+| Modül yokken (değişiklikten önce, 2026-11-10) | 1 926 408 B | %97,98 | 39 672 B | — |
+| Görev grubu 1 sonu (iskelet + 16 parametre, 2026-11-10) | 1 931 164 B | %98,22 | 34 916 B | +4 756 B |
 
 ## Out of Scope
 

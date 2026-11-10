@@ -1,0 +1,161 @@
+/****************************************************************************
+ *
+ *   Copyright (c) 2026 PX4 Development Team. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name PX4 nor the names of its contributors may be
+ *    used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ ****************************************************************************/
+
+/**
+ * @file AutoFollow.hpp
+ *
+ * AUTO FOLLOW external flight mode: registers itself with commander and
+ * answers the arming checks. Guidance follows in a later step.
+ */
+
+#pragma once
+
+#include <drivers/drv_hrt.h>
+#include <lib/perf/perf_counter.h>
+#include <px4_platform_common/defines.h>
+#include <px4_platform_common/module.h>
+#include <px4_platform_common/module_params.h>
+#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+
+#include <uORB/Publication.hpp>
+#include <uORB/Subscription.hpp>
+#include <uORB/SubscriptionInterval.hpp>
+#include <uORB/topics/arming_check_reply.h>
+#include <uORB/topics/arming_check_request.h>
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/register_ext_component_reply.h>
+#include <uORB/topics/register_ext_component_request.h>
+#include <uORB/topics/unregister_ext_component.h>
+#include <uORB/topics/vehicle_control_mode.h>
+#include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/vehicle_status.h>
+
+using namespace time_literals;
+
+class AutoFollow : public ModuleBase<AutoFollow>, public ModuleParams, public px4::ScheduledWorkItem
+{
+public:
+	AutoFollow();
+	~AutoFollow() override;
+
+	/** @see ModuleBase */
+	static int task_spawn(int argc, char *argv[]);
+
+	/** @see ModuleBase */
+	static int custom_command(int argc, char *argv[]);
+
+	/** @see ModuleBase */
+	static int print_usage(const char *reason = nullptr);
+
+	/** @see ModuleBase::print_status() */
+	int print_status() override;
+
+	bool init();
+
+private:
+	void Run() override;
+
+	void parameters_update(bool force);
+
+	void register_mode();
+	void check_mode_registration();
+	void configure_control_mode();
+	void unregister_mode();
+	bool unregistration_done();
+	void reply_to_arming_check(uint8_t request_id);
+
+	bool registered() const { return _mode_id >= 0 && _arming_check_id >= 0; }
+
+	// Mode name shown in QGC / RC. Must stay fixed: commander keeps the slot by its hash (COM_MODEx_HASH).
+	static constexpr const char *MODE_NAME = "AUTO FOLLOW";
+
+	// Arbitrary id to match the registration reply with our request.
+	static constexpr uint64_t REGISTRATION_REQUEST_ID = 0xAF15;
+
+	// Fixed 50 Hz cycle, so that data loss is noticed even when no input arrives.
+	static constexpr hrt_abstime CYCLE_INTERVAL = 20_ms;
+
+	// Longest wait on stop for commander to drop the mode (vehicle_status is published at least at 2 Hz).
+	static constexpr hrt_abstime UNREGISTER_TIMEOUT = 1_s;
+
+	// Subscriptions
+	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+	uORB::Subscription _register_ext_component_reply_sub{ORB_ID(register_ext_component_reply)};
+	uORB::Subscription _arming_check_request_sub{ORB_ID(arming_check_request)};
+	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
+
+	// Publications
+	uORB::Publication<register_ext_component_request_s> _register_ext_component_request_pub{ORB_ID(register_ext_component_request)};
+	uORB::Publication<unregister_ext_component_s> _unregister_ext_component_pub{ORB_ID(unregister_ext_component)};
+	uORB::Publication<vehicle_control_mode_s> _config_control_setpoints_pub{ORB_ID(config_control_setpoints)};
+	uORB::Publication<arming_check_reply_s> _arming_check_reply_pub{ORB_ID(arming_check_reply)};
+
+	// Performance counters
+	perf_counter_t _loop_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")};
+	perf_counter_t _loop_interval_perf{perf_alloc(PC_INTERVAL, MODULE_NAME": interval")};
+
+	// Registration state
+	bool _registration_sent{false};
+	bool _registration_rejected{false};
+	int8_t _mode_id{-1};          // assigned nav_state (23..30), -1 if not registered
+	int8_t _arming_check_id{-1};  // arming check registration id, -1 if not registered
+	hrt_abstime _unregister_time{0}; // time the unregistration was published, 0 if not yet
+
+	// Vehicle state
+	bool _mode_active{false};     // vehicle_status.nav_state == _mode_id
+	bool _landed{false};          // vehicle_land_detected.landed
+
+	// Angle parameters converted from [deg] to [rad]
+	float _trk_ang_rad{0.f};
+	float _min_dep_rad{0.f};
+
+	// AF_ENABLE is only read by the boot script (rc.mc_apps), not by the module.
+	DEFINE_PARAMETERS(
+		(ParamFloat<px4::params::AF_TRK_ANG>) _param_af_trk_ang,      // [deg]
+		(ParamFloat<px4::params::AF_K_DIST>) _param_af_k_dist,        // [1/s]
+		(ParamFloat<px4::params::AF_K_FF>) _param_af_k_ff,            // [-]
+		(ParamFloat<px4::params::AF_VEL_MAX>) _param_af_vel_max,      // [m/s]
+		(ParamFloat<px4::params::AF_ACC_MAX>) _param_af_acc_max,      // [m/s^2]
+		(ParamFloat<px4::params::AF_ALPHA>) _param_af_alpha,          // [-]
+		(ParamFloat<px4::params::AF_BETA>) _param_af_beta,            // [-]
+		(ParamFloat<px4::params::AF_DATA_TOUT>) _param_af_data_tout,  // [s]
+		(ParamFloat<px4::params::AF_LOST_T>) _param_af_lost_t,        // [s]
+		(ParamFloat<px4::params::AF_YAW_MIN_D>) _param_af_yaw_min_d,  // [m]
+		(ParamFloat<px4::params::AF_TGT_HGT>) _param_af_tgt_hgt,      // [m]
+		(ParamFloat<px4::params::AF_GND_OFS>) _param_af_gnd_ofs,      // [m]
+		(ParamFloat<px4::params::AF_NORM_TOL>) _param_af_norm_tol,    // [-]
+		(ParamFloat<px4::params::AF_MIN_DEP>) _param_af_min_dep,      // [deg]
+		(ParamFloat<px4::params::AF_MAX_RNG>) _param_af_max_rng       // [m]
+	)
+};

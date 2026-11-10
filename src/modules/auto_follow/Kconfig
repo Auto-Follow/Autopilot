@@ -1,0 +1,5 @@
+menuconfig MODULES_AUTO_FOLLOW
+	bool "auto_follow"
+	default n
+	---help---
+		Enable support for auto_follow (AUTO FOLLOW external flight mode)

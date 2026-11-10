@@ -1,6 +1,6 @@
 # AUTO FOLLOW (M15) sözlüğü: bizim verdiğimiz bütün adlar
 
-> **Sürüm:** 1 (write-spec turu), 2026-11-10 · **Durum:** kod henüz yazılmadı. Adlar **karar**; davranış ve değerler `spec.md`'den alındı. Kod yazıldıkça bu dosya **aynı commit'te** güncellenir ve "koddan doğrulandı" diye işaretlenir.
+> **Sürüm:** 2 (Görev grubu 1), 2026-11-10 · **Durum:** iskelet kodu yazıldı. Bölüm 1 (mod ve modül), Bölüm 3 (parametreler) ve Bölüm 7'deki modül dosyaları **koddan doğrulandı** (✔). Log mesajı, durumlar ve doğrulama sonuçları (Bölüm 4–6) Grup 2'de kodla eşitlenecek. Adlar **karar**; davranış ve değerler `spec.md`'den alındı. Kod yazıldıkça bu dosya **aynı commit'te** güncellenir.
 >
 > **Kapsam (Karar C3, 2026-11-10):** Yalnızca log alanları değil, M15'te bizim ad verdiğimiz her şey: mod, modül ve komutları, dosyalar, girdi mesajı, parametreler, log mesajı ve alanları, durumlar, doğrulama sonuçları, script'ler. Kullanıcı: "Bizim yazdığımız, isimlerini verdiğimiz her şeyi detaylı kaydet."
 
@@ -14,12 +14,13 @@
 
 ## 1. Mod ve modül
 
-| Ad | Ne | Nerede görülür | Not |
-|---|---|---|---|
-| `AUTO FOLLOW` | Uçuş modunun kayıt adı | QGC mod listesi, RC anahtarı ayarı | Ad **değişmemeli**: PX4 modun yerini adın hash'iyle hatırlar (`COM_MODE${i}_HASH`, `src/modules/commander/module.yaml:5-16`). PX4 modu 23–30 aralığından bir `nav_state`'e atar. |
-| `auto_follow` | PX4 modülü ve konsol komutu | `pxh>` (SITL) / NSH (6C) konsolu, `top`, `work_queue status` | Komutlar: `auto_follow start` (başlat ve modu kaydet), `auto_follow stop` (durdur, kaydı sil), `auto_follow status` (durum yazdır). Açılışta `rc.mc_apps` satırıyla kendiliğinden başlar, ama yalnızca `AF_ENABLE` = 1 ise (Karar B2-b, A13). |
-| `CONFIG_MODULES_AUTO_FOLLOW` | Modülü firmware'e katan ayar | `boards/px4/sitl/default.px4board`, `boards/px4/fmu-v6c/default.px4board` | `=y` olunca modül derlenir. |
-| `src/modules/auto_follow/` | Modülün klasörü | Repo | İçindeki dosyalar Bölüm 7'de. |
+| Ad | Ne | Nerede görülür | Not | Kod |
+|---|---|---|---|---|
+| `AUTO FOLLOW` | Uçuş modunun kayıt adı | QGC mod listesi, RC anahtarı ayarı | Ad **değişmemeli**: PX4 modun yerini adın hash'iyle hatırlar (`COM_MODE${i}_HASH`, `src/modules/commander/module.yaml:5-16`). PX4 modu 23–30 aralığından bir `nav_state`'e atar. SITL'de **23** aldı; durdurup yeniden başlatınca yine 23 (`COM_MODE0_HASH` doldu). | ✔ koddan doğrulandı (`AutoFollow.hpp`, `MODE_NAME`; SITL `commander status`: `External Mode 1: nav_state: 23, name: AUTO FOLLOW`) |
+| `auto_follow` | PX4 modülü ve konsol komutu | `pxh>` (SITL) / NSH (6C) konsolu, `top`, `work_queue status` | Komutlar: `auto_follow start` (başlat ve modu kaydet), `auto_follow stop` (kaydı sil, PX4 kaldırana kadar en fazla 1 s bekle, durdur), `auto_follow status` (kayıt durumu, mod numarası, mod aktif mi, yerde mi, çevrim süresi/aralığı). Açılışta `rc.mc_apps` satırıyla kendiliğinden başlar, ama yalnızca `AF_ENABLE` = 1 ise (Karar B2-b, A13). İş kuyruğu `nav_and_controllers`, 50 Hz. Konsolda `perf` sayaçları `auto_follow: cycle` ve `auto_follow: interval` adıyla görünür. | ✔ koddan doğrulandı (`CMakeLists.txt` `MAIN auto_follow`; SITL'de üç komut denendi) |
+| `CONFIG_MODULES_AUTO_FOLLOW` | Modülü firmware'e katan ayar | `boards/px4/sitl/default.px4board`, `boards/px4/fmu-v6c/default.px4board` | `=y` olunca modül derlenir. | ✔ koddan doğrulandı (`Kconfig`, iki kart dosyası) |
+| `src/modules/auto_follow/` | Modülün klasörü | Repo | İçindeki dosyalar Bölüm 7'de. | ✔ |
+| `rc.mc_apps` satırı | Açılışta başlatma | `ROMFS/px4fmu_common/init.d/rc.mc_apps` (dosyanın sonu) | `if param compare -s AF_ENABLE 1` → `then` → `auto_follow start` → `fi`; üstünde bir açıklama satırı. `MC_NN_EN` bloğunun kalıbı. | ✔ koddan doğrulandı (SITL: `AF_ENABLE` = 1 iken başladı, 0 iken başlamadı) |
 
 ## 2. Girdi mesajı (Pi → Pixhawk)
 
@@ -38,6 +39,8 @@ Logda bu ham değerler `auto_follow_status`'un `los_*` alanlarına kopyalanmış
 ## 3. Parametreler (`AF_*`, QGC → Parameters)
 
 Hepsi QGC'den değiştirilir, derleme gerekmez. Açılar QGC'de **derece** girilir, kod içinde radyana çevrilir. Min–max dışındaki değer QGC'de girilemez.
+
+✔ **Koddan doğrulandı (Grup 1):** 16 parametrenin adı, varsayılanı, birimi ve min–max'ı `src/modules/auto_follow/module.yaml` ile bu tabloyla birebir aynı; SITL'de `param show AF_*` ile görüldü. `AF_ENABLE` tam sayıdır (0/1) ve "değişince yeniden başlatma gerekir" diye işaretlidir; modül bu parametreyi okumaz, yalnızca `rc.mc_apps` okur. Birimsiz parametreler (`AF_K_FF`, `AF_ALPHA`, `AF_BETA`, `AF_NORM_TOL`) QGC'de birimsiz görünür. QGC'deki parametre **grubu** şimdilik `AUTO FOLLOW` (öneri, **kullanıcı onayı bekliyor**; bkz. `implementation/grup-1-iskelet-mod-kaydi.md` Bölüm 7).
 
 | Ad | Ne işe yarar | Varsayılan | Birim | Min–max | Ne zaman değiştirilir? |
 |---|---|---|---|---|---|
@@ -175,13 +178,13 @@ Kontroller bu sırayla yapılır; ilk geçilemeyen kontrol sonucu belirler. Say�
 
 | Ad | Ne | Kilit durumu |
 |---|---|---|
-| `src/modules/auto_follow/AutoFollow.cpp/.hpp` | Modülün ana kodu: PX4'e kayıt, 50 Hz çevrim, durum makinesi, setpoint ve log yayını | Kilitli, onay gerekli |
+| `src/modules/auto_follow/AutoFollow.cpp/.hpp` | Modülün ana kodu: PX4'e kayıt, 50 Hz çevrim, durum makinesi, setpoint ve log yayını | Kilitli, onay gerekli · ✔ Grup 1'de yazıldı (kayıt, arming check, 50 Hz çevrim; durum makinesi, setpoint ve log Grup 2'de) |
 | `src/modules/auto_follow/AutoFollowGuidance.cpp/.hpp` | Hesaplar: doğrulama, geometri, guidance kuralı, sınırlar (ayrı kütüphane, birim testi için) | Kilitli, onay gerekli |
 | `src/modules/auto_follow/AlphaBetaFilter.hpp` | Alpha-beta filtresi sınıfı | Kilitli, onay gerekli |
 | `src/modules/auto_follow/AutoFollowGuidanceTest.cpp` | Kısa birim testi (`make tests TESTFILTER=AutoFollowGuidance`) | Kilitli, onay gerekli |
-| `src/modules/auto_follow/CMakeLists.txt`, `Kconfig`, `module.yaml` | Derleme, açma ayarı, parametre tanımları | Kilitli, onay gerekli |
+| `src/modules/auto_follow/CMakeLists.txt`, `Kconfig`, `module.yaml` | Derleme, açma ayarı, parametre tanımları | Kilitli, onay gerekli · ✔ Grup 1'de yazıldı |
 | `msg/AutoFollowStatus.msg` | Log mesajının tanımı (Bölüm 4) | Kilitli, onay gerekli |
-| `ROMFS/px4fmu_common/init.d/rc.mc_apps` (satır) | `AF_ENABLE` = 1 ise açılışta `auto_follow start` | Kilitli, onay gerekli (7. yol) |
+| `ROMFS/px4fmu_common/init.d/rc.mc_apps` (satır) | `AF_ENABLE` = 1 ise açılışta `auto_follow start` | Kilitli, onay gerekli (7. yol) · ✔ Grup 1'de yazıldı |
 | `tez/sitl/af_los_gonder.py` | Geçici test göndericisi: Pi gibi `AF_LOS` gönderir (açık / kapalı çevrim) | İzinli |
 | `tez/analiz/af_log_analiz.py` | ULog'u pyulog 1.2.4 ile okuyup senaryo ölçümlerini çıkaran script | İzinli |
 | `~/Desktop/AUTO-FOLLOW LOG/` | Her SITL testinden sonra ULog'un kopyalandığı klasör (repo dışı) | — |
@@ -191,3 +194,4 @@ Kontroller bu sırayla yapılır; ilk geçilemeyen kontrol sonucu belirler. Say�
 | Sürüm | Tarih | Ne |
 |---|---|---|
 | 1 | 2026-11-10 | İlk sürüm (write-spec turu): bütün adlar, spec'teki tanımlarla; kod henüz yok |
+| 2 | 2026-11-10 | Görev grubu 1: mod adı, modül ve komutları, `CONFIG_MODULES_AUTO_FOLLOW`, `rc.mc_apps` satırı, 16 parametre ve modül dosyaları koddan doğrulandı; SITL'de alınan mod numarası (23) yazıldı; QGC parametre grubu adı onay bekliyor |

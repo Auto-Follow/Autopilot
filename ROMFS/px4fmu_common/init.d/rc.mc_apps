@@ -41,3 +41,11 @@ if param compare -s MC_NN_EN 1
 then
 	mc_nn_control start
 fi
+
+#
+# Start the AUTO FOLLOW external flight mode (only if AF_ENABLE is 1).
+#
+if param compare -s AF_ENABLE 1
+then
+	auto_follow start
+fi
