@@ -10,7 +10,8 @@ import hedef
 
 GOOD = """
 ad: deneme
-drone: {yukseklik_m: 10, mod: tez}
+drone: {yukseklik_m: 10}
+takip: {kaynak: yok}
 hedef:
   baslangic: [10, 0]
   yol:
@@ -89,7 +90,8 @@ def test_every_moving_trajectory_has_its_own_animation_file_spelling(sc: hedef.S
     "change, message",
     [
         (("ad: deneme", "ad: deneme\nfazla: 1"), "bilinmeyen alan"),
-        (("mod: tez", "mod: ucus"), "drone.mod"),
+        (("kaynak: yok", "kaynak: uydu"), "takip.kaynak"),
+        (("kaynak: yok", "kaynak: yok, hiz: 1"), "takip"),
         (("yukseklik_m: 10", "yukseklik_m: 1"), "en az 2.0"),
         (("baslangic: [10, 0]", "baslangic: [10]"), "hedef.baslangic"),
         (("hiz_mps: 3.0", "hiz_mps: 9"), "en fazla 6 m/s"),
@@ -105,6 +107,22 @@ def test_every_moving_trajectory_has_its_own_animation_file_spelling(sc: hedef.S
 def test_mistakes_name_the_field(tmp_path: Path, change: tuple[str, str], message: str) -> None:
     with pytest.raises(ValueError, match=message.replace("[", r"\[").replace(".", r"\.")):
         hedef.load(write(tmp_path, GOOD.replace(*change)))
+
+
+def test_tracking_source_defaults_to_none(tmp_path: Path) -> None:
+    """No takip block = open loop: the drone holds position (PX4 "Hold") while the target walks."""
+    assert hedef.load(write(tmp_path, GOOD)).tracking_source == "yok"
+    assert hedef.load(write(tmp_path, GOOD.replace("takip: {kaynak: yok}\n", ""))).tracking_source == "yok"
+
+
+def test_drone_mode_is_gone_and_later_sources_are_refused(tmp_path: Path) -> None:
+    """drone.mod selected the removed skeleton mode; follow_me / tez_los are wired in later task groups."""
+    old = GOOD.replace("drone: {yukseklik_m: 10}", "drone: {yukseklik_m: 10, mod: tez}")
+    with pytest.raises(ValueError, match=r"drone\.mod: .*takip\.kaynak"):
+        hedef.load(write(tmp_path, old))
+    for source, group in (("follow_me", 6), ("tez_los", 5)):
+        with pytest.raises(ValueError, match=rf"takip\.kaynak: .*Görev grubu {group}"):
+            hedef.load(write(tmp_path, GOOD.replace("kaynak: yok", f"kaynak: {source}")))
 
 
 def test_unknown_scenario_lists_the_known_ones() -> None:

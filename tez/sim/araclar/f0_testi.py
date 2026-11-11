@@ -4,9 +4,11 @@
 Starts the simulation without a window (or uses one that is already running, --acik-sim) and checks, each reported
 as OK / HATA:
   1. The Camera Module 3 stream: 2304x1296, about 30 fps, focal length of a 66 deg lens.
-  2. "Tez Auto Follow" is in PX4's mode list (MAVLink AVAILABLE_MODES); arming in it on the ground is refused.
-  3. Takeoff to 10 m, switch to the thesis mode, it holds position for 15 s.
-  4. Landing and disarm; PX4 and Gazebo shut down cleanly; the mode was never marked unresponsive.
+  2. PX4 runs the stock airframe (SYS_AUTOSTART 4001) and every start parameter of tez/sim/parametreler
+     (gercek_dron.params, sim.params) has the same value in PX4 (PARAM_REQUEST_READ).
+  3. "Hold" and "Follow Target" are in PX4's mode list (MAVLink AVAILABLE_MODES, what QGC shows).
+  4. Takeoff to 10 m, switch to Hold, it holds position for 15 s.
+  5. Landing and disarm; PX4 and Gazebo shut down cleanly.
 
     ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/f0_testi.py [--acik-sim]
 """
@@ -24,20 +26,21 @@ os.environ.setdefault("GZ_IP", "127.0.0.1")  # same as calistir.sh
 from gz.msgs10.camera_info_pb2 import CameraInfo  # noqa: E402
 from gz.msgs10.image_pb2 import Image  # noqa: E402
 from gz.transport13 import Node  # noqa: E402
-from pymavlink import mavutil  # noqa: E402
 
+import parametreler  # noqa: E402
 from kayit import CAMERA_TOPIC  # noqa: E402
-from px4_baglanti import TEZ_MODE_NAME, Vehicle  # noqa: E402
+from px4_baglanti import FOLLOW_TARGET_MODE_NAME, HOLD_MODE_NAME, Vehicle  # noqa: E402
 from simulasyon import BUILD, Simulation  # noqa: E402
 
-MODE_NAME = TEZ_MODE_NAME
 OUT = BUILD / "tez_kabul"
+AIRFRAME = 4001  # stock 4001_gz_x500, chosen by calistir.sh (PX4_SYS_AUTOSTART)
+REQUIRED_MODES = (HOLD_MODE_NAME, FOLLOW_TARGET_MODE_NAME)
 CAMERA_SIZE = (2304, 1296)  # [px]
 CAMERA_HFOV = math.radians(66.0)  # Camera Module 3 Standard
 CAMERA_RATE = 30.0  # [Hz]
 TAKEOFF_ALT = 10.0  # [m]
 HOLD_TIME = 15.0  # [s]
-HOLD_TOLERANCE = 0.5  # [m] horizontal and vertical drift allowed while the skeleton mode holds
+HOLD_TOLERANCE = 0.5  # [m] horizontal and vertical drift allowed while Hold keeps the position
 
 results: list[tuple[str, bool, str]] = []
 
@@ -95,23 +98,32 @@ def check_camera() -> None:
     report("kamera odak uzaklığı", abs(fx - fx_expected) < 2.0, f"fx {fx:.1f} px (66° için {fx_expected:.1f})")
 
 
-def flight(v: Vehicle, custom_mode: int) -> None:
-    if v.wait(["LOCAL_POSITION_NED"], lambda _: True, 60) is None:
-        report("konum kestirimi", False, "LOCAL_POSITION_NED gelmedi")
-        return
-    report(
-        "tez modunda arm reddi",
-        not v.switch_mode(custom_mode) or not v.command(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 1, quiet=True),
-        "yerde tez moduna geçilip arm edilemez",
-    )
-    time.sleep(1)
+def check_parameters(v: Vehicle) -> None:
+    """The stock airframe runs and PX4 holds every value of the .params files (after the PX4_PARAM_* start)."""
+    autostart = v.get_param("SYS_AUTOSTART")
+    report("airframe", autostart == AIRFRAME, f"SYS_AUTOSTART {autostart} (beklenen {AIRFRAME}, stok 4001_gz_x500)")
 
+    expected = parametreler.load()  # the same files calistir.sh loaded; --param is not used by this test
+    wrong = []
+    for name, p in expected.items():
+        actual = v.get_param(name)
+        if not parametreler.matches(p.value, actual):
+            wrong.append(f"{name} PX4'te {actual} ({p.source}: {parametreler.format_value(p.value)})")
+    report(
+        "başlangıç parametreleri",
+        not wrong,
+        f"{len(expected) - len(wrong)}/{len(expected)} parametre PX4'te dosyadaki değerde"
+        + (f"; farklı: {'; '.join(wrong)}" if wrong else ""),
+    )
+
+
+def flight(v: Vehicle, hold_mode: int) -> None:
     climbed = v.takeoff(TAKEOFF_ALT)
     if not report("kalkış", climbed, f"{TAKEOFF_ALT:.0f} m'ye kalktı" if climbed else "kalkılamadı"):
         return
     time.sleep(3)  # let the takeoff mode settle into its hover
 
-    if not report("tez moduna geçiş", v.switch_mode(custom_mode), f"HEARTBEAT '{MODE_NAME}' gösteriyor"):
+    if not report("Hold'a geçiş", v.switch_mode(hold_mode), f"HEARTBEAT '{HOLD_MODE_NAME}' gösteriyor"):
         return
 
     start = v.wait(["LOCAL_POSITION_NED"], lambda _: True, 5)
@@ -122,8 +134,8 @@ def flight(v: Vehicle, custom_mode: int) -> None:
         if p is not None and start is not None:
             max_xy = max(max_xy, math.hypot(p.x - start.x, p.y - start.y))
             max_z = max(max_z, abs(p.z - start.z))
-    still = v.current_mode() == custom_mode
-    report("mod korundu", still, f"{HOLD_TIME:.0f} s boyunca tez modunda kaldı" if still else "mod başka moda düştü")
+    still = v.current_mode() == hold_mode
+    report("mod korundu", still, f"{HOLD_TIME:.0f} s boyunca Hold'da kaldı" if still else "mod başka moda düştü")
     report(
         "konum tutma",
         max_xy < HOLD_TOLERANCE and max_z < HOLD_TOLERANCE,
@@ -137,9 +149,15 @@ def checks() -> None:
     check_camera()
     v = Vehicle()
     try:
-        custom_mode = v.modes().get(MODE_NAME)
-        if report("mod listesi", custom_mode is not None, f"'{MODE_NAME}' QGC'nin göreceği listede"):
-            flight(v, custom_mode)
+        check_parameters(v)
+        modes = v.modes()
+        missing = [name for name in REQUIRED_MODES if name not in modes]
+        listed = " ve ".join(f"'{name}'" for name in REQUIRED_MODES)
+        detail = f"{listed} QGC'nin göreceği listede"
+        if missing:
+            detail = f"eksik: {', '.join(missing)}; PX4'ün listesi: {', '.join(sorted(modes))}"
+        if report("mod listesi", not missing, detail):
+            flight(v, modes[HOLD_MODE_NAME])
     finally:
         v.close()
 
@@ -154,13 +172,13 @@ def main() -> int:
     else:
         sim = Simulation(OUT)
         with sim:
-            if report("simülasyon açıldı", sim.wait_ready(), f"PX4 + Gazebo, tez modu kaydoldu (log: {sim.log_path})"):
+            if report("simülasyon açıldı", sim.wait_ready(), f"PX4 + Gazebo, rcS bitti (log: {sim.log_path})"):
                 checks()
         problems = sim.problems()
         for problem in problems:
             report("temiz kapanış", False, problem)
         if not problems:
-            report("temiz kapanış", True, "PX4 ve Gazebo kapandı, mod hiç 'unresponsive' olmadı")
+            report("temiz kapanış", True, "PX4 ve Gazebo kapandı")
 
     failed = [name for name, ok, _ in results if not ok]
     print("\nSONUÇ:", "GEÇTİ" if not failed else f"KALDI ({', '.join(failed)})", flush=True)

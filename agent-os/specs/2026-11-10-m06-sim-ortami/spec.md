@@ -24,8 +24,9 @@
   - `PX4_GZ_WORLD=<dünya>` ve `PX4_SIM_MODEL=x500_tez`: ikincisi yalnız bilgi amaçlıdır.
   - Not: Yalnız `PX4_SIM_MODEL=x500_tez` vermek yetmez. rcS bu durumda `<no>_x500_tez` adlı bir airframe dosyası arar ve "Unknown model" diyerek çıkar.
 - **Parametre yükleme yöntemi:** v1.17.0 posix rcS'teki `PX4_PARAM_<AD>=<değer>` ortam değişkeni döngüsü kullanılır (rcS 129–136).
-  - Döngü `param reset_all`'dan sonra, airframe dosyasından önce `param set` yapar. Bu yüzden airframe'in `param set-default` satırları bu değerleri ezmez.
-  - Her açılışta `parameters*.bson` silinir; koşular birbirinin parametresini devralmaz.
+  - Döngü `param reset_all`'dan sonra, airframe dosyasından önce `param set` yapar. `param set` değeri kullanıcı katmanına yazar, `param set-default` yalnız varsayılanı değiştirir; bu yüzden airframe'in `param set-default` satırları bu değerleri ezmez.
+  - İstisna (uygulamada bulundu, `param.cpp` `do_set`): `param set`, değer o anki değere eşitse hiçbir şey yazmaz. Varsayılana eşit bir değer kullanıcı katmanına girmez ve sonradan bir `set-default` satırı onu değiştirebilir (ör. `--param MPC_THR_HOVER=0.5` → 4001'in `0.60`'ı kazanır). Bu yüzden F0 her değeri PX4'ten geri okur; bugünkü dosyalarda 15/15 aynıdır.
+  - Her açılışta `parameters*.bson` silinir; koşular birbirinin parametresini devralmaz. Çağıranın kabuğundan gelen `PX4_PARAM_*` değişkenleri `calistir.sh` tarafından silinir; tek yol `--param`'dır.
 - **Elenen yollar ve nedenleri:**
   - Açılıştan sonra MAVLink `PARAM_SET`: kalkışla yarışır; bazı ayarlar modül başlarken okunur.
   - `px4 -s <betik>`: rcS'in kopyalanmasını ve veri klasörünün elle verilmesini gerektirir.
@@ -34,12 +35,13 @@
 - **Parametre dosyaları:**
   - `tez/sim/parametreler/gercek_dron.params`: 4019 kazançları ve 22.08 dosyasından davranış parametreleri.
   - `tez/sim/parametreler/sim.params`: yalnız sim için. `SDLOG_PROFILE 163` sayesinde `debug_vect` ULog'a girer.
-  - Biçim: her satırda `AD DEĞER  # kaynak`. Ad `^[A-Z0-9_]{1,16}$` kuralına uymalı, değer sayı olmalıdır. Hatalı satır, satır numarası ve adıyla reddedilir.
+  - Biçim: her satırda `AD DEĞER  # kaynak`. Ad `^[A-Z0-9_]{1,16}$` kuralına uymalı, değer sayı olmalıdır (`nan`/`inf` değil). Kaynak yorumu zorunludur; aynı dosyada aynı ad iki kez yazılamaz. Hatalı satır, dosya adı, satır numarası ve adıyla reddedilir ve sim hiç açılmaz.
+  - Ayrıştırıcı: `araclar/parametreler.py` (`calistir.sh` onu `TEZ_PYTHON` ya da ekip venv'iyle çağırır ve yazdığı `PX4_PARAM_*` satırlarını dışa aktarır).
 - **Yükleme sırası** (aynı parametre birden fazla yerde varsa sonuncu kazanır): `gercek_dron.params` → `sim.params` → senaryodaki `takip.px4_parametreleri` → `--param AD=DEĞER`.
 - **Seçim kuralı:**
   - Dahil: `MC_*`, `IMU_*_CUTOFF`, `MPC_*`, `FLW_TGT_*`, `EKF2_HGT_REF`, `EKF2_MAG_TYPE`.
   - Hariç: `CA_*` geometri (22.08'deki ±1 değerleri sim modeline uymaz), `MPC_THR_HOVER` (model fiziğine bağlı), `CAL_*`, `RC*`, `BAT*`, `SENS_*`, `MAV_*`, `SER_*`, failsafe ayarları, `MIS_TAKEOFF_ALT` (bunu senaryo verir).
-  - Uygulamada 22.08 dosyası v1.17.0 varsayılanlarıyla betikle karşılaştırılır. Tablo "Faz A Dosya Planı"ndadır.
+  - Uygulamada 22.08 dosyası v1.17.0 varsayılanlarıyla betikle karşılaştırılır. Tablo "Faz A Dosya Planı"ndadır; karşılaştırmanın tamamı `implementation/gorev-grubu-01.md`'dedir.
 - F0 kabul testi stok modlara ve parametre doğrulamasına uyarlanır (bkz. "Test Planı"). `tez/sim/README.md` (b) yoluna göre yeniden yazılır. Hüseyin'in onayı bekleniyor.
 
 **2. Kare okuyucu ve kamera kusurları aşaması**
@@ -199,7 +201,7 @@
   - `--param AD=DEĞER` ve `--px4-baslat KOMUT` (ikisi de birden çok verilebilir)
   - `--gecikme-ms`, `--qgc`, `--videosuz`, `--kareleri-sakla`
 - Komut satırı YAML'daki değeri ezer. Koşuda geçerli olan ayarların hepsi `ozet.json` içindeki `ayarlar` alanına yazılır. Bunlara PX4'e yüklenen parametreler ve model özeti de dahildir.
-- `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` ve `--temiz` aynen kalır.
+- `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` (`calistir.sh`) ve `--temiz` (`derle.sh`) aynen kalır. `calistir.sh` her açılışta parametreleri zaten sıfırlar.
 
 **9. Ölçütler, rapor ve MP4 video**
 - Her koşu `tez/sim/sonuclar/<tarih>_<ad>/` altına şunları yazar (git'e girmez):
@@ -437,6 +439,7 @@ flowchart LR
 | `tez/px4/` | daldan çıkar | İskelet modül m06 PR'ına girmez |
 | `tez/sim/parametreler/gercek_dron.params`, `sim.params` | yeni | Başlangıç parametreleri (tablo aşağıda) |
 | `tez/sim/calistir.sh` | değişir | `PX4_SYS_AUTOSTART=4001`, `PX4_GZ_MODEL_NAME`, `PX4_PARAM_*`; `--param`, `--px4-baslat` |
+| `araclar/parametreler.py` | yeni | `.params` ayrıştırma, yükleme sırası, `PX4_PARAM_*` satırları; F0 için geri okunan değerin karşılaştırılması |
 | `tez/sim/derle.sh` | değişir | `--harici`, değişince yeniden yapılandırma; `tez/px4` yoksa stok derleme |
 | `tez/sim/kur.sh` | değişir | Sonda model klasörü ve sha256 kontrolü (indirmez) |
 | `tez/sim/modeller.yaml` | yeni | Bilinen model dosyaları: ad, sha256, boyut, kaynak |
@@ -476,6 +479,8 @@ Sürüm sabitliği (kural 4) için:
 | `SDLOG_PROFILE` (`sim.params`) | 163 | sim: 131 + 32 (DEBUG_TOPICS, `debug_vect` için) | SITL rcS: 131 |
 
 Davranışı yalnız ilk 7 kazanç değiştirir. Gereksinimlerde sayılan 22.08 değerleri zaten v1.17.0 varsayılanlarıyla aynıdır; izlenebilirlik için yine açıkça yazılır.
+
+Karşılaştırmanın sonucu (11.11, `implementation/gorev-grubu-01.md`): 22.08'deki 1109 parametreden "dahil" sınıfında olup stok 4001 SITL'in etkin varsayılanından (meta veri + açılıştaki `set-default` satırları) farklı olan **yalnız bu 7 kazanç**tır. `MC_AT_EN` (22.08: 1) meta varsayılandan farklıdır ama SITL rcS onu zaten 1 yapar. Tablo değişmedi.
 
 ### Senaryo alanları (Faz A, yeni)
 

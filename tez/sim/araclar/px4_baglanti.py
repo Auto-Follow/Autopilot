@@ -2,14 +2,28 @@
 
 import math
 import socket
+import struct
 import threading
 import time
 from collections.abc import Callable
 
 from pymavlink import mavutil
 
-TEZ_MODE_NAME = "Tez Auto Follow"
+# Names PX4 gives its own modes in AVAILABLE_MODES (src/lib/modes/ui.hpp nav_state_names; what QGC shows).
+# Modes are always chosen by name: the numbers of external modes depend on the registration order.
 HOLD_MODE_NAME = "Hold"
+FOLLOW_TARGET_MODE_NAME = "Follow Target"
+
+
+def decode_param_value(value: float, param_type: int) -> int | float:
+    """PARAM_VALUE.param_value as the parameter's own type.
+
+    PX4 copies INT32 parameters bit for bit into the float field (MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE,
+    mavlink_parameters.cpp send_param), so 4001 arrives as the float 5.6e-42 and has to be reinterpreted.
+    """
+    if param_type == mavutil.mavlink.MAV_PARAM_TYPE_INT32:
+        return struct.unpack("<i", struct.pack("<f", value))[0]
+    return value
 
 
 class Vehicle:
@@ -111,6 +125,18 @@ class Vehicle:
             timeout,
         )
         return hb.custom_mode if hb is not None else None
+
+    def get_param(self, name: str, timeout: float = 6.0) -> int | float | None:
+        """Current value of a PX4 parameter (PARAM_REQUEST_READ); None if PX4 does not answer (unknown name)."""
+        tries = 3  # UDP: a request or its answer can get lost while PX4 streams telemetry
+        for _ in range(tries):
+            self.m.mav.param_request_read_send(self.m.target_system, self.m.target_component, name.encode(), -1)
+            msg = self.m.recv_match(
+                type="PARAM_VALUE", condition=f"PARAM_VALUE.param_id=='{name}'", blocking=True, timeout=timeout / tries
+            )
+            if msg is not None:
+                return decode_param_value(msg.param_value, msg.param_type)
+        return None
 
     def set_param(self, name: str, value: float) -> None:
         self.m.mav.param_set_send(

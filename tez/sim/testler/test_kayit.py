@@ -20,7 +20,7 @@ LEVEL_EAST = np.array([1.0, 0.0, 0.0, 0.0])  # Gazebo model facing east, level
 
 def scenario(start: tuple[float, float]) -> hedef.Scenario:
     """A target standing at `start` the whole time."""
-    sc = hedef.Scenario("t", "", "duz_alan", 10.0, "tez", start, 60.0, 5.0)
+    sc = hedef.Scenario("t", "", "duz_alan", 10.0, "yok", start, 60.0, 5.0)
     sc.track, sc.walk_end = yuruyus.plan(start, 60.0, [("wait", 1.0)], yuruyus.Behaviour())
     return sc
 

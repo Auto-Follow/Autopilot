@@ -6,8 +6,8 @@
     ... --dogrula           overhead camera checks that the rendered target is where the ground truth says
 
 Steps: write the scenario world (base world + target), start Gazebo + PX4 (calistir.sh), take off, switch to the
-scenario's mode, record ground truth while the target walks, land, shut down, collect the ULog, write the report
-to tez/sim/sonuclar/<date>_<scenario>/.
+mode of the scenario's tracking source (takip.kaynak; "yok" = PX4 "Hold"), record ground truth while the target
+walks, land, shut down, collect the ULog, write the report to tez/sim/sonuclar/<date>_<scenario>/.
 """
 
 import argparse
@@ -21,10 +21,12 @@ import dogrulama
 import hedef
 import rapor
 from kayit import Recorder
-from px4_baglanti import HOLD_MODE_NAME, TEZ_MODE_NAME, Vehicle
+from px4_baglanti import HOLD_MODE_NAME, Vehicle
 from simulasyon import BUILD, SIM_DIR, Simulation
 
 STALL_TIMEOUT = 15.0  # [s wall] sim time not advancing for this long = Gazebo is stuck
+# PX4 mode (AVAILABLE_MODES name) of each tracking source; chosen by name, never by number
+TRACKING_MODES = {"yok": HOLD_MODE_NAME}
 
 
 def log(text: str) -> None:
@@ -41,9 +43,9 @@ def fly(sc: hedef.Scenario, rec: Recorder, events: list[str]) -> bool:
 
 def _fly(v: Vehicle, sc: hedef.Scenario, rec: Recorder, events: list[str]) -> bool:
     modes = v.modes()
-    name = TEZ_MODE_NAME if sc.drone_mode == "tez" else HOLD_MODE_NAME
+    name = TRACKING_MODES[sc.tracking_source]
     if name not in modes:
-        events.append(f"'{name}' PX4'ün mod listesinde yok")
+        events.append(f"'{name}' PX4'ün mod listesinde yok; mevcut modlar: {', '.join(sorted(modes))}")
         return False
     mode = modes[name]
     log(f"Kalkış: {sc.altitude:.0f} m")

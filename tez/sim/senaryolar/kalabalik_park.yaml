@@ -11,13 +11,15 @@ ad: kalabalik_park
 aciklama: >
   Hedef (mavi üst) patikanın yanından yürür, çamın arkasından geçer, durur ve geri döner. Bir kişi patikada yürür,
   biri çapraz koşar, biri bir süre durup sonra yavaşça yürür, biri de hedefle aynı kıyafetle hedefin yolunu keser.
-  Dron tez modunda (iskelet mod: yerinde bekler).
+  Dron takip etmez (takip kaynağı yok: PX4 Hold'da yerinde bekler).
 
 dunya: cayir
 
 drone:
   yukseklik_m: 10
-  mod: tez
+
+takip:
+  kaynak: yok
 
 hedef:
   tur: insan

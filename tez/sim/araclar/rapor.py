@@ -296,6 +296,7 @@ def write(
 
     summary = {
         "senaryo": sc.name,
+        "takip_kaynagi": sc.tracking_source,
         "sonuc": result,
         "tarih": dt.datetime.now().isoformat(timespec="seconds"),
         "commit": _git_commit(),
@@ -379,7 +380,7 @@ code {{ font-size:13px; }}
 <h1>{e(sc.name)}</h1>
 <p class=muted>{e(sc.description)}</p>
 <p><span class=badge style="background:{badge[1]}">{badge[0]} {e(s["sonuc"])}</span>
-<span class=muted>&nbsp;{e(s["tarih"])} · commit {e(s["commit"])} · dron modu <code>{e(sc.drone_mode)}</code>,
+<span class=muted>&nbsp;{e(s["tarih"])} · commit {e(s["commit"])} · takip kaynağı <code>{e(sc.tracking_source)}</code>,
 {sc.altitude:.0f} m</span></p>
 <h2>Başarı ölçütleri</h2>{success_html}
 <h2>Ölçümler</h2><table>{metric_rows}</table>

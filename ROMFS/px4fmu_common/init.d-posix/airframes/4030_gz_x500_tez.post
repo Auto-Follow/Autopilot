@@ -1,8 +1,0 @@
-#!/bin/sh
-#
-# Runs at the end of rcS, after commander and the controllers are up.
-# tez_auto_follow exists only in builds made with tez/sim/derle.sh (EXTERNAL_MODULES_LOCATION=tez/px4);
-# in a plain `make px4_sitl` build this line fails with "not found" and the boot continues (rcS uses set +e).
-#
-
-tez_auto_follow start

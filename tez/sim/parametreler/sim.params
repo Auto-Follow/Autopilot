@@ -1,0 +1,3 @@
+# Simulation-only settings, loaded after gercek_dron.params (format and order: see gercek_dron.params).
+
+SDLOG_PROFILE     163     # sim: SITL rcS default 131 + 32 (DEBUG_TOPICS) so that debug_vect (TEZ_LOS) is logged

@@ -14,7 +14,7 @@ import yuruyus
 
 def scenario(success: dict) -> hedef.Scenario:
     """Walks east 10 m from 60 s (ideal motion: exactly 70 s at the end)."""
-    sc = hedef.Scenario("t", "", "duz_alan", 10.0, "tez", (10.0, 0.0), 60.0, 5.0, success=success)
+    sc = hedef.Scenario("t", "", "duz_alan", 10.0, "yok", (10.0, 0.0), 60.0, 5.0, success=success)
     sc.track, sc.walk_end = yuruyus.plan(sc.start, 60.0, [("move", (20.0, 0.0), 1.0)], yuruyus.Behaviour(natural=False))
     return sc
 

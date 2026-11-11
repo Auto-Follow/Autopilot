@@ -1,18 +1,24 @@
 """Start and stop the thesis simulation (calistir.sh) from the Python tools; always shuts down, even after an error.
 
-with Simulation(out_dir, world_file, headless=True) as sim:
+with Simulation(out_dir, world_file, headless=True, params={"FLW_TGT_DST": 10}) as sim:
     if sim.wait_ready(): ...
-sim.problems()   # what was wrong with the run: processes left over, mode marked unresponsive
+sim.problems()   # what was wrong with the run: processes left over, an external mode marked unresponsive
 """
 
+import os
 import subprocess
+import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
+
+from parametreler import Number, format_value
 
 SIM_DIR = Path(__file__).resolve().parent.parent
 REPO = SIM_DIR.parent.parent
 BUILD = REPO / "build" / "px4_sitl_tez"
-READY_LINE = "registered as"  # tez_auto_follow is registered with the commander: PX4 is up and attached to Gazebo
+READY_LINE = "Startup script returned successfully"  # PX4 ran its whole rcS: attached to Gazebo, all modules up
+FAILED_LINES = ("Startup script returned with return value", "Unknown model", "gz_bridge failed")
 
 
 def running() -> bool:
@@ -22,11 +28,31 @@ def running() -> bool:
     return px4 or gz
 
 
+def command(world: str | Path, headless: bool, params: Mapping[str, Number] | None = None) -> list[str]:
+    """calistir.sh call; `params` are loaded after the .params files, in their order (the last one wins)."""
+    args = [str(SIM_DIR / "calistir.sh"), "--dunya", str(world)]
+    if headless:
+        args.append("--ekransiz")
+    for name, value in (params or {}).items():
+        args += ["--param", f"{name}={format_value(value)}"]
+    return args
+
+
 class Simulation:
-    def __init__(self, out: Path, world: str | Path = "duz_alan", headless: bool = True) -> None:
+    def __init__(
+        self,
+        out: Path,
+        world: str | Path = "duz_alan",
+        headless: bool = True,
+        params: Mapping[str, Number] | None = None,
+        external_mode: bool = False,
+    ) -> None:
         self.out = out
         self.world = world
         self.headless = headless
+        self.params = dict(params or {})
+        # Only an out-of-tree mode can be marked unresponsive by the commander; stock runs do not check for it.
+        self.external_mode = external_mode
         self.log_path = out / "sim.log"
         self.proc: subprocess.Popen | None = None
         self.started = 0.0
@@ -35,10 +61,15 @@ class Simulation:
         if running():
             raise RuntimeError("Zaten çalışan bir PX4 veya Gazebo var; önce onu kapatın")
         self.out.mkdir(parents=True, exist_ok=True)
-        args = [str(SIM_DIR / "calistir.sh"), "--dunya", str(self.world)] + (["--ekransiz"] if self.headless else [])
+        # calistir.sh runs parametreler.py; give it this interpreter unless the caller chose one
+        env = {**os.environ, "TEZ_PYTHON": os.environ.get("TEZ_PYTHON") or sys.executable}
         self.started = time.time()
         self.proc = subprocess.Popen(
-            args, stdin=subprocess.DEVNULL, stdout=self.log_path.open("w"), stderr=subprocess.STDOUT
+            command(self.world, self.headless, self.params),
+            stdin=subprocess.DEVNULL,
+            stdout=self.log_path.open("w"),
+            stderr=subprocess.STDOUT,
+            env=env,
         )
         return self
 
@@ -53,7 +84,10 @@ class Simulation:
         while time.monotonic() < t_end:
             if self.proc.poll() is not None:
                 return False
-            if READY_LINE in self.log():
+            text = self.log()
+            if any(line in text for line in FAILED_LINES):
+                return False
+            if READY_LINE in text:
                 return True
             time.sleep(1)
         return False
@@ -72,7 +106,7 @@ class Simulation:
             self.proc.wait(10)
 
     def problems(self) -> list[str]:
-        """Checks after stop(): nothing left running, the commander never dropped the thesis mode."""
+        """Checks after stop(): nothing left running; with an external mode, the commander never dropped it."""
         found = []
         for _ in range(10):  # Gazebo may need a few seconds after calistir.sh has returned
             if not running():
@@ -80,8 +114,8 @@ class Simulation:
             time.sleep(1)
         else:
             found.append("kapanıştan sonra çalışan PX4/Gazebo süreci kaldı")
-        if "unresponsive" in self.log().lower():
-            found.append("PX4 tez modunu 'unresponsive' olarak işaretledi (sim.log)")
+        if self.external_mode and "unresponsive" in self.log().lower():
+            found.append("PX4 harici modu 'unresponsive' olarak işaretledi (sim.log)")
         return found
 
     def newest_ulog(self) -> Path | None:

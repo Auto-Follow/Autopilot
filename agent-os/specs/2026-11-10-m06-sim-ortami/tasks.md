@@ -69,45 +69,45 @@ Kritik yol sıkıdır (1–9 ≈ 5 gün). Gecikme olursa demodan hiçbir madde d
 #### Görev Grubu 1: (b) yolu — stok 4001, başlangıç parametreleri, F0 uyarlaması
 **Bağımlılık:** Yok · **Emek:** ~0.75 gün · **Onay:** Hüseyin'in onayı bekleniyor (yine de ilerlenir)
 
-- [ ] 1.0 PX4 dosyalarına dokunmadan stok 4001 + gerçek dron ayarlarıyla simi açmak
-  - [ ] 1.1 Testleri yaz: `testler/test_parametreler.py` (5–7 test)
+- [x] 1.0 PX4 dosyalarına dokunmadan stok 4001 + gerçek dron ayarlarıyla simi açmak
+  - [x] 1.1 Testleri yaz: `testler/test_parametreler.py` (5–7 test)
     - Yorum ve boş satır atlanır; `AD DEĞER  # kaynak` ayrıştırılır
     - Ad `^[A-Z0-9_]{1,16}$`'e uymazsa ya da değer sayı değilse satır numarası ve adla reddedilir
     - Yükleme sırası: `gercek_dron.params` → `sim.params` → `takip.px4_parametreleri` → `--param` (sonuncu kazanır)
     - `--param AD=DEĞER` ayrıştırma ve hatalı biçimin reddi
     - `PX4_PARAM_<AD>=<değer>` listesinin üretimi
     - `test_hedef.py`'ye: `drone.mod` artık reddedilir; `takip.kaynak` verilmezse `yok`
-  - [ ] 1.2 Başlangıç parametre dosyalarını oluştur
+  - [x] 1.2 Başlangıç parametre dosyalarını oluştur
     - `tez/sim/parametreler/gercek_dron.params`: `4030_gz_x500_tez`'teki 7 kazanç satırı (4019) + 22.08 davranış parametreleri (spec "Başlangıç parametreleri" tablosu), her satırda `# kaynak`
     - `tez/sim/parametreler/sim.params`: `SDLOG_PROFILE 163`
     - `~/Desktop/Follow/4_Ucus/Drone parametreleri/22.08.2026.params` v1.17.0 varsayılanlarıyla (derleme çıktısındaki parametre meta verisi) tek seferlik bir betikle karşılaştırılır. Seçim kuralı spec 1. maddededir (dahil / hariç). Betik repoya girmez; sonuç tablosu `implementation/gorev-grubu-01.md`'ye yazılır. 22.08 dosyası repoya girmez.
-  - [ ] 1.3 PX4 dosyalarını v1.17.0 hâline döndür
+  - [x] 1.3 PX4 dosyalarını v1.17.0 hâline döndür
     - Kazançlar 1.2'de taşındıktan **sonra** `4030_gz_x500_tez`, `4030_gz_x500_tez.post`, `airframes/CMakeLists.txt` `main`'deki hâline döndürülür
     - `tez/px4/` daldan çıkarılır (yeni bir silme commit'iyle; geçmiş yeniden yazılmaz). İskelet modül `c4b4abf342` commit'inde okunabilir kalır.
-  - [ ] 1.4 Parametre ayrıştırıcısını yaz: `araclar/parametreler.py` (yeni)
+  - [x] 1.4 Parametre ayrıştırıcısını yaz: `araclar/parametreler.py` (yeni)
     - Ayrıştırma, birleştirme sırası, `PX4_PARAM_*` ortam listesinin üretimi; `calistir.sh`'ın çağırabileceği küçük bir komut satırı girişi
     - Yorumlayıcı `TEZ_PYTHON`'dan, yoksa ekip venv'inden alınır (`f0_kabul.sh` deseni)
-  - [ ] 1.5 `tez/sim/calistir.sh`'ı (b) yoluna geçir
+  - [x] 1.5 `tez/sim/calistir.sh`'ı (b) yoluna geçir
     - `PX4_SYS_AUTOSTART=4001`, `PX4_GZ_MODEL_NAME=x500_tez_0`, `PX4_GZ_WORLD=<dünya>`, `PX4_SIM_MODEL=x500_tez`
     - İki `.params` dosyası + `--param AD=DEĞER` (birden çok) → `PX4_PARAM_*`
     - Her açılışta `parameters*.bson` silinir
     - `--ekransiz`, `--dunya`, `--temiz` ve PX4'ü kapatma yolu aynen kalır
-  - [ ] 1.6 `tez/sim/derle.sh`: `tez/px4/src/CMakeLists.txt` yoksa stok `px4_sitl_default` (+ `px4_gz_plugins`) `build/px4_sitl_tez`'e derlenir. (`--harici` 10. grupta.)
-  - [ ] 1.7 `simulasyon.py` ve `px4_baglanti.py`
+  - [x] 1.6 `tez/sim/derle.sh`: `tez/px4/src/CMakeLists.txt` yoksa stok `px4_sitl_default` (+ `px4_gz_plugins`) `build/px4_sitl_tez`'e derlenir. (`--harici` 10. grupta.)
+  - [x] 1.7 `simulasyon.py` ve `px4_baglanti.py`
     - Hazır satırı `"registered as"` yerine `"Startup script returned successfully"`
     - Parametreler `calistir.sh`'a aktarılır; "unresponsive" kontrolü yalnız harici modlu koşuda (bayrak; 10. grupta kullanılır)
     - `TEZ_MODE_NAME` kaldırılır; `get_param` (`PARAM_REQUEST_READ`) eklenir
-  - [ ] 1.8 Senaryoyu iskelet modsuz hâle getir (en az değişiklik; tam şema 2. grupta)
+  - [x] 1.8 Senaryoyu iskelet modsuz hâle getir (en az değişiklik; tam şema 2. grupta)
     - `hedef.py`: `drone.mod` kalkar; `takip.kaynak` yalnız `yok` (→ "Hold") kabul edilir
     - `senaryo.py` modu "Hold" olarak adıyla seçer; `rapor.py` "dron modu" yerine takip kaynağını yazar
     - 3 senaryo `takip: {kaynak: yok}` olur
-  - [ ] 1.9 `f0_testi.py`'yi uyarla
+  - [x] 1.9 `f0_testi.py`'yi uyarla
     - Kamera çözünürlüğü, hızı, fx (mevcut)
     - `SYS_AUTOSTART == 4001`; iki `.params` dosyasındaki her satır PX4'te aynı değerde (`get_param`)
     - "Hold" ve "Follow Target" AVAILABLE_MODES'ta
     - 10 m kalkış; Hold'da 15 s konum tutma (sapma < 0.5 m); iniş, disarm, temiz kapanış
-  - [ ] 1.10 `tez/sim/README.md`'den iskelet modül ve ROMFS satırlarını çıkar, kısa bir "(b) yolu" bölümü ekle (tam yeniden yazım 13. grupta); `ruff.toml`'a `parametreler` ekle
-  - [ ] 1.11 Doğrulama
+  - [x] 1.10 `tez/sim/README.md`'den iskelet modül ve ROMFS satırlarını çıkar, kısa bir "(b) yolu" bölümü ekle (tam yeniden yazım 13. grupta); `ruff.toml`'a `parametreler` ekle
+  - [x] 1.11 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_parametreler.py tez/sim/testler/test_hedef.py -q

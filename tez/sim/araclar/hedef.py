@@ -27,7 +27,10 @@ SUCCESS_KEYS = {
     "en_uzun_kayip_max_s": "hedefin kadrajdan çıktığı en uzun aralık, en fazla [s]",
     "yatay_mesafe_max_m": "dron ile hedef arasındaki yatay mesafe, en fazla [m]",
 }
-DRONE_MODES = {"tez", "bekle"}
+# takip.kaynak: who steers the drone after takeoff. Only "yok" (open loop, PX4 "Hold") so far; the others are
+# wired in later task groups of spec 2026-11-10-m06-sim-ortami (group number in the error message).
+TRACKING_SOURCES = {"yok"}
+LATER_TRACKING_SOURCES = {"follow_me": 6, "tez_los": 5}
 BEHAVIOUR_KEYS = {"dogal", "tohum", "hiz_dalgalanma", "yol_sapmasi_m"}
 PERSON_KEYS = {"baslangic", "yol", "davranis", "kiyafet"}
 TARGET_LABEL = 1  # segmentation label of the target; the other people get OTHER_LABEL + i
@@ -88,7 +91,7 @@ class Scenario:
     description: str
     world: str
     altitude: float
-    drone_mode: str
+    tracking_source: str
     start: tuple[float, float]
     start_time: float
     end_wait: float
@@ -159,13 +162,17 @@ def load(name_or_path: str) -> Scenario:
     d = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(d, dict):
         raise ValueError(f"{path.name}: YAML sözlük (alan: değer) olmalı")
-    _check_keys(d, {"ad", "aciklama", "dunya", "drone", "hedef", "diger_insanlar", "zamanlama", "basari"}, path.name)
+    top_keys = {"ad", "aciklama", "dunya", "drone", "takip", "hedef", "diger_insanlar", "zamanlama", "basari"}
+    _check_keys(d, top_keys, path.name)
 
     drone = d.get("drone") or {}
-    _check_keys(drone, {"yukseklik_m", "mod"}, "drone")
-    mode = drone.get("mod", "tez")
-    if mode not in DRONE_MODES:
-        raise ValueError(f"drone.mod: {sorted(DRONE_MODES)} olmalı, gelen: {mode!r}")
+    if "mod" in drone:
+        raise ValueError(
+            "drone.mod: kaldırıldı (iskelet tez modu yok); yerine takip.kaynak yazın, ör. takip: {kaynak: yok} "
+            "= dron PX4 Hold'da bekler"
+        )
+    _check_keys(drone, {"yukseklik_m"}, "drone")
+    tracking_source = _tracking_source(d.get("takip") or {})
 
     target = d.get("hedef") or {}
     _check_keys(target, PERSON_KEYS | {"tur"}, "hedef")
@@ -187,7 +194,7 @@ def load(name_or_path: str) -> Scenario:
         description=str(d.get("aciklama", "")),
         world=world,
         altitude=_number(drone, "yukseklik_m", "drone", 10.0, minimum=2.0),
-        drone_mode=mode,
+        tracking_source=tracking_source,
         start=_point(target.get("baslangic"), "hedef.baslangic"),
         start_time=_number(timing, "baslama_s", "zamanlama", 60.0, minimum=20.0),
         end_wait=_number(timing, "son_bekleme_s", "zamanlama", 5.0),
@@ -206,6 +213,22 @@ def load(name_or_path: str) -> Scenario:
         sc.others.append(_person(o, f"diger_insanlar[{i}]", sc.start_time))
     _check_trees(sc)
     return sc
+
+
+def _tracking_source(d: object) -> str:
+    if not isinstance(d, dict):
+        raise ValueError("takip: {kaynak: yok} biçiminde olmalı")
+    _check_keys(d, {"kaynak"}, "takip")
+    source = d.get("kaynak", "yok")
+    if source in LATER_TRACKING_SOURCES:
+        raise ValueError(
+            f"takip.kaynak: {source!r} henüz bağlanmadı (Görev grubu {LATER_TRACKING_SOURCES[source]}'da "
+            "bağlanacak); şimdilik yalnız 'yok'"
+        )
+    if source not in TRACKING_SOURCES:
+        known = sorted(TRACKING_SOURCES | set(LATER_TRACKING_SOURCES))
+        raise ValueError(f"takip.kaynak: {known} olmalı, gelen: {source!r}")
+    return source
 
 
 def _person(d: object, where: str, start_time: float) -> Person:

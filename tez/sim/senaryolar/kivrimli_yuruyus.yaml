@@ -8,13 +8,16 @@
 ad: kivrimli_yuruyus
 aciklama: >
   İnsan dronun 10 m önünden yola çıkar; kıvrılarak kuzeydoğuya yürür, durur, yavaş yürür, kısa bir koşu yapar,
-  sert bir dönüşle geri yürür. Dron tez modunda (iskelet mod: yerinde bekler), yani hedef kadrajdan çıkar.
+  sert bir dönüşle geri yürür. Dron takip etmez (takip kaynağı yok: PX4 Hold'da yerinde bekler), yani hedef
+  kadrajdan çıkar.
 
 dunya: duz_alan
 
 drone:
   yukseklik_m: 10
-  mod: tez
+
+takip:
+  kaynak: yok
 
 hedef:
   tur: insan

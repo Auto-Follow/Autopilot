@@ -3,13 +3,31 @@
 Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodlarını gerçek uçuştan önce Gazebo'da
 **ölçerek** denemesi için ortak ortam. Tasarım: "Auto-Follow Simülasyon ve Test Ortamı — Tasarım Önerisi" belgesi.
 
-> **Durum: F1 (hakem çekirdeği) + gerçekçi dünya.** Tez dronu + düz alan ve dokulu çayır (patika, ağaçlar) +
-> PX4'te görünen "Tez Auto Follow" modu (iskelet: yerinde bekler) + insan gibi yürüyen hedef ve başka insanlar,
-> YAML senaryo, kare kare doğru cevap (görünürlük ve kutu dahil), ULog ve otomatik HTML rapor.
-> Sıradaki: F2 (kontrol ekibi için "mükemmel algılayıcı"), F3 (görüntü ekibi için kamera ve etiketli kareler).
+> **Durum: F1 (hakem çekirdeği) + gerçekçi dünya, m06 Görev grubu 1 ((b) yolu).** Tez dronu + düz alan ve dokulu
+> çayır (patika, ağaçlar) + stok PX4 (airframe 4001, gerçek dronun ayarlarıyla) + insan gibi yürüyen hedef ve başka
+> insanlar, YAML senaryo, kare kare doğru cevap (görünürlük ve kutu dahil), ULog ve otomatik HTML rapor.
+> m06'nın devamı (model, `TEZ_LOS`, Follow Me, MP4): `agent-os/specs/2026-11-10-m06-sim-ortami/`.
 
-PX4 kaynağı değişmez. Tez modu `tez/px4/` altında **harici modül** olarak derlenir; dron ve dünya `tez/sim/` altında
-durur. PX4 tarafında sadece kilit listesinde izinli iki dosya eklenir: airframe `4030_gz_x500_tez` (+ `.post`).
+PX4 kaynağı, ROMFS ve submodule'ler **değişmez** (`tez/pin/verify_pin.sh --worktree` → "KILIT SAGLAM"); dron, dünya
+ve başlangıç parametreleri `tez/sim/` altında durur.
+
+## PX4 tarafı: (b) yolu
+
+- `calistir.sh` PX4'ü stok `4001_gz_x500` airframe'iyle açar (`PX4_SYS_AUTOSTART=4001`) ve dünyada zaten duran
+  `x500_tez_0` dronuna bağlar (`PX4_GZ_MODEL_NAME=x500_tez_0`). `PX4_SIM_MODEL=x500_tez` yalnız bilgi amaçlıdır; tek
+  başına verilirse rcS `<no>_x500_tez` adlı bir airframe arar ve "Unknown model" diyerek çıkar.
+- Gerçek dronun ayarları her açılışta yüklenir. Sıra (aynı parametre birden çok yerdeyse **sonuncu kazanır**):
+  `tez/sim/parametreler/gercek_dron.params` (4019 kazançları + 22.08 davranış ayarları) → `sim.params`
+  (`SDLOG_PROFILE 163`: `debug_vect` ULog'a girer) → `calistir.sh --param AD=DEĞER` (birden çok verilebilir).
+- Yöntem: stok posix rcS'teki `PX4_PARAM_<AD>=<değer>` döngüsü. rcS bunları `param reset_all`'dan sonra, airframe
+  dosyasından önce `param set` ile yazar; airframe'in `param set-default` satırları onları ezmez. Dikkat: PX4
+  `param set` değer o anki değere eşitse hiçbir şey yazmaz; böyle bir değeri sonradan bir `set-default` satırı
+  değiştirebilir. F0 testi bu yüzden her değeri PX4'ten geri okur.
+- Dosya biçimi: her satırda `AD DEĞER  # kaynak` (ad büyük harf, en fazla 16 karakter; değer sayı; kaynak yorumu
+  zorunlu). Hatalı satır, dosya adı, satır numarası ve parametre adıyla bildirilir ve sim hiç açılmaz.
+- Hangi 22.08 parametrelerinin neden alındığı: spec "Başlangıç parametreleri" ve
+  `implementation/gorev-grubu-01.md`. Her açılışta `parameters*.bson` silinir; koşular birbirinin parametresini
+  devralmaz.
 
 ## Kurulum (bir kere)
 
@@ -22,20 +40,23 @@ tez/sim/kur.sh              # insan modeli, zemin dokuları ve ağaçları indir
                             # üretir (ilk sefer ~3 dakika); git'e girmez. Tekrar çalıştırınca sadece eksik/değişeni yapar
 ```
 
-`derle.sh` ayrı bir klasöre derler; ekibin normal `build/px4_sitl_default` derlemesine dokunmaz.
-Tez modunun kodunu değiştirdikten sonra yine `tez/sim/derle.sh` (sadece değişen dosyalar derlenir).
+`derle.sh` stok `px4_sitl_default` yapılandırmasını (+ Gazebo eklentileri) ayrı bir klasöre derler; ekibin normal
+`build/px4_sitl_default` derlemesine dokunmaz. Eski bir `build/px4_sitl_tez` harici modülle yapılandırılmışsa
+`derle.sh` CMake'i kendiliğinden yeniden yapılandırır.
 
 ## Çalıştırma
 
 ```bash
-tez/sim/calistir.sh               # Gazebo penceresi + bu terminalde PX4 kabuğu (pxh>)
-tez/sim/calistir.sh --ekransiz    # pencere yok (otomatik testler için)
+tez/sim/calistir.sh                          # Gazebo penceresi + bu terminalde PX4 kabuğu (pxh>)
+tez/sim/calistir.sh --ekransiz               # pencere yok (otomatik testler için)
+tez/sim/calistir.sh --param FLW_TGT_DST=10   # parametre dosyalarından sonra bir parametre daha (sonuncu kazanır)
 ```
+
+AMD hibrit GPU'lu laptopta Gazebo penceresini açmadan önce `export DRI_PRIME=1`.
 
 - QGroundControl'ü açın; kendiliğinden bağlanır (UDP 14550).
 - Kalkış: QGC'de **Takeoff** (10 m'ye kalkar; yükseklik `MIS_TAKEOFF_ALT`).
-- Havadayken uçuş modu listesinden **Tez Auto Follow** seçin. Şu anki iskelet seçildiği yerde havada bekler.
-- Tez modunda yerde arm edilemez (PX4 Follow Me gibi): önce başka modla kalkın.
+- Kalkıştan sonra PX4 **Hold**'a geçer ve yerinde bekler. Stok **Follow Target** (Follow Me) modu da listededir.
 - Kapatma: `pxh>` içinde `shutdown` veya Ctrl+C. Gazebo da kapanır.
 - Her açılış temiz parametrelerle başlar (ekip standardı: testler birbirinin parametresini devralmaz).
 
@@ -50,9 +71,10 @@ tez/sim/araclar/f0_kabul.sh              # simi kendisi açar (pencere yok), ~1.
 tez/sim/araclar/f0_kabul.sh --acik-sim   # zaten açık bir sim üzerinde (ör. Gazebo + QGC penceresiyle izlemek için)
 ```
 
-Kontrol ettikleri: kamera çözünürlüğü, hızı (sim saniyesi başına kare) ve odak uzaklığı; modun QGC listesinde
-olması; yerde arm reddi; 10 m kalkış; tez moduna geçiş ve 15 s konum tutma (sapma < 0.5 m); iniş ve disarm; PX4 ve
-Gazebo'nun temiz kapanması; modun hiç "unresponsive" işaretlenmemesi. Log: `build/px4_sitl_tez/tez_kabul/sim.log`.
+Kontrol ettikleri: kamera çözünürlüğü, hızı (sim saniyesi başına kare) ve odak uzaklığı; `SYS_AUTOSTART` 4001;
+iki `.params` dosyasındaki her parametrenin PX4'te aynı değerde olması (`PARAM_REQUEST_READ`); "Hold" ve "Follow
+Target" modlarının QGC listesinde olması; 10 m kalkış; Hold'da 15 s konum tutma (sapma < 0.5 m); iniş ve disarm; PX4
+ve Gazebo'nun temiz kapanması. Log: `build/px4_sitl_tez/tez_kabul/sim.log`.
 
 ## Senaryolar (F1)
 
@@ -65,8 +87,8 @@ $P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --ekransiz   # pencere yok
 $P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --dogrula    # + tepe kamerasıyla hedef konumu kontrolü
 ```
 
-Senaryo yöneticisi dünyayı (temel dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve senaryonun moduna
-alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar. Çıktı `tez/sim/sonuclar/<tarih>_<ad>/`
+Senaryo yöneticisi dünyayı (temel dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve takip kaynağının
+moduna alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar. Çıktı `tez/sim/sonuclar/<tarih>_<ad>/`
 (git'e girmez):
 
 | Dosya | İçerik |
@@ -83,7 +105,9 @@ kısa koşu, sert geri dönüş) — ikisi düz alanda — ve `kalabalik_park` (
 kopyalayın. Alanlar:
 
 - `dunya`: `duz_alan` (tek renk düz alan, hızlı) veya `cayir` (aşağıda "Dünyalar")
-- `drone.yukseklik_m`, `drone.mod` (`tez` veya `bekle` = PX4 Hold)
+- `drone.yukseklik_m`
+- `takip.kaynak`: şimdilik yalnız `yok` (dron PX4 Hold'da bekler, açık döngü; varsayılan). `follow_me` ve `tez_los`
+  m06'nın sonraki görev gruplarında bağlanır. Eski `drone.mod` alanı kaldırıldı.
 - `hedef.baslangic: [x, y]` ve `hedef.yol`: sırayla `{nokta: [x, y], hiz_mps: v}` (v > 2 m/s koşu) veya `{dur_s: s}`
 - `hedef.davranis` (isteğe bağlı): hedef **insan gibi** hareket eder (`araclar/yuruyus.py`): ilk adımda yürüme hızına
   çıkar (yürürken 2 m/s², koşarken 2.5 m/s²), köşeleri yayla döner (yarıçap v²/1.5 m/s²; 1.4 m/s'de ~1.3 m),
@@ -172,23 +196,20 @@ F1 kabul testi (senaryoyu iki kez koşar, ~6 dakika; `araclar/f1_testi.py`):
 tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koşu aynı (≤ 0.15 m)
 ```
 
-## Kontrol ekibi: modu nereye yazıyorum?
+## Kontrol ekibi: kendi PX4 modunu takmak
 
-`tez/px4/src/modules/tez_auto_follow/TezAutoFollow.cpp`
-
-- Mod kaydı, kalkış öncesi kontrollere cevap ve modun aktif olup olmadığı hazır; dokunmanız gerekmez.
-- Takip mantığı `update_setpoint()` içine yazılır: her 10 ms'de bir `trajectory_setpoint` (NED konum, hız, yaw)
-  yayınlanır, PX4'ün konum kontrolcüsü onu izler.
-- Yeni parametreler `TEZ_` ön ekiyle (`standards/px4/uorb-params.md`).
-- Gerçek kart için de derlenir: `make px4_fmu-v6c_default EXTERNAL_MODULES_LOCATION=$PWD/tez/px4`
-  (gerçek araçta modül SD karttaki `etc/extras.txt` içine `tez_auto_follow start` yazılarak başlatılır).
+Bu dalda tez PX4 modülü yok; sim stok PX4 ile çalışır. Ağaç dışı bir modülü (ör. m15 takip modu) sime takmak için
+`derle.sh --harici <klasör>` ve `calistir.sh --px4-baslat "<komut>"` m06 Görev grubu 10'da gelir; adım adım kılavuz
+spec'in "Takım Arkadaşı Kılavuzu" bölümündedir. Eski iskelet modül örnek olarak dalın `c4b4abf342` commit'inde
+okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modülü yazan kişi kendi spec'inde belirler.
 
 ## Dosyalar
 
 | Yol | Ne |
 |---|---|
-| `tez/sim/derle.sh` | PX4 SITL + tez modülleri → `build/px4_sitl_tez` |
-| `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır |
+| `tez/sim/derle.sh` | Stok PX4 SITL + Gazebo eklentileri → `build/px4_sitl_tez` |
+| `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır (stok 4001, başlangıç parametreleri) |
+| `tez/sim/parametreler/gercek_dron.params`, `sim.params` | Başlangıç parametreleri (`AD DEĞER  # kaynak`); `araclar/parametreler.py` okur |
 | `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/worlds/cayir.sdf`, `cayir.yaml` | Dokulu çayır: zemin ve ağaçlar `cayir.yaml`'dan üretilir (`araclar/dunya.py`) |
@@ -197,16 +218,14 @@ tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koş
 | `tez/sim/models/dokular/KAYNAK.md` | Zemin dokuları ve ağaçların kaynağı ve lisansı |
 | `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kayma düzeltmeleri ve Gazebo hatası önlemi: `KAYNAK.md`) |
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `px4_baglanti.py` (MAVLink), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
-| `tez/px4/src/modules/tez_auto_follow/` | Tez uçuş modu (iskelet) |
-| `ROMFS/.../airframes/4030_gz_x500_tez(.post)` | SITL airframe: x500 + gerçek X500 V2 (4019) açısal hız kazançları; modu başlatır |
 
 Python araçları:
 
 ```bash
 P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
 $P -m pytest tez/sim/testler                     # birim testleri, simsiz, ~1 s
-../Vision/.venv/bin/ruff format --config tez/sim/ruff.toml tez/sim && ../Vision/.venv/bin/ruff check --config tez/sim/ruff.toml tez/sim
+$P -m ruff format --config tez/sim/ruff.toml tez/sim && $P -m ruff check --config tez/sim/ruff.toml tez/sim   # ruff 0.16.9
 ```

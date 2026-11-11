@@ -9,4 +9,4 @@ ignore = ["ANN401"]
 
 [lint.isort]
 # modules in araclar/ import each other by plain name (the scripts run from that folder)
-known-first-party = ["dogrulama", "hedef", "kamera", "kayit", "px4_baglanti", "rapor", "animasyon", "senaryo", "simulasyon", "yuruyus"]
+known-first-party = ["dogrulama", "hedef", "kamera", "kayit", "parametreler", "px4_baglanti", "rapor", "animasyon", "senaryo", "simulasyon", "yuruyus"]

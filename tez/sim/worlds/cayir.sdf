@@ -56,7 +56,7 @@
       <pose>0 0 0 0 0 0</pose>
     </include>
 
-    <!-- The drone is part of the world; PX4 attaches to it by name (airframe 4030_gz_x500_tez, PX4_GZ_MODEL_NAME). -->
+    <!-- The drone is part of the world; PX4 (stock airframe 4001) attaches to it by name (PX4_GZ_MODEL_NAME, calistir.sh). -->
     <include>
       <uri>model://x500_tez</uri>
       <name>x500_tez_0</name>
