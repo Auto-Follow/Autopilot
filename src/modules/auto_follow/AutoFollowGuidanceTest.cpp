@@ -36,8 +36,8 @@
  * @file AutoFollowGuidanceTest.cpp
  *
  * Short unit test of the AUTO FOLLOW pure computations with the numerical examples of the spec:
- * geometry, velocity law, velocity limit, acceleration limit, corrupt input and the target loss timeouts,
- * and the resets after AF_DATA_TOUT without input (sequence number memory, filter).
+ * geometry, velocity law, velocity limit, acceleration limit, yaw rate limit, corrupt input, the target loss timeouts,
+ * the Hold request retries and the resets after AF_DATA_TOUT without input (sequence number memory, filter).
  */
 
 #include <string.h>
@@ -61,13 +61,15 @@ constexpr float GND_OFS = 0.f;
 constexpr float MIN_DEPRESSION = 10.f * M_DEG_TO_RAD_F;
 constexpr float MAX_RANGE = 40.f;
 
-// Default AF_TRK_ANG, AF_K_DIST, AF_K_FF, AF_VEL_MAX, AF_ACC_MAX, AF_YAW_MIN_D, AF_NORM_TOL, AF_DATA_TOUT, AF_LOST_T
+// Default AF_TRK_ANG, AF_K_DIST, AF_K_FF, AF_VEL_MAX, AF_ACC_MAX, AF_YAW_MIN_D, AF_YAWRATE_MAX, AF_NORM_TOL, AF_DATA_TOUT,
+// AF_LOST_T
 constexpr float TRACK_ANGLE = 30.f * M_DEG_TO_RAD_F;
 constexpr float K_DIST = 0.5f;
 constexpr float K_FF = 0.f;
 constexpr float VEL_MAX = 2.f;
 constexpr float ACC_MAX = 3.f;
 constexpr float YAW_MIN_RANGE = 1.f;
+constexpr float YAWRATE_MAX = 60.f * M_DEG_TO_RAD_F;
 constexpr float NORM_TOL = 0.1f;
 constexpr float DATA_TIMEOUT = 0.5f;
 constexpr float LOST_TIMEOUT = 1.f;
@@ -260,7 +262,7 @@ TEST(AutoFollowGuidanceTest, NoTargetImmediatelyLost)
 
 TEST(AutoFollowGuidanceTest, RestartedSenderAcceptedAfterTimeout)
 {
-	// GIVEN: sequence 1000 passed the sequence check at t0, then the companion computer restarts and counts from 1
+	// GIVEN: sequence 1000 arrived at t0 (last AF_LOS sample), then the companion computer restarts and counts from 1
 	const uint64_t t0 = 10 * S;
 	const float restarted[INPUT_SIZE] {0.8f, 0.f, 0.6f, 50.f, 1.f, 1.f};
 
@@ -270,7 +272,7 @@ TEST(AutoFollowGuidanceTest, RestartedSenderAcceptedAfterTimeout)
 	EXPECT_EQ(check_input("AF_LOS", restarted, now, now, has_previous_seq, 1000.f, NORM_TOL, DATA_TIMEOUT, true),
 		  auto_follow_status_s::CHECK_SEQ);
 
-	// WHEN: AF_DATA_TOUT without a sample passing the sequence check, THEN: 1000 is forgotten and sequence 1 is accepted
+	// WHEN: AF_DATA_TOUT without any AF_LOS sample, THEN: 1000 is forgotten and sequence 1 is accepted
 	now = t0 + S / 2;
 	has_previous_seq = keep_previous_seq(true, t0, now, DATA_TIMEOUT);
 	EXPECT_FALSE(has_previous_seq);
@@ -298,4 +300,101 @@ TEST(AutoFollowGuidanceTest, FilterRestartsAfterLongGap)
 	filter.correct(Vector2f(5.f, 3.f), 10.f, 0.5f, 0.17f);
 	EXPECT_EQ(filter.position(), Vector2f(5.f, 3.f));
 	EXPECT_EQ(filter.velocity(), Vector2f(0.f, 0.f));
+}
+
+TEST(AutoFollowGuidanceTest, FrozenSenderNeverAccepted)
+{
+	// GIVEN: a frozen companion computer repeats its last sample (sequence 5) at 20 Hz for 3 s
+	// (bookkeeping as in AutoFollow::process_input: the AF_LOS name refreshes the memory, the sequence check sets it)
+	const float frozen[INPUT_SIZE] {0.8f, 0.f, 0.6f, 50.f, 5.f, 1.f};
+	const uint64_t t0 = 10 * S;
+	bool has_previous_seq = false;
+	float previous_seq = 0.f;
+	uint64_t last_name_pass = 0;
+	int accepted = 0;
+	uint64_t now = t0;
+
+	for (; now < t0 + 3 * S; now += S / 20) {
+		has_previous_seq = keep_previous_seq(has_previous_seq, last_name_pass, now, DATA_TIMEOUT);
+		const uint8_t result = check_input("AF_LOS", frozen, now, now, has_previous_seq, previous_seq, NORM_TOL, DATA_TIMEOUT,
+						   true);
+
+		if (result != auto_follow_status_s::CHECK_NAME) {
+			last_name_pass = now;
+		}
+
+		if (sequence_passed(result)) {
+			has_previous_seq = true;
+			previous_seq = frozen[INPUT_SEQ];
+		}
+
+		accepted += (result == auto_follow_status_s::CHECK_OK) ? 1 : 0;
+	}
+
+	// THEN: only the first sample is accepted, every repetition is CHECK_SEQ (no valid data: KAYIP_BEKLE, then Hold)
+	EXPECT_EQ(accepted, 1);
+	EXPECT_TRUE(keep_previous_seq(has_previous_seq, last_name_pass, now, DATA_TIMEOUT));
+
+	// WHEN: the sender is silent for AF_DATA_TOUT (0.5 s) and restarts with sequence 1, THEN: sequence 1 is accepted
+	const float restarted[INPUT_SIZE] {0.8f, 0.f, 0.6f, 50.f, 1.f, 1.f};
+	now = last_name_pass + S / 2;
+	has_previous_seq = keep_previous_seq(has_previous_seq, last_name_pass, now, DATA_TIMEOUT);
+	EXPECT_FALSE(has_previous_seq);
+	EXPECT_EQ(check_input("AF_LOS", restarted, now, now, has_previous_seq, previous_seq, NORM_TOL, DATA_TIMEOUT, true),
+		  auto_follow_status_s::CHECK_OK);
+}
+
+TEST(AutoFollowGuidanceTest, YawRateLimitPerCycle)
+{
+	// GIVEN: one 50 Hz cycle, at most AF_YAWRATE_MAX (60 deg/s) * dt = 1.2 deg change of the yaw setpoint
+	const float max_change = YAWRATE_MAX * 0.02f;
+
+	// WHEN: the target is 90 deg to the right, THEN: the yaw setpoint turns right by 1.2 deg only
+	EXPECT_NEAR(limit_yaw_change(0.f, M_PI_2_F, max_change), max_change, 1e-6f);
+
+	// WHEN: the target is to the left, THEN: it turns left
+	EXPECT_NEAR(limit_yaw_change(0.f, -M_PI_2_F, max_change), -max_change, 1e-6f);
+
+	// WHEN: from 179.5 deg to -179 deg, THEN: the shorter way across +-180 deg, wrapped (-179.3 deg)
+	const float across = limit_yaw_change(179.5f * M_DEG_TO_RAD_F, -179.f * M_DEG_TO_RAD_F, max_change);
+	EXPECT_NEAR(across, -179.3f * M_DEG_TO_RAD_F, 1e-4f);
+
+	// WHEN: the change is small, THEN: the yaw towards the target is reached
+	EXPECT_NEAR(limit_yaw_change(0.f, 0.01f, max_change), 0.01f, 1e-6f);
+
+	// WHEN: 1 s of 50 Hz cycles, THEN: 60 deg
+	float yaw = 0.f;
+
+	for (int i = 0; i < 50; i++) {
+		yaw = limit_yaw_change(yaw, 170.f * M_DEG_TO_RAD_F, max_change);
+	}
+
+	EXPECT_NEAR(yaw, 60.f * M_DEG_TO_RAD_F, 1e-4f);
+
+	// WHEN: no previous yaw setpoint, THEN: no reference to limit from, the yaw towards the target is used
+	EXPECT_NEAR(limit_yaw_change(NAN, 1.f, max_change), 1.f, 1e-6f);
+}
+
+TEST(AutoFollowGuidanceTest, HoldRequestRetries)
+{
+	// GIVEN: HOLD_ISTENDI is entered at t0, retries 1 s apart, at most 3 requests (tasks 5.2)
+	const uint64_t t0 = 10 * S;
+	const uint8_t max_requests = 3;
+
+	// THEN: the first request is sent at once
+	EXPECT_EQ(hold_action(0, false, false, false, t0, 0, S, max_requests), HoldAction::REQUEST);
+
+	// WHEN: commander rejects it, THEN: no new request before 1 s, a new one at 1 s
+	EXPECT_EQ(hold_action(1, true, false, false, t0 + S - 20000, t0, S, max_requests), HoldAction::NONE);
+	EXPECT_EQ(hold_action(1, true, false, false, t0 + S, t0, S, max_requests), HoldAction::REQUEST);
+
+	// WHEN: the second request is not answered at all, THEN: it is repeated at 1 s as well
+	EXPECT_EQ(hold_action(2, false, false, false, t0 + 2 * S, t0 + S, S, max_requests), HoldAction::REQUEST);
+
+	// WHEN: the third request is rejected, THEN: no fourth request, the failure is reported once
+	EXPECT_EQ(hold_action(3, true, false, false, t0 + 2 * S + 20000, t0 + 2 * S, S, max_requests), HoldAction::REPORT_FAILURE);
+	EXPECT_EQ(hold_action(3, true, false, true, t0 + 10 * S, t0 + 2 * S, S, max_requests), HoldAction::NONE);
+
+	// WHEN: a request is accepted, THEN: nothing more (commander switches to Hold, the mode becomes PASIF)
+	EXPECT_EQ(hold_action(1, true, true, false, t0 + 5 * S, t0, S, max_requests), HoldAction::NONE);
 }

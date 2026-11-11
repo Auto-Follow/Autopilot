@@ -168,6 +168,37 @@ Vector2f limit_change(const Vector2f &previous, const Vector2f &desired, float m
 	return desired;
 }
 
+float limit_yaw_change(float previous, float desired, float max_change)
+{
+	if (!PX4_ISFINITE(previous)) {
+		return desired;
+	}
+
+	const float change = math::constrain(matrix::wrap_pi(desired - previous), -max_change, max_change);
+	return matrix::wrap_pi(previous + change);
+}
+
+HoldAction hold_action(uint8_t request_count, bool answered, bool accepted, bool failure_reported, uint64_t now,
+		       uint64_t last_request, uint64_t retry_interval, uint8_t max_requests)
+{
+	if (request_count == 0) {
+		return HoldAction::REQUEST;
+	}
+
+	if (accepted) {
+		return HoldAction::NONE;
+	}
+
+	// Rejected (TEMPORARILY_REJECTED, Commander.cpp:936-944) or no answer within the retry interval
+	const bool retry_time = (now >= last_request + retry_interval);
+
+	if (request_count < max_requests) {
+		return retry_time ? HoldAction::REQUEST : HoldAction::NONE;
+	}
+
+	return ((answered || retry_time) && !failure_reported) ? HoldAction::REPORT_FAILURE : HoldAction::NONE;
+}
+
 bool update_state(StateMachine &sm, bool mode_active, uint64_t now, uint64_t last_valid, uint64_t last_no_target,
 		  float data_timeout, float lost_timeout)
 {

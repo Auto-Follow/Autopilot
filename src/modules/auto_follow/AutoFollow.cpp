@@ -93,6 +93,7 @@ void AutoFollow::parameters_update(bool force)
 		// QGC shows angles in degrees, the computation uses radians
 		_trk_ang_rad = math::radians(_param_af_trk_ang.get());
 		_min_dep_rad = math::radians(_param_af_min_dep.get());
+		_yawrate_max_rad = math::radians(_param_af_yawrate_max.get());
 	}
 }
 
@@ -239,6 +240,12 @@ void AutoFollow::update_vehicle_state()
 			_status.alt_hold_z += _local_position.delta_z;
 			_filter.reset();
 		}
+
+		// The held / commanded yaw is shifted with an EKF heading reset (as MulticopterPositionControl.cpp:709-711)
+		if (_local_position.heading_reset_counter != _heading_reset_counter) {
+			_heading_reset_counter = _local_position.heading_reset_counter;
+			_yaw_cmd = matrix::wrap_pi(_yaw_cmd + _local_position.delta_heading);
+		}
 	}
 
 	vehicle_attitude_s attitude;
@@ -259,12 +266,13 @@ void AutoFollow::process_input(hrt_abstime now)
 	}
 
 	const float *data = input.data;
-	_has_previous_seq = keep_previous_seq(_has_previous_seq, _last_seq_pass, now, _param_af_data_tout.get());
+	_has_previous_seq = keep_previous_seq(_has_previous_seq, _last_name_pass, now, _param_af_data_tout.get());
 	uint8_t result = check_input(input.name, data, input.timestamp, now, _has_previous_seq, _previous_seq,
 				     _param_af_norm_tol.get(), _param_af_data_tout.get(), _local_position.xy_valid && _local_position.z_valid);
 
 	// Raw AF_LOS values are logged before validation; samples of other debug_array senders are only counted
 	if (result != auto_follow_status_s::CHECK_NAME) {
+		_last_name_pass = now;
 		_status.los_timestamp = input.timestamp;
 		_status.los_frd[0] = data[INPUT_LOS_X];
 		_status.los_frd[1] = data[INPUT_LOS_Y];
@@ -277,7 +285,6 @@ void AutoFollow::process_input(hrt_abstime now)
 	if (sequence_passed(result)) {
 		_has_previous_seq = true;
 		_previous_seq = data[INPUT_SEQ];
-		_last_seq_pass = now;
 	}
 
 	if (result == auto_follow_status_s::CHECK_OK) {
@@ -417,7 +424,7 @@ void AutoFollow::publish_setpoint(hrt_abstime now, float dt, bool lost_state_ent
 		// law -> AF_VEL_MAX -> AF_ACC_MAX
 		_vel_cmd = limit_change(_vel_cmd, constrain_length(guidance.vel_law, _param_af_vel_max.get()),
 					_param_af_acc_max.get() * dt);
-		_yaw_cmd = guidance.yaw;
+		_yaw_cmd = limit_yaw_change(_yaw_cmd, guidance.yaw, _yawrate_max_rad * dt);
 
 		guidance.vel_law.copyTo(_status.vel_cmd_law);
 		_status.range_est = guidance.range_est;
@@ -458,6 +465,68 @@ void AutoFollow::publish_setpoint(hrt_abstime now, float dt, bool lost_state_ent
 
 	_vel_cmd.copyTo(_status.vel_cmd);
 	_status.yaw_cmd = _yaw_cmd;
+}
+
+void AutoFollow::update_hold_request(hrt_abstime now, bool hold_state_entered)
+{
+	// Answers of commander to our request (target = source of the request, Commander.cpp answer_command)
+	vehicle_command_ack_s ack;
+	int tries = vehicle_command_ack_s::ORB_QUEUE_LENGTH;
+
+	while (_vehicle_command_ack_sub.update(&ack) && --tries >= 0) {
+		if (ack.command == vehicle_command_s::VEHICLE_CMD_SET_NAV_STATE && ack.target_system == _system_id
+		    && ack.target_component == _component_id && _hold_request_time != 0 && ack.timestamp >= _hold_request_time) {
+			_hold_answered = true;
+			_hold_accepted = (ack.result == vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED);
+		}
+	}
+
+	if (hold_state_entered) {
+		_status.hold_request_count = 0;
+		_hold_answered = false;
+		_hold_accepted = false;
+		_hold_failure_reported = false;
+	}
+
+	if (!_mode_active || _state_machine.state != auto_follow_status_s::STATE_HOLD_ISTENDI) {
+		return;
+	}
+
+	switch (AutoFollowGuidance::hold_action(_status.hold_request_count, _hold_answered, _hold_accepted, _hold_failure_reported,
+						now, _hold_request_time, HOLD_RETRY_INTERVAL, HOLD_REQUEST_MAX)) {
+	case AutoFollowGuidance::HoldAction::REQUEST:
+		publish_hold_request(now);
+		break;
+
+	case AutoFollowGuidance::HoldAction::REPORT_FAILURE:
+		// The vehicle keeps holding position in this mode; no other mode is requested, the pilot takes over
+		mavlink_log_critical(&_mavlink_log_pub, "AUTO FOLLOW: Hold rejected, holding position");
+		_hold_failure_reported = true;
+		break;
+
+	default:
+		break;
+	}
+}
+
+void AutoFollow::publish_hold_request(hrt_abstime now)
+{
+	// Same as a mode change by the user: source component < COMPONENT_MODE_EXECUTOR_START (Commander.cpp:1559-1562)
+	vehicle_command_s command{};
+	command.command = vehicle_command_s::VEHICLE_CMD_SET_NAV_STATE;
+	command.param1 = vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER;
+	command.target_system = _system_id;
+	command.target_component = _component_id;
+	command.source_system = _system_id;
+	command.source_component = _component_id;
+	command.from_external = false;
+	command.timestamp = now;
+	_vehicle_command_pub.publish(command);
+
+	_hold_request_time = now;
+	_hold_answered = false;
+	_hold_accepted = false;
+	_status.hold_request_count++;
 }
 
 void AutoFollow::clear_guidance_output()
@@ -528,6 +597,8 @@ void AutoFollow::Run()
 
 	if (_vehicle_status_sub.update(&vehicle_status)) {
 		_mode_active = registered() && (vehicle_status.nav_state == static_cast<uint8_t>(_mode_id));
+		_system_id = vehicle_status.system_id;
+		_component_id = vehicle_status.component_id;
 	}
 
 	vehicle_land_detected_s vehicle_land_detected;
@@ -577,6 +648,10 @@ void AutoFollow::Run()
 	} else {
 		clear_guidance_output();
 	}
+
+	// KAYIP_BEKLE -> HOLD_ISTENDI: Hold is requested from commander, repeated if rejected
+	update_hold_request(now, _state_machine.state == auto_follow_status_s::STATE_HOLD_ISTENDI
+			    && previous_state != auto_follow_status_s::STATE_HOLD_ISTENDI);
 
 	publish_status(now);
 
@@ -659,7 +734,9 @@ Input is the line of sight to the target in body FRD from the companion computer
 (MAVLink DEBUG_FLOAT_ARRAY named AF_LOS, uORB debug_array). Every sample is validated;
 the target position on flat ground is estimated with an alpha-beta filter.
 While the mode is active, trajectory_setpoint (horizontal velocity, altitude held at entry,
-yaw towards the target) is published every cycle; on target loss the vehicle holds position.
+yaw towards the target, rate limited by AF_YAWRATE_MAX) is published every cycle. On target loss
+the vehicle holds position; after AF_LOST_T Hold is requested from commander (repeated at most
+3 times at 1 s if rejected). The mode does not resume tracking by itself after Hold.
 auto_follow_status is published every cycle and always logged.
 
 Arming in this mode is refused; take off in another mode and switch to AUTO FOLLOW in the air.

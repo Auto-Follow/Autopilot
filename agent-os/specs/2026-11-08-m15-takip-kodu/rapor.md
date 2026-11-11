@@ -1,10 +1,10 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 7 (Görev grubu 4), 2026-11-11
+> **Sürüm:** 8 (Görev grubu 5), 2026-11-11
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
-> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. **Grup 2 düzeltme turu bitti:** kullanıcının Grup 2 sonrası kararlarıyla filtre uzun veri kesintisinde, Pi'nin sıra no hafızası `AF_DATA_TOUT` sonra sıfırlanıyor; EKF konum sıfırlamasında tutulan nokta kaydırılıyor; 2 test eklendi (9/9 geçti). **Görev grubu 4 (SITL açık çevrim) bitti:** test göndericisi `tez/sitl/af_los_gonder.py` yazıldı; Gazebo'da ön kontroller ve S1a, S1b, S2, S3, S4 (yerinde bekleme kısmı), S5 uçuldu ve loglardan sayıyla ölçüldü; spec'in beklediği değerler görüldü, modül kodunda hata çıkmadı; açık çevrime özgü 2 davranış (S1b salınımı, S3 dönmesi) ve 5 açık soru var (§4.9, §11). PX4'ten Hold isteme Grup 5'te. Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün, sürüm 6 düzeltme turunun, sürüm 7 Grup 4'ün sonucunu anlatır; uygulama sırasında verilen bütün kararlar §5.1'de. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
+> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. **Grup 2 düzeltme turu bitti:** kullanıcının Grup 2 sonrası kararlarıyla filtre uzun veri kesintisinde, Pi'nin sıra no hafızası `AF_DATA_TOUT` sonra sıfırlanıyor; EKF konum sıfırlamasında tutulan nokta kaydırılıyor; 2 test eklendi (9/9 geçti). **Görev grubu 4 (SITL açık çevrim) bitti:** test göndericisi `tez/sitl/af_los_gonder.py` yazıldı; Gazebo'da ön kontroller ve S1a, S1b, S2, S3, S4 (yerinde bekleme kısmı), S5 uçuldu ve loglardan sayıyla ölçüldü; spec'in beklediği değerler görüldü, modül kodunda hata çıkmadı; açık çevrime özgü 2 davranış (S1b salınımı, S3 dönmesi) görüldü; 5 sorusu cevaplandı (§5.1 U4.16–U4.21). **Görev grubu 5 (Hold geçişi) bitti:** hedef kaybında süre dolunca modül PX4'ten Hold istiyor (reddedilirse 1 s arayla en fazla 3 kez, sonra QGC uyarısı); Gazebo'da S4'ün dört varyantı Hold dahil ölçüldü (veri kesilince son geçerli mesajdan Hold'a 1,53 s), Hold'dan sonra mod kendiliğinden açılmıyor, RC anahtarı aç-kapa ve QGC ile yeniden giriliyor; donmuş Pi artık 1,5 s'de Hold'a gidiyor (sıra no kuralı, karar 1a); yeni parametre `AF_YAWRATE_MAX` (60°/s) ile drone 60°/s dönüyor (önce 192°/s); EKF yön sıfırlamasında tutulan yaw kaydırılıyor; 12/12 birim testi; 6C flash %98,53; 3 yeni soru (§11). Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün, sürüm 6 düzeltme turunun, sürüm 7 Grup 4'ün, sürüm 8 Grup 5'in sonucunu anlatır; uygulama sırasında verilen bütün kararlar §5.1'de. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
 
 Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
 
@@ -20,7 +20,7 @@ Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıkt�
 | `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
 | `planning/raw-idea.md` | Görevin ilk tanımı |
 | `planning/visuals/` | İki akış şeması (Mermaid) |
-| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`) |
+| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`, `grup-5-hold-gecisi.md`) |
 
 ---
 
@@ -155,7 +155,10 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | `774583fdbc` | Görev grubu 3: kısa birim testi; rapor sürüm 5 |
 | `909f13ec97` | Grup 2 soruları (filtre sıfırlama, EKF reset kaydırma kararları) |
 | `1ac574d8cb` | Grup 2 düzeltme turu: filtre ve sıra no sıfırlama, EKF reset kaydırma; rapor sürüm 6 |
-| *(bu sürüm)* | Görev grubu 4: test göndericisi, ön kontroller, S1–S5; rapor sürüm 7 |
+| `9c8ad8b523` | Görev grubu 4: test göndericisi, ön kontroller, S1–S5; rapor sürüm 7 |
+| `eecad14a5d` | Grup 0 notu (Vision'a sorulanlar) |
+| `f9901fc725`, `b139307596` | Grup 4 sorularının cevapları (1a sıra no, `AF_YAWRATE_MAX` 60, script'ler yerelde) ve Grup 5 alt görevleri |
+| *(bu sürüm)* | Görev grubu 5: Hold geçişi, S4 tam, yaw sınırı, sıra no inceltmesi; rapor sürüm 8 |
 
 ---
 
@@ -363,6 +366,7 @@ Hepsi QGC'den değiştirilebilir, kod yeniden derlenmez. Ön ek `AF_` (PX4 v1.17
 | `AF_DATA_TOUT` | Veri zaman aşımı | 0.5 s | Pi 10–30 Hz gönderir; 0.5 s, 5–15 kayıp mesaj demek |
 | `AF_LOST_T` | Kayıptan Hold'a | 1.0 s | PX4 offboard kaybı da 1 s (`COM_OF_LOSS_T`); ilk uçuşlarda kısa |
 | `AF_YAW_MIN_D` | Bunun altında yaw sabit | 1 m | Hedef altındayken yön belirsiz |
+| `AF_YAWRATE_MAX` | Burnun en fazla dönüş hızı (Grup 5'te eklendi) | 60°/s | Kullanıcının kararı; PX4'ün otomatik modlarındaki değer (`MPC_YAWRAUTO_MAX`). Bizim mod PX4'ün uçuş görevlerini kullanmadığı için o sınır uygulanmıyordu, drone 200°/s'ye kadar dönüyordu |
 | `AF_TGT_HGT` | Hedef noktası yüksekliği | 1.0 m | İnsanın gövde ortası |
 | `AF_GND_OFS` | Zemin farkı | 0 m | Düz arazi |
 | `AF_NORM_TOL` | Vektör uzunluk toleransı | 0.1 | Bozuk veri yakalayıcı, ince ayar değil |
@@ -386,18 +390,23 @@ Hepsi QGC'den değiştirilebilir, kod yeniden derlenmez. Ön ek `AF_` (PX4 v1.17
 | Bozuk mesaj (NaN, yanlış ad, uzunluk ≠ 1, tekrar eden sıra no, yukarı bakan yön, çok uzak) | Atılır, sayılır, loga yazılır; drone etkilenmez |
 | Görüntü çok eski (yaş > 0.5 s) | Atılır |
 | 0.5 s geçerli veri yok ya da Pi "hedef yok" dedi | KAYIP-BEKLE: drone yerinde bekler (mevcut konum, hız 0, son yaw) |
-| 1.0 s daha veri yok | Hold istenir; takip kendiliğinden başlamaz |
-| Hedef görünmezken moda girildi | Aynı kural, 1.5 s içinde hedef yoksa Hold |
+| 1.0 s daha veri yok | Hold istenir (PX4'e "Hold moduna geç" komutu, pilotun QGC'den seçmesiyle aynı yol); PX4 Hold'a geçer, takip kendiliğinden başlamaz. **SITL'de:** son geçerli mesajdan Hold'a 1,53 s; "hedef yok"tan 1,04 s |
+| Hedef görünmezken moda girildi | Aynı kural, 1.5 s içinde hedef yoksa Hold (**SITL'de** girişten 1,52 s) |
+| Hold'dan sonra veri geri geldi | Drone Hold'da kalır; RC anahtarı yerinde bırakılsa da. Pilot anahtarı başka konuma alıp geri getirir ya da QGC'den seçer (**SITL'de** ikisi de denendi) |
+| Pi donup aynı mesajı tekrarlarsa | Tekrarların hepsi atılır (sıra no artmıyor) → 0.5 s sonra yerinde bekler, 1.5 s'de Hold (karar 1a; **SITL'de** 1,54 s) |
 | Drone'un kendi konumu geçersiz (ör. GPS yok) | Hedef hesaplanmaz, takip yapılmaz; yatay hız 0 istenir |
 | Hız isteği | En fazla 2 m/s, en fazla 3 m/s² ivmeyle değişir |
 | Modül donarsa | PX4 cevap alamadığını fark eder ve kendi failsafe'ini çalıştırır |
 | Pilot | Her an başka moda geçebilir. İlk uçuşta RC'de Position moduna ayrılmış bir anahtar konumu olmalı |
 | Bu modda arm | Yasak. Önce Position'da arm edilip kalkılır, AUTO FOLLOW havada açılır |
 | Yerde arm'lıyken moda geçiş | Engellenir: modül yerdeyken PX4'e "şu an çalışamam" der, PX4 geçişi reddeder (QGC'de mesaj + uyarı sesi). Disarm iken geçiş serbest |
-| Pilot çubuğu oynatırsa | Drone Position moduna geçer (güvenlik amaçlı; SITL'de doğrulanacak) |
-| Hold isteği reddedilirse | Yerinde beklemeye devam eder; 1 s arayla en fazla 3 kez yeniden ister |
+| Pilot çubuğu oynatırsa | Drone Position moduna geçer (güvenlik amaçlı; Grup 4'te SITL'de görüldü) |
+| Hold isteği reddedilirse | Yerinde beklemeye devam eder; 1 s arayla en fazla 3 kez yeniden ister (cevap gelmezse de). Üçü de kabul edilmezse QGC'ye bir kez kritik uyarı düşer (geçici metin `AUTO FOLLOW: Hold rejected, holding position`), drone yerinde beklemeyi sürdürür, modül RTL/iniş istemez; pilot devralır. Ret yolu yalnızca birim testinde sınandı (SITL'de üretilemedi) |
+| Burun dönüşü | En fazla `AF_YAWRATE_MAX` (60°/s); PX4'ün 200°/s sınırı da geçerli (**SITL'de** 59,9°/s) |
+| PX4'ün yön tahmini bir anda düzeltilirse (EKF yön sıfırlaması) | Modülün tuttuğu yaw da aynı açı kadar kaydırılır; drone gereksiz dönmez (konum/irtifa sıfırlamasındaki kaydırmanın devamı) |
 
-- **(doğrulanacak):** Çubuk oynayınca Position'a geçişin gerçekten çalıştığı (SITL ön kontrolü).
+- **Gerçekleşen hâli (Görev grubu 5, 2026-11-11):** tablodaki bütün kayıp ve Hold davranışları kodda; SITL ölçümleri §4.9 ve `implementation/grup-5-hold-gecisi.md`. Hold isteğini PX4 "kullanıcı isteği" sayıyor (gönderen bileşen numarası 1 < 1000, `Commander.cpp:1559-1562`; spec'teki "(doğrulanacak)" doğrulandı).
+- **Masa testinde (disarm, yerde) hedefsiz giriş:** 1,5 s sonra Hold'a geçilir ve Hold'da arm serbesttir (PX4'ün Hold'u arm'ı engellemez, yerde kalkış yapmaz); kullanıcıya soruldu (§11).
 - **İlk uçuş önerisi:** `AF_LOST_T` kısa (1 s), `AF_VEL_MAX` düşük (2 m/s), `AF_K_FF` = 0.
 
 ### 4.8 Loglama
@@ -462,7 +471,11 @@ Bu isteğe kullanıcının bir örneği eşlik etti: Özelleştirilmiş bir Beta
 | 8 | Yeniden başlayan Pi (düzeltme turu, Karar 5b-a): önceki sıra no 1000, sonra sıra no 1 | 0,48 s'de hâlâ `CHECK_SEQ`; **0,5 s'de** önceki numara unutulur, sıra no 1 `CHECK_OK` | Geçti |
 | 9 | Uzun kesintiden sonra filtre (düzeltme turu, Karar 3): hareketli hedef kestirimi, sonra veri yok | 0,48 s'de kestirim hâlâ kullanılır; **0,5 s'de** eskimiş sayılır; sıfırlamadan sonraki ilk ölçümde konum = ölçüm, hız = 0 | Geçti |
 
-Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.**
+| 10 | Donmuş Pi (Grup 5, karar 1a): aynı mesaj (sıra no 5) 3 s, 20 Hz; sonra 0,5 s sessizlik ve sıra no 1 | Yalnızca ilk mesaj kabul, tekrarlar `CHECK_SEQ`; sessizlikten sonra sıra no 1 kabul | Geçti |
+| 11 | Yaw hız sınırı (Grup 5, `AF_YAWRATE_MAX` 60°/s) | çevrim başına 1,2°, kısa yoldan (179,5° → −179,3°), 1 s'de 60° | Geçti |
+| 12 | Hold tekrar kuralı (Grup 5) | ilk istek hemen; ret ya da cevapsızlıkta 1 s sonra tekrar; 3. istekten sonra uyarı bir kez; kabulden sonra hiçbir şey | Geçti |
+
+Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.** Grup 5'ten sonra (2026-11-11): **12 testin 12'si geçti.**
 
 - Birim testinde olmayanlar (yaş, konum, aşağı bakış ve menzil kontrolleri, filtre, yaw donması, hedefsiz giriş) SITL'de (S4, S5) ölçülecek.
 
@@ -491,8 +504,18 @@ Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.**
 | S1b | LOS (0,8; 0; 0,6) | Girişte d = 11,93 m, kural **−1,76 m/s** (geri), kırpma yok; uçarken eğimle salınım, ortalama 1,53 m/s geri | geri ~1,8 m/s | Geçti (salınım gözlemi) | `20_58_51.ulg` |
 | S2 | LOS (0; 0,8; 0,6) | Burun **sağa** döndü ve dönmeyi sürdürdü: ortalama 192°/s, en çok 206°/s (`MC_YAWRATE_MAX` 200°/s) | sağa dönüş | Geçti | `21_00_19.ulg` |
 | S3 | LOS (0,174; 0; 0,985) | Girişte d = 1,61 m, kural −6,93 m/s → **2,00 m/s** geri; yaw donmadı; ~2,5 s sonra kendi etrafında dönmeye başladı | geri, 2 m/s kırpma, yaw donmaz | Geçti (dönme gözlemi) | `21_01_32.ulg` |
-| S4 | Kesinti 1,0 s ve 3,0 s; "hedef yok" 0,5 s ve 3,0 s; hedefsiz giriş | KAYIP_BEKLE kesintiden **0,51 s** sonra, HOLD_ISTENDI **1,51 s** sonra; kısa kesintide takip kendiliğinden sürdü; "hedef yok"ta **bir çevrimde** bekleme, **1,00 s** sonra HOLD_ISTENDI; hedefsiz girişte **1,50 s**; HOLD_ISTENDI'de veri dönünce takibe dönülmedi; beklemede hız isteği 0, drone tutulan noktada (en çok 0,7 m fren payı) | 0,5 / +1,0 s; hemen / 1,0 s; 1,5 s | Geçti (Hold isteği Grup 5) | `21_02_55.ulg` |
+| S4 | Kesinti 1,0 s ve 3,0 s; "hedef yok" 0,5 s ve 3,0 s; hedefsiz giriş | KAYIP_BEKLE kesintiden **0,51 s** sonra, HOLD_ISTENDI **1,51 s** sonra; kısa kesintide takip kendiliğinden sürdü; "hedef yok"ta **bir çevrimde** bekleme, **1,00 s** sonra HOLD_ISTENDI; hedefsiz girişte **1,50 s**; HOLD_ISTENDI'de veri dönünce takibe dönülmedi; beklemede hız isteği 0, drone tutulan noktada (en çok 0,7 m fren payı) | 0,5 / +1,0 s; hemen / 1,0 s; 1,5 s | Geçti (Hold isteği Grup 5'te; sonuç aşağıda) | `21_02_55.ulg` |
 | S5 | Araya karışık ve sürekli: yanlış ad, NaN/Inf, norm, sıra no, eski, ufuk, uzak | Araya karışıkta her tür yalnızca kendi sayacını artırdı, durum hep TAKIP, hız isteği salınım içinde (`uzak` hariç); sürekli bozukta 0,5 s / 1,5 s'de bekleme / HOLD_ISTENDI. İstisnalar: **`sira`** (aynı sıra no sürekli gelince her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor) ve **`ufuk`/`uzak`** (gövdeye sabit yön drone eğilince eşiği geçiyor; kontrol 400 mesajın 400'ünde eşikte doğru karar verdi) | atılır, sayaç artar, drone etkilenmez | Geçti, 3 türde açık çevrim / spec çelişkisi notu | `21_05_34.ulg`, `21_10_47.ulg` |
+
+**SITL sonuçları (Görev grubu 5, 2026-11-11; `AF_LOST_T` = 1,0 s, `AF_YAWRATE_MAX` = 60°/s, son kodla):** ayrıntı `implementation/grup-5-hold-gecisi.md` Bölüm 4.
+
+| # | Script ne gönderdi | Drone ne yaptı / ölçülen | Beklenen | Sonuç | ULog |
+|---|---|---|---|---|---|
+| S4 tam | Kesinti 1,0 s ve 3,0 s; "hedef yok" 0,5 s ve 3,0 s; hedefsiz giriş | Uzun kesintide son geçerli mesajdan **Hold'a (`nav_state = 4`) 1,528 s**; uzun "hedef yok"ta ilk bayraktan **1,036 s**; hedefsiz girişte girişten **1,524 s**; kısa kesinti ve kısa "hedef yok"ta Hold yok, takip sürdü. Her Hold'da tek istek, PX4 kabul etti (istekten Hold'a 20–24 ms), istek "User" kaynaklı (1/1). Hold'dan sonra veri dönse de mod açılmadı. Hold'da drone yerinde (≤ 0,26 m) | ≈ 1,5 s; 1,0 s; 1,5 s; Hold'dan sonra dönüş yok | Geçti | `19_18_27.ulg` |
+| Yeniden giriş (5.6) | Hold'dan sonra RC anahtarı yerinde, veri geçerli; sonra anahtar aç-kapa; sonra yine Hold ve QGC komutu | Anahtar yerindeyken 5,9 s Hold sürdü; aç-kapa ile AUTO FOLLOW'a döndü ve takibe başladı; QGC komutuyla da döndü | Anahtarı yerinde bırakmak yetmez; aç-kapa ve QGC ile giriş | Geçti | `19_22_03.ulg` |
+| Donmuş Pi | `--senaryo sira`: 3 s boyunca hep aynı sıra no | 30 tekrarın 30'u atıldı; son geçerliden 0,52 s'de bekleme, **1,54 s'de Hold** (Grup 4'te Hold'a hiç gitmiyordu) | 0,5 s / 1,5 s (karar 1a) | Geçti | `19_20_46.ulg` |
+| S2 tekrarı | LOS (0; 0,8; 0,6) | Komut edilen yaw **tam 60,0°/s**, drone **59,9°/s** sağa döndü (Grup 4'te 192°/s); yön komutun ~22° gerisinden | ≈ 60°/s | Geçti | `19_25_29.ulg` |
+| Masada hedefsiz giriş (bilgi) | Yerde, disarm, AUTO FOLLOW, veri yok | 1,52 s sonra Hold; Hold'da arm kabul edildi, drone yerde kaldı | U4.20: 1,5 s'de Hold | Görüldü (soru §11) | `19_23_53.ulg` |
 
 - **Kapalı çevrim kısa kontrolü** (`20_48_09.ulg`): 20 m öndeki hayali hedefe 4,5 s'de 15,5 m'ye geldi, aşım 0,04 m, son 10 s'de hata −0,006 ± 0,02 m. Ayrıntılı ölçüm S6'da.
 - **Açık çevrimin doğası:** LOS gövdeye sabit; drone eğildikçe aynı gövde yönü dünyada başka açıya denk gelir. Spec'in sayıları drone düzken (moda girişte) birebir görüldü; uçarken eğim yüzünden kaydı (S1b salınımı, S3 dönmesi, S5 `ufuk`/`uzak`). Kod hatası değil; gerçek uçuşta kamera bu eğimi görüntüde görür.
@@ -528,7 +551,8 @@ Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.**
 - **Flash:** 6C'nin flash'ı ~%98 dolu. Derleme çıktısındaki kullanım spec'e yazılır. Taşarsa Hüseyin'e haber verilir; modül kapatarak yer açılmaz (o iş m14). Not: `CONSTRAINED_FLASH` ayarı açılırsa `DEBUG_FLOAT_ARRAY` işleyicisi derlemeden çıkar (`mavlink_receiver.cpp:284-305`), yani m14'te dikkat edilmeli.
 - **Flash ölçümü (Grup 1 sonu):** modül yokken 1 926 408 B (%97,98), iskelet + 16 parametreyle **1 931 164 B / 1920 KB (%98,22)**; artış **+4 756 B**, boş kalan ~34 KB. Grup 2 (guidance, filtre, log mesajı) bunun üstüne eklenecek.
 - **Flash ölçümü (Grup 2 sonu):** **1 936 100 B / 1920 KB (%98,48)**; Grup 1'e göre artış **+4 936 B**, boş kalan ~29 KB (29 980 B).
-- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. **Grup 2'de yazılanlar:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane), `AlphaBetaFilter.hpp`, `AutoFollow.cpp/.hpp`'ye girdi, setpoint ve log; `msg/AutoFollowStatus.msg`; `msg/CMakeLists.txt` ve `logged_topics.cpp`'ye birer satır. **Grup 3'te yazılanlar:** `AutoFollowGuidanceTest.cpp` ve `CMakeLists.txt`'e `px4_add_unit_gtest` satırı (firmware'e girmez, flash değişmedi).
+- **Flash ölçümü (Grup 5 sonu):** **1 937 252 B / 1920 KB (%98,53)**; Grup 2 düzeltme turuna göre (1 936 260 B) artış **+992 B**, boş kalan ~28 KB (28 828 B). Taşma yok.
+- **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. **Grup 2'de yazılanlar:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane), `AlphaBetaFilter.hpp`, `AutoFollow.cpp/.hpp`'ye girdi, setpoint ve log; `msg/AutoFollowStatus.msg`; `msg/CMakeLists.txt` ve `logged_topics.cpp`'ye birer satır. **Grup 3'te yazılanlar:** `AutoFollowGuidanceTest.cpp` ve `CMakeLists.txt`'e `px4_add_unit_gtest` satırı (firmware'e girmez, flash değişmedi). **Grup 5'te değişenler:** yalnızca `src/modules/auto_follow/` içindeki dosyalar (`AutoFollow.cpp/.hpp`, `AutoFollowGuidance.cpp/.hpp`, `AutoFollowGuidanceTest.cpp`, `module.yaml`); kilitli diğer yollara dokunulmadı.
 
 ---
 
@@ -678,6 +702,24 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | U4.20 | Hedefsiz girişte Hold (Grup 5'ten sonra) | — | Masa testinde hedefsiz moda girilirse 1,5 s sonra Hold istenir | A3 ile tutarlı. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
 | U4.21 | Sıra no hep aynı gelirse (donmuş Pi) | a) önceki numara yalnızca tam sessizlikte (`AF_DATA_TOUT` boyunca hiç `AF_LOS` yok) unutulsun · b) böyle kalsın (5b-a) · c) a + moda her girişte unut | **a** (Grup 5) | Şu anki kuralla donmuş Pi'nin tekrarladığı mesaj her 0,5 s'de bir kabul ediliyor, drone Hold'a geçmiyor (S5 `sira`); yaş kontrolü yakalamıyor. (a) ile tekrarlar hep atılır → 1,5 s'de Hold; yeniden başlayan Pi saniyelerce sustuğu için yine kabul edilir. Kullanıcı: "1a" (2026-11-11) | Kullanıcı |
 
+**Görev grubu 5 (Hold geçişi, yaw sınırı, sıra no inceltmesi, yön sıfırlaması)** — ayrıntı `implementation/grup-5-hold-gecisi.md` Bölüm 2, 5 ve 8. Kullanıcının bu gruba giren kararları önceden verilmişti (Hold reddi "tamam", D5-a, 1a, `AF_YAWRATE_MAX` 60); aşağıdakiler uygulamada çıkan noktalardır:
+
+| # | Konu | Seçenekler | Seçilen | Neden | Kim karar verdi |
+|---|---|---|---|---|---|
+| G5.1 | Hold isteğinin göndereni (`source_system` / `source_component`) | PX4'ün kendi kimliği (`vehicle_status`) · ayrı bir numara | PX4'ün kimliği (SITL'de 1/1), hedef de aynı | PX4'ün navigator modülü de böyle gönderir (`navigator_main.cpp:1404-1409`); 1 < 1000 olduğu için commander "User" sayar (`Commander.cpp:1559-1562`; spec'teki "(doğrulanacak)" kaynakta ve SITL'de doğrulandı). "User" yalnızca mode executor'ları ilgilendirir (`ModeManagement.cpp:424-429`) | Kod içi |
+| G5.2 | PX4'ün cevabı nasıl tanınır? | — | Komut `SET_NAV_STATE`, cevabın hedefi bizim gönderen kimliğimiz, zamanı istekten sonra | Commander cevabı komutu gönderene adresler (`Commander.cpp:2673-2680`); başka bir `SET_NAV_STATE` gönderen PX4 içinde yok | Kod içi |
+| G5.3 | 1 s içinde cevap gelmezse | bekle · reddedilmiş gibi tekrar et | Tekrar et (3 istek sınırı aynı) | Commander her komuta cevap verir; cevap kuyruğu 4 mesajlık (`VehicleCommandAck.msg:26`), kaybolursa drone sonsuza dek HOLD_ISTENDI'de beklemesin. Tekrarlanan Hold isteği zararsız | Kod içi (tasks 5.2 yalnızca "ret" diyordu; sapma olarak notta) |
+| G5.4 | `hold_request_count` ne zaman sıfırlanır? | açılıştan beri say · her HOLD_ISTENDI döneminde sıfırdan | Her dönemin başında 0, ilk istekle 1; PASIF'te son değer kalır | Sözlükteki "normalde 1, reddedilirse en fazla 3" anlatımı dönem başına sayımı gerektiriyor | Kod içi |
+| G5.5 | 3 istekten sonra QGC uyarısının metni | — | **Geçici:** `AUTO FOLLOW: Hold rejected, holding position` (İngilizce, 44 karakter; QGC + konsol + ULog) | Kararda metin yok; en sade hâl yazıldı | **Kullanıcıya soruldu** (§11, notun soru 1'i) |
+| G5.6 | Uyarı PX4 "event" sistemiyle de gitsin mi? Sonda sekme (`\t`) olsun mu? | — | Hayır; sekme yok | Event flash ve olay tanımı ister; PX4'te sondaki sekme "aynı mesaj event olarak da geliyor" demek, bizde event olmadığı için konmadı | Kod içi (event seçeneği soru 1c'de soruldu) |
+| G5.7 | Tekrar kuralının yeri | modülün içinde · saf fonksiyon | Saf fonksiyon `hold_action` (`AutoFollowGuidance`), birim testli | Ret SITL'de üretilemedi; kural zamanı argüman alan fonksiyonla test edilebiliyor (spec Bölüm 11 ilkesi). Kod içi ad, sözlüğe girmez | Kod içi |
+| G5.8 | Yaw sınırının uygulandığı yer | — | Yalnızca TAKIP'te, guidance'ın yaw'ına; KAYIP_BEKLE / HOLD_ISTENDI'de yaw zaten sabit. Önceki yaw yoksa (NaN) sınır uygulanmaz, hedef açı kullanılır | Moda girişte başlangıç zaten o anki yön (`vehicle_local_position.heading`, EKF hep sonlu yayınlar); NaN durumu pratikte olmaz | Kod içi |
+| G5.9 | `AF_YAWRATE_MAX`'ın `module.yaml` biçimi | — | `decimal: 0`, birim `deg/s`, İngilizce açıklamada `MC_YAWRATE_MAX`'ın da geçerli olduğu yazılı | `MPC_YAWRAUTO_MAX`'ın biçimi (`multicopter_autonomous_params.c:140-148`); ad, değer, aralık kullanıcının | Kod içi |
+| G5.10 | Yön sıfırlamasında yaw kaydırma ne zaman? Filtre? | — | Her sıfırlamada (mod kapalıyken de; girişte yaw zaten o anki yöne kurulur). Filtre sıfırlanmaz | Karar D5-a yalnızca yaw diyor; filtrenin de sıfırlanması **kullanıcıya soruldu** (§11, notun soru 3'ü) | Kod içi + soru |
+| G5.11 | Sıra no "sessizlik" zamanı (karar 1a'nın uygulanması) | — | Ad kontrolünü geçen son mesajın işlendiği çevrimden sayılır (yeni iç değişken; eskisinin yerine). Unutma bir sonraki mesaj işlenirken uygulanır (D2 ile aynı) | Kullanıcıya görünen ad eklenmez; birim testli | Kod içi |
+| G5.12 | Disarm iken hedefsiz girişte Hold | — | Şimdiki hâl: 1,5 s'de Hold istenir (U4.20); Hold'da arm serbest kalıyor (PX4'ün Hold'u arm'ı engellemez, `mode_requirements.cpp:110-124`; yerde kalkış yapmaz, `loiter.cpp:93-94`) | SITL'de görüldü; yan etki | **Kullanıcıya soruldu** (§11, notun soru 2'si) |
+| G5.13 | SITL test yardımcıları (repo dışı, `~/m15-sitl-araclari/`) | — | `run.sh` aynı adlı logun üstüne yazmaz ve `AD.py` varsa onu çalıştırır; yeni `hold_yeniden_giris.py`, `hold_disarm.py`, `analiz_hold.py`, `analiz_s2.py`; `senaryo.py S5sira` | Masaüstündeki loglar korunsun; yeni testler | Kod içi |
+
 ---
 
 ## 6. Varsayımlar (ortak spec'ler yazılınca güncellenecek)
@@ -782,14 +824,13 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 Grup 1'in 3 sorusu (QGC grup adı, lisans başlığı, `module.yaml` dili) ve Grup 2'nin 6 sorusu cevaplandı; seçilenler §5.1'de.
 
 Uygulamadan açık kalan:
-- **Grup 4'ten 5 soru** (`implementation/grup-4-sitl-acik-cevrim.md` Bölüm 9). Kullanıcının cevapları (2026-11-11), ayrıntı §5.1 U4.16–U4.20:
-  1. **Sıra no sürekli aynı gelirse** (donmuş Pi): Karar 5b-a gereği her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor; spec S5'teki "uzun bozuk veri hedef kaybı yoluna girer" cümlesiyle çelişiyor. Ayrıntılı anlatıldı; **karar (a)**: önceki numara yalnızca tam sessizlikte unutulur (§5.1 U4.21), Grup 5'te.
-  2. `AF_YAW_MIN_D` = 1 m kalır, S6–S7'de bakılır (**karar**).
-  3. **Ayrı yaw hız sınırı `AF_YAWRATE_MAX` = 60°/s Grup 5'te eklenecek** (karar).
-  4. Bağlantı adresi `udpin:0.0.0.0:14540` onaylandı (**karar**).
-  5. Test akışı script'leri repoya girmez, `~/m15-sitl-araclari/`'da kalıcı durur (**karar**).
-- **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor).
-- **EKF yön (heading) sıfırlaması:** karar verildi (§5.1 D5, a): tutulan yaw `delta_heading` kadar kaydırılacak; **Grup 5'te uygulanacak**.
+- Grup 4'ün 5 sorusu cevaplandı ve uygulandı (§5.1 U4.16–U4.21; sıra no karar 1a ve `AF_YAWRATE_MAX` Grup 5'te). EKF yön sıfırlamasında yaw kaydırma (D5) Grup 5'te uygulandı.
+- **Grup 5'ten 3 soru** (`implementation/grup-5-hold-gecisi.md` Bölüm 8):
+  1. **Hold 3 istekte de kabul edilmezse QGC uyarısının metni** (§5.1 G5.5): (a) geçici metin `AUTO FOLLOW: Hold rejected, holding position` kalsın · (b) başka metin · (c) (a) + PX4 event. Öneri (a).
+  2. **Masada (disarm) hedefsiz girişte Hold'a geçiliyor ve Hold'da arm serbest** (§5.1 G5.12): (a) böyle kalsın · (b) disarm iken Hold isteme · (c) yerdeyken Hold isteme. Öneri (a).
+  3. **EKF yön sıfırlamasında filtre de sıfırlansın mı?** (§5.1 G5.10): (a) hayır (şimdiki) · (b) evet (bir satır). Öneri (b).
+- **Bilgi:** Hold reddi yolu (3 istek, QGC uyarısı) SITL'de üretilemedi, yalnızca birim testinde sınandı; EKF yön sıfırlaması SITL'de olmadı (ikisi de doğrulanacak).
+- **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor); Hold'a geçişin QGC'de nasıl göründüğü.
 
 Bekleyen dış bağımlılıklar:
 - Hüseyin: 7 kilitli yol için onay.
@@ -809,7 +850,7 @@ Bekleyen dış bağımlılıklar:
    2. guidance, alpha-beta ve log mesajı — **bitti (2026-11-10)**, not: `implementation/grup-2-guidance-filtre-log.md`
    3. kısa birim testi — **bitti (2026-11-10)**, not: `implementation/grup-3-birim-testi.md`
    4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı) — **bitti (2026-11-11)**, not: `implementation/grup-4-sitl-acik-cevrim.md`
-   5. Hold geçişi, S4'ün tamamı
+   5. Hold geçişi, S4'ün tamamı — **bitti (2026-11-11)**, not: `implementation/grup-5-hold-gecisi.md`
    6. S6–S7, analiz script'i ve sözlüğün son eşitlemesi (log mesajı Grup 2'ye taşındı ve yazıldı)
 
    Her görev grubundan sonra ne yapıldığı, neden yapıldığı ve nasıl test edildiği bu rapora ve spec klasörüne sade dille yazılır.
@@ -863,3 +904,4 @@ Bekleyen dış bağımlılıklar:
 | 5 | 2026-11-10 | Görev grubu 3 (kısa birim testi): `AutoFollowGuidanceTest.cpp`, 7 test (geometri 12,0 m, kural −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s zaman aşımı, hedef yok), hepsi geçti; kod değişmedi, hata bulunmadı; §4.9'a sonuç tablosu; flash değişmedi (%98,48) |
 | 6 | 2026-11-10 | Grup 2 düzeltme turu (kullanıcının Grup 2 sonrası kararları): filtre `AF_DATA_TOUT` boyunca geçerli veri yoksa sıfırlanır (3), EKF konum sıfırlamasında tutulan nokta `delta_xy` / `delta_z` kadar kaydırılır (4), sıra no hafızası `AF_DATA_TOUT` sonra unutulur (5b-a), spec'teki `perf` cümlesi düzeltildi (2-a); 1-a, 5a, 6 kod değişikliği yok. 2 test eklendi (9/9 geçti); 6C flash +160 B (%98,48). Yeni §5.1 "Uygulamada verilen kararlar": Grup 1–3 ve bu turun bütün uygulama kararları; §4.5 ve §11 güncellendi |
 | 7 | 2026-11-11 | Görev grubu 4 (SITL açık çevrim): test göndericisi `tez/sitl/af_los_gonder.py` (bağlantı varsayılanı `udpin:0.0.0.0:14540` olarak düzeltildi); ön kontroller (mod 23, arm ve geçiş kuralları, giriş/çıkışta setpoint, RC anahtarı ve çubuğu, MAVLink 2) ve S1a–S5 sonuçları §4.9'da (ULog adlarıyla); modül kodu değişmedi; §5.1'e Grup 4 uygulama kararları (U4.1–U4.15); §11'e 5 yeni soru; RC anahtarı cümlesi düzeltildi (`COM_FLTMODEx` = 100) |
+| 8 | 2026-11-11 | Görev grubu 5 (Hold geçişi): hedef kaybında PX4'ten Hold isteği (1 s arayla en fazla 3, sonra QGC uyarısı; isteğin "User" sayıldığı doğrulandı), `AF_YAWRATE_MAX` (60°/s), sıra no kuralı karar 1a, EKF yön sıfırlamasında yaw kaydırma (D5-a); §4.6, §4.7 gerçekleşen hâliyle; §4.9'a 3 birim testi (12/12) ve Grup 5 SITL sonuçları (S4 tam: Hold'a 1,53 s / 1,04 s / 1,52 s; Hold sonrası RC anahtarı ve QGC ile yeniden giriş; donmuş Pi 1,54 s'de Hold; S2 60°/s; masada hedefsiz giriş); 6C flash %98,48 → %98,53 (+992 B); §5.1'e G5.1–G5.13; §11'den Grup 4 soruları ve D5 kaldırıldı, Grup 5'in 3 sorusu eklendi |

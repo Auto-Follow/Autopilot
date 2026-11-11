@@ -121,6 +121,19 @@ parameters:
         max: 10.0
         decimal: 1
 
+      AF_YAWRATE_MAX:
+        description:
+          short: Maximum yaw rate of the yaw request
+          long: |
+            The yaw setpoint towards the target changes at most by this rate.
+            The attitude controller limit MC_YAWRATE_MAX still applies.
+        type: float
+        unit: deg/s
+        default: 60.0
+        min: 5.0
+        max: 200.0
+        decimal: 0
+
       AF_TGT_HGT:
         description:
           short: Height of the tracked point on the target

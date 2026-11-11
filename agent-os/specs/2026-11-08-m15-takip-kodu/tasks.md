@@ -8,7 +8,7 @@
 
 ## Genel bakış
 
-Toplam: 7 görev grubu (0–6), 86 alt görev (0: 6 · 1: 14 · 2: 23, geri dönüş 2.LF dahil · 3: 6 · 4: 14 · 5: 11 · 6: 12). 2026-11-10: log mesajı Grup 6'dan Grup 2'ye taşındı (kullanıcı "1-a").
+Toplam: 7 görev grubu (0–6), 89 alt görev (0: 6 · 1: 14 · 2: 23, geri dönüş 2.LF dahil · 3: 6 · 4: 14 · 5: 14, 2026-11-11 eklenen 5.A–5.C dahil · 6: 12). 2026-11-10: log mesajı Grup 6'dan Grup 2'ye taşındı (kullanıcı "1-a").
 
 | Grup | Ne | Kim | Bağımlılık |
 |---|---|---|---|
@@ -266,27 +266,28 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
 - **Neden:** Spec Bölüm 7 (hedef kaybı D, kullanıcı "önemli" dedi; C2: Hold reddinde 1 s arayla en fazla 3 tekrar; A4).
 - **Nasıl kontrol edilir:** S4'te son geçerli örnekten `nav_state = 4`'e kadar geçen süre ULog'dan ölçülür.
 
-- [ ] 5.0 Hold geçişini tamamla
-  - [ ] 5.1 HOLD_ISTENDI'ye geçişte `vehicle_command` yayınlanır: `command = VEHICLE_CMD_SET_NAV_STATE` (`msg/versioned/VehicleCommand.msg:114`), `param1 = NAVIGATION_STATE_AUTO_LOITER` (`VehicleStatus.msg:40`), hedef sistem/bileşen `vehicle_status.system_id/component_id` (`VehicleStatus.msg:118-119`; süzgeç `Commander.cpp:746-747`; işleme `:936-944`). `source_component < 1000` olmalı ki istek "User" sayılsın (`Commander.cpp:1559-1562`) **(doğrulanacak)**.
-  - [ ] 5.2 `vehicle_command_ack` izlenir; `TEMPORARILY_REJECTED` gelirse hover sürer ve istek **1 s arayla en fazla 3 kez** tekrarlanır (C2). Gönderilen istek sayısı `hold_request_count` alanına yazılır. **3 denemeden sonra da reddedilirse (Karar 2026-11-10, kullanıcı "tamam"):** drone yerinde beklemeye (hover) devam eder, durum HOLD_ISTENDI'de kalır; QGC'ye uyarı düşer (`mavlink_log_critical`, bir kez) ve logda görünür (`hold_request_count` = 3, `state` = HOLD_ISTENDI); pilot RC ile devralır. Modül kendi başına RTL, iniş ya da başka bir mod istemez.
-  - [ ] 5.3 PX4 Hold'a geçince (`nav_state` artık bizim mod değil) durum PASIF olur, setpoint durur; takibe **kendiliğinden dönülmez** (C reddedildi).
-  - [ ] 5.A **EKF yön sıfırlamasında tutulan yaw kaydırılır** (Karar D5-a, 2026-11-10): `vehicle_local_position.heading_reset_counter` değişince tutulan/komut edilen yaw (`_yaw_cmd`) `delta_heading` kadar kaydırılır (PX4 kalıbı `MulticopterPositionControl.cpp:709-711`; konum kaydırmasının, karar 4, yanına).
-  - [ ] 5.B **Sıra no "önceki numara" yalnızca tam sessizlikte unutulur** (Karar 1a, 2026-11-11; 5b-a'nın inceltilmesi): önceki numara, `AF_DATA_TOUT` boyunca **hiç `AF_LOS` adlı mesaj gelmezse** (1. kontrolü geçen mesaj; sonraki kontrollerde atılsa bile sessizliği bozar) unutulur. Donmuş Pi aynı mesajı tekrarlarsa hepsi `CHECK_SEQ` ile atılır → 0.5 s'de KAYIP_BEKLE, 1.5 s'de Hold. Birim testine bu durum eklenir. SITL: `--senaryo sira` uzun bölümünde Hold görülür.
-  - [ ] 5.C **Yaw hız sınırı parametresi `AF_YAWRATE_MAX`** (Karar 2026-11-11; ad ve değer kullanıcının): varsayılan **60°/s**, aralık **5–200°/s**, QGC grubu `AUTO FOLLOW`, İngilizce açıklama. Her çevrimde komut edilen yaw en fazla `AF_YAWRATE_MAX × dt` kadar değişir (açı farkı ±π'ye sarılarak). Yeni log alanı yok (`yaw_cmd` sınırlanmış değeri gösterir). Kanıt: PX4 otomatik modlarında `MPC_YAWRAUTO_MAX` = 60°/s (`multicopter_autonomous_params.c:148`, `FlightTaskAuto.cpp:306-307`); bizim modda yalnızca `MC_YAWRATE_MAX` = 200°/s (`mc_att_control_params.c:147`). Birim testi; SITL'de S2 tekrarlanır (beklenen ≈ 60°/s).
-  - [ ] 5.4 Derleme: `make px4_sitl` ve `make px4_fmu-v6c_default`, flash kaydı; `make tests TESTFILTER=AutoFollowGuidance` yeşil.
-  - [ ] 5.5 **S4 tam** (Grup 4.2 oturum adımlarıyla, `AF_LOST_T` = 1.0 s; kullanılan değer kayda yazılır):
+- [x] 5.0 Hold geçişini tamamla
+  - [x] 5.1 HOLD_ISTENDI'ye geçişte `vehicle_command` yayınlanır: `command = VEHICLE_CMD_SET_NAV_STATE` (`msg/versioned/VehicleCommand.msg:114`), `param1 = NAVIGATION_STATE_AUTO_LOITER` (`VehicleStatus.msg:40`), hedef sistem/bileşen `vehicle_status.system_id/component_id` (`VehicleStatus.msg:118-119`; süzgeç `Commander.cpp:746-747`; işleme `:936-944`). `source_component < 1000` olmalı ki istek "User" sayılsın (`Commander.cpp:1559-1562`) **(doğrulanacak)**.
+  - [x] 5.2 `vehicle_command_ack` izlenir; `TEMPORARILY_REJECTED` gelirse hover sürer ve istek **1 s arayla en fazla 3 kez** tekrarlanır (C2). Gönderilen istek sayısı `hold_request_count` alanına yazılır. **3 denemeden sonra da reddedilirse (Karar 2026-11-10, kullanıcı "tamam"):** drone yerinde beklemeye (hover) devam eder, durum HOLD_ISTENDI'de kalır; QGC'ye uyarı düşer (`mavlink_log_critical`, bir kez) ve logda görünür (`hold_request_count` = 3, `state` = HOLD_ISTENDI); pilot RC ile devralır. Modül kendi başına RTL, iniş ya da başka bir mod istemez.
+  - [x] 5.3 PX4 Hold'a geçince (`nav_state` artık bizim mod değil) durum PASIF olur, setpoint durur; takibe **kendiliğinden dönülmez** (C reddedildi).
+  - [x] 5.A **EKF yön sıfırlamasında tutulan yaw kaydırılır** (Karar D5-a, 2026-11-10): `vehicle_local_position.heading_reset_counter` değişince tutulan/komut edilen yaw (`_yaw_cmd`) `delta_heading` kadar kaydırılır (PX4 kalıbı `MulticopterPositionControl.cpp:709-711`; konum kaydırmasının, karar 4, yanına).
+  - [x] 5.B **Sıra no "önceki numara" yalnızca tam sessizlikte unutulur** (Karar 1a, 2026-11-11; 5b-a'nın inceltilmesi): önceki numara, `AF_DATA_TOUT` boyunca **hiç `AF_LOS` adlı mesaj gelmezse** (1. kontrolü geçen mesaj; sonraki kontrollerde atılsa bile sessizliği bozar) unutulur. Donmuş Pi aynı mesajı tekrarlarsa hepsi `CHECK_SEQ` ile atılır → 0.5 s'de KAYIP_BEKLE, 1.5 s'de Hold. Birim testine bu durum eklenir. SITL: `--senaryo sira` uzun bölümünde Hold görülür.
+  - [x] 5.C **Yaw hız sınırı parametresi `AF_YAWRATE_MAX`** (Karar 2026-11-11; ad ve değer kullanıcının): varsayılan **60°/s**, aralık **5–200°/s**, QGC grubu `AUTO FOLLOW`, İngilizce açıklama. Her çevrimde komut edilen yaw en fazla `AF_YAWRATE_MAX × dt` kadar değişir (açı farkı ±π'ye sarılarak). Yeni log alanı yok (`yaw_cmd` sınırlanmış değeri gösterir). Kanıt: PX4 otomatik modlarında `MPC_YAWRAUTO_MAX` = 60°/s (`multicopter_autonomous_params.c:148`, `FlightTaskAuto.cpp:306-307`); bizim modda yalnızca `MC_YAWRATE_MAX` = 200°/s (`mc_att_control_params.c:147`). Birim testi; SITL'de S2 tekrarlanır (beklenen ≈ 60°/s).
+  - [x] 5.4 Derleme: `make px4_sitl` ve `make px4_fmu-v6c_default`, flash kaydı; `make tests TESTFILTER=AutoFollowGuidance` yeşil.
+  - [x] 5.5 **S4 tam** (Grup 4.2 oturum adımlarıyla, `AF_LOST_T` = 1.0 s; kullanılan değer kayda yazılır):
     - gönderim kesilir → 0.5 s sonra KAYIP_BEKLE (hover), +1.0 s sonra `nav_state = 4` (toplam ≈ 1.5 s);
     - 1.0 s dolmadan geri gelir → takip kendiliğinden sürer, Hold yok;
     - `data[5] = 0` → hemen KAYIP_BEKLE, 1.0 s sonra Hold;
     - hedefsiz moda giriş → girişten 1.5 s sonra Hold.
 
     Ölçüm: son geçerli örnek ↔ `vehicle_status.nav_state = 4` arası süre, `vehicle_command` (istek anı), `trajectory_setpoint`. Hold'un kaynağının "User" görünüp görünmediği not edilir (5.1 doğrulaması).
-  - [ ] 5.6 Kalan ön kontrol: Hold'dan sonra RC anahtarını başka konuma alıp geri getirerek ve QGC'den tek tıkla yeniden giriş; anahtarı yerinde bırakmanın yetmediği görülür (`ManualControl.cpp:176-177`).
-  - [ ] 5.7 Her ULog `~/Desktop/AUTO-FOLLOW LOG/`'a kopyalanır; **ne verildi, drone ne yaptı, ULog adı** yazılır; parametre dosyası her testten önce/sonra sıfırlanır.
-  - [ ] 5.8 `tez/pin/verify_pin.sh --worktree`: yalnızca 7 yoldan değişenler.
-  - [ ] 5.9 `log-sozlugu.md`: `STATE_HOLD_ISTENDI` ve `hold_request_count` satırları kodla doğrulanır; **`AF_YAWRATE_MAX` satırı eklenir**; sıra no kuralının (5.B) anlatımı güncellenir; `spec.md` parametre tablosu ve Bölüm 2 (kontrol 4) aynı şekilde güncellenir (aynı commit).
-  - [ ] 5.10 `rapor.md` (§4.7 güvenlik davranışları gerçekleşen hâliyle, S4 sonuçları, flash, belge geçmişi) ve görev grubu notu.
-  - [ ] 5.11 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 5 — Hold geçişi, S4 tam, yaw sınırı, sıra no inceltmesi`.
+  - [x] 5.6 Kalan ön kontrol: Hold'dan sonra RC anahtarını başka konuma alıp geri getirerek ve QGC'den tek tıkla yeniden giriş; anahtarı yerinde bırakmanın yetmediği görülür (`ManualControl.cpp:176-177`).
+  - [x] 5.7 Her ULog `~/Desktop/AUTO-FOLLOW LOG/`'a kopyalanır; **ne verildi, drone ne yaptı, ULog adı** yazılır; parametre dosyası her testten önce/sonra sıfırlanır.
+  - [x] 5.8 `tez/pin/verify_pin.sh --worktree`: yalnızca 7 yoldan değişenler.
+  - [x] 5.9 `log-sozlugu.md`: `STATE_HOLD_ISTENDI` ve `hold_request_count` satırları kodla doğrulanır; **`AF_YAWRATE_MAX` satırı eklenir**; sıra no kuralının (5.B) anlatımı güncellenir; `spec.md` parametre tablosu ve Bölüm 2 (kontrol 4) aynı şekilde güncellenir (aynı commit).
+  - [x] 5.10 `rapor.md` (§4.7 güvenlik davranışları gerçekleşen hâliyle, S4 sonuçları, flash, belge geçmişi) ve görev grubu notu.
+  - [x] 5.11 Commit: `2026-11-08-m15-takip-kodu: Görev grubu 5 — Hold geçişi, S4 tam, yaw sınırı, sıra no inceltmesi`.
+  - Sonuç (2026-11-11): Hold isteği, tekrar ve QGC uyarısı (geçici metin), yön sıfırlamasında yaw kaydırma, sıra no kuralı 1a ve `AF_YAWRATE_MAX` yazıldı; birim testi 12/12; 6C flash 1 937 252 B (%98,53, +992 B). SITL (son kodla): S4 tam — son geçerliden Hold'a 1,528 s, "hedef yok"tan 1,036 s, hedefsiz girişten 1,524 s, kısa kesintide Hold yok, Hold'dan sonra kendiliğinden dönüş yok (`19_18_27.ulg`); Hold sonrası RC anahtarı aç-kapa ve QGC ile yeniden giriş, anahtarı yerinde bırakmak yetmedi (`19_22_03.ulg`); donmuş Pi 1,540 s'de Hold (`19_20_46.ulg`); S2 60°/s (`19_25_29.ulg`); masada hedefsiz giriş (`19_23_53.ulg`). İstek "User" sayılıyor (5.1 doğrulandı). Ret yolu SITL'de üretilemedi, birim testinde sınandı. 3 soru: `implementation/grup-5-hold-gecisi.md` Bölüm 8.
 
 **Kabul kriterleri:**
 - Veri kesilince son geçerli örnekten ≈ 1.5 s sonra `nav_state = 4`; bayrak 0'da 1.0 s; hedefsiz girişte girişten 1.5 s.

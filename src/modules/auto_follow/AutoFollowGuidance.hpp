@@ -89,16 +89,17 @@ inline bool sequence_passed(uint8_t check_result)
 }
 
 /**
- * Whether the previous sequence number is still compared with. It is forgotten when no sample passed the sequence check
- * for data_timeout, so that a restarted companion computer (sequence back to 1) is accepted again.
+ * Whether the previous sequence number is still compared with. It is only forgotten when no sample named AF_LOS
+ * (passed the name check, even if rejected later) arrived for data_timeout, so that a restarted companion computer
+ * (sequence back to 1, after a silent restart) is accepted again, while a frozen sender repeating its last sample is not.
  * @param has_previous_seq a sample passed the sequence check before
- * @param last_seq_pass time the last sample passed the sequence check [us]
+ * @param last_name_pass time the last sample passed the name check [us]
  * @param now current time [us]
  * @param data_timeout AF_DATA_TOUT [s]
  */
-inline bool keep_previous_seq(bool has_previous_seq, uint64_t last_seq_pass, uint64_t now, float data_timeout)
+inline bool keep_previous_seq(bool has_previous_seq, uint64_t last_name_pass, uint64_t now, float data_timeout)
 {
-	return has_previous_seq && now < last_seq_pass + static_cast<uint64_t>(data_timeout * 1e6f);
+	return has_previous_seq && now < last_name_pass + static_cast<uint64_t>(data_timeout * 1e6f);
 }
 
 struct Geometry {
@@ -159,6 +160,36 @@ matrix::Vector2f constrain_length(const matrix::Vector2f &v, float max_length);
  * so the limit does not depend on the direction.
  */
 matrix::Vector2f limit_change(const matrix::Vector2f &previous, const matrix::Vector2f &desired, float max_change);
+
+/**
+ * Move the yaw setpoint from previous towards desired by at most max_change (AF_YAWRATE_MAX * dt) along the shorter way.
+ * @param previous last yaw setpoint [rad], desired is returned unchanged if not finite
+ * @param desired yaw towards the target [rad]
+ * @param max_change [rad]
+ * @return yaw setpoint wrapped to [-pi, pi) [rad]
+ */
+float limit_yaw_change(float previous, float desired, float max_change);
+
+enum class HoldAction : uint8_t {
+	NONE,           // nothing to do (waiting for the answer or the retry time, accepted, or failure already reported)
+	REQUEST,        // publish a (new) Hold request
+	REPORT_FAILURE  // the last allowed request was not accepted: warn once, keep holding position
+};
+
+/**
+ * Hold request policy in HOLD_ISTENDI: first request at once; if not accepted (rejected or no answer)
+ * repeated retry_interval after the previous one, at most max_requests requests; then the failure is reported once.
+ * @param request_count requests sent in this HOLD_ISTENDI period
+ * @param answered commander answered the last request
+ * @param accepted the answer was ACCEPTED
+ * @param failure_reported the failure was already reported
+ * @param now current time [us]
+ * @param last_request time of the last request [us]
+ * @param retry_interval [us]
+ * @param max_requests
+ */
+HoldAction hold_action(uint8_t request_count, bool answered, bool accepted, bool failure_reported, uint64_t now,
+		       uint64_t last_request, uint64_t retry_interval, uint8_t max_requests);
 
 struct StateMachine {
 	uint8_t state{auto_follow_status_s::STATE_PASIF};

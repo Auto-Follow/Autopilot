@@ -37,7 +37,8 @@
  *
  * AUTO FOLLOW external flight mode: registers itself with commander, answers the arming checks,
  * validates the companion computer line of sight (debug_array "AF_LOS"), estimates the target position
- * and publishes trajectory_setpoint while the mode is active. auto_follow_status is published every cycle.
+ * and publishes trajectory_setpoint while the mode is active. On target loss it holds position and then requests Hold
+ * from commander. auto_follow_status is published every cycle.
  */
 
 #pragma once
@@ -48,6 +49,7 @@
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/module_params.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+#include <systemlib/mavlink_log.h>
 
 #include "AlphaBetaFilter.hpp"
 #include "AutoFollowGuidance.hpp"
@@ -65,6 +67,8 @@
 #include <uORB/topics/trajectory_setpoint.h>
 #include <uORB/topics/unregister_ext_component.h>
 #include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_command_ack.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_local_position.h>
@@ -109,6 +113,8 @@ private:
 	void count_check_result(uint8_t check_result, hrt_abstime now);
 	void enter_mode();
 	void publish_setpoint(hrt_abstime now, float dt, bool lost_state_entered);
+	void update_hold_request(hrt_abstime now, bool hold_state_entered);
+	void publish_hold_request(hrt_abstime now);
 	void clear_guidance_output();
 	void publish_status(hrt_abstime now);
 
@@ -129,6 +135,10 @@ private:
 	// Shortest interval between two console warnings about rejected input samples.
 	static constexpr hrt_abstime REJECT_WARN_INTERVAL = 1_s;
 
+	// Hold request in HOLD_ISTENDI: repeated after this time if rejected (or not answered), at most HOLD_REQUEST_MAX requests.
+	static constexpr hrt_abstime HOLD_RETRY_INTERVAL = 1_s;
+	static constexpr uint8_t HOLD_REQUEST_MAX = 3;
+
 	// Subscriptions
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _register_ext_component_reply_sub{ORB_ID(register_ext_component_reply)};
@@ -138,6 +148,7 @@ private:
 	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
 	uORB::Subscription _debug_array_sub{ORB_ID(debug_array)};
+	uORB::Subscription _vehicle_command_ack_sub{ORB_ID(vehicle_command_ack)};
 
 	// Publications
 	uORB::Publication<register_ext_component_request_s> _register_ext_component_request_pub{ORB_ID(register_ext_component_request)};
@@ -146,6 +157,8 @@ private:
 	uORB::Publication<arming_check_reply_s> _arming_check_reply_pub{ORB_ID(arming_check_reply)};
 	uORB::Publication<trajectory_setpoint_s> _trajectory_setpoint_pub{ORB_ID(trajectory_setpoint)};
 	uORB::Publication<auto_follow_status_s> _auto_follow_status_pub{ORB_ID(auto_follow_status)};
+	uORB::Publication<vehicle_command_s> _vehicle_command_pub{ORB_ID(vehicle_command)};
+	orb_advert_t _mavlink_log_pub{nullptr};
 
 	// Performance counters
 	perf_counter_t _loop_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")};
@@ -161,10 +174,13 @@ private:
 	// Vehicle state
 	bool _mode_active{false};     // vehicle_status.nav_state == _mode_id
 	bool _landed{false};          // vehicle_land_detected.landed
+	uint8_t _system_id{0};        // vehicle_status.system_id, target and source of the Hold request
+	uint8_t _component_id{0};     // vehicle_status.component_id (< COMPONENT_MODE_EXECUTOR_START: source "User")
 	vehicle_local_position_s _local_position{};
 	matrix::Quatf _attitude{0.f, 0.f, 0.f, 0.f}; // FRD to NED; zero until received, rotates to NaN (rejected)
 	uint8_t _xy_reset_counter{0};
 	uint8_t _z_reset_counter{0};
+	uint8_t _heading_reset_counter{0};
 
 	// Status message, also holds the raw input, counters and geometry of the last sample between cycles
 	auto_follow_status_s _status{};
@@ -172,7 +188,7 @@ private:
 	// Input history
 	bool _has_previous_seq{false};
 	float _previous_seq{0.f};               // sequence number of the last sample that passed the sequence check
-	hrt_abstime _last_seq_pass{0};          // [us] time the last sample passed the sequence check
+	hrt_abstime _last_name_pass{0};         // [us] time the last sample passed the name check (AF_LOS)
 	hrt_abstime _last_valid{0};             // [us] arrival of the last sample that passed all checks
 	hrt_abstime _last_no_target{0};         // [us] arrival of the last CHECK_NO_TARGET sample
 	hrt_abstime _last_accepted_arrival{0};  // [us] arrival of the last accepted sample
@@ -188,9 +204,16 @@ private:
 	float _yaw_cmd{NAN};                    // [rad] last yaw setpoint
 	matrix::Vector2f _hold_xy{NAN, NAN};    // [m] NED x, y held in KAYIP_BEKLE / HOLD_ISTENDI
 
+	// Hold request (VEHICLE_CMD_SET_NAV_STATE), count in _status.hold_request_count
+	hrt_abstime _hold_request_time{0};      // [us] time of the last request
+	bool _hold_answered{false};             // commander answered the last request
+	bool _hold_accepted{false};             // the answer was ACCEPTED
+	bool _hold_failure_reported{false};     // QGC warning after the last rejected request sent
+
 	// Angle parameters converted from [deg] to [rad]
 	float _trk_ang_rad{0.f};
 	float _min_dep_rad{0.f};
+	float _yawrate_max_rad{0.f};            // [rad/s]
 
 	// AF_ENABLE is only read by the boot script (rc.mc_apps), not by the module.
 	DEFINE_PARAMETERS(
@@ -204,6 +227,7 @@ private:
 		(ParamFloat<px4::params::AF_DATA_TOUT>) _param_af_data_tout,  // [s]
 		(ParamFloat<px4::params::AF_LOST_T>) _param_af_lost_t,        // [s]
 		(ParamFloat<px4::params::AF_YAW_MIN_D>) _param_af_yaw_min_d,  // [m]
+		(ParamFloat<px4::params::AF_YAWRATE_MAX>) _param_af_yawrate_max, // [deg/s]
 		(ParamFloat<px4::params::AF_TGT_HGT>) _param_af_tgt_hgt,      // [m]
 		(ParamFloat<px4::params::AF_GND_OFS>) _param_af_gnd_ofs,      // [m]
 		(ParamFloat<px4::params::AF_NORM_TOL>) _param_af_norm_tol,    // [-]
