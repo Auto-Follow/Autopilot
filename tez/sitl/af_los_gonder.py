@@ -18,12 +18,19 @@ Kullanım (SITL açıkken, ayrı bir terminalde):
     python3 tez/sitl/af_los_gonder.py --senaryo kes        # S4: gönderimi kes / geri başlat
     python3 tez/sitl/af_los_gonder.py --senaryo nan        # S5: araya NaN/Inf karıştır
     python3 tez/sitl/af_los_gonder.py --cevrim kapali      # kapalı çevrim: hayali yer hedefi
+    python3 tez/sitl/af_los_gonder.py --cevrim kapali --hedef-mesafe 25 --hedef-aci 30
+                                                           # S6: hedef 25 m uzakta, burnun 30 derece sağında
 
 Seçenekler:
     --cevrim acik|kapali  acik: sabit LOS gönderir (varsayılan).
-                          kapali: başlangıçta drone'un önünde yerde hayali bir
-                          hedef noktası seçer, drone'un konumunu ve tutumunu
-                          MAVLink'ten okuyup gerçek body FRD LOS'u hesaplar.
+                          kapali: başlangıçta yerde hayali bir hedef noktası
+                          seçer, drone'un konumunu ve tutumunu MAVLink'ten
+                          okuyup gerçek body FRD LOS'u hesaplar.
+    --hedef-mesafe METRE  Kapalı çevrimde hedefin başlangıçtaki yatay uzaklığı
+                          (varsayılan 20 m). Açık çevrimde kullanılmaz.
+    --hedef-aci DERECE    Kapalı çevrimde hedefin başlangıçta burna göre yönü
+                          (varsayılan 0 = tam önde, pozitif = sağ, negatif = sol).
+                          Açık çevrimde kullanılmaz.
     --los X Y Z           Açık çevrimde gönderilecek LOS (birim vektöre
                           çevrilmeden aynen gönderilir).
     --senaryo AD          Zaman çizelgeli bozma/kesme senaryosu (aşağıda).
@@ -46,6 +53,14 @@ beri geçen süre, SENARYO_BASLA_S öncesi hep normal gönderim):
                ufuk: aşağı bakış 5 derece · uzak: aşağı bakış 11 derece
                (10 m irtifada ~46 m > AF_MAX_RNG 40 m).
     Hedefsiz moda giriş (S4-d) için script hiç çalıştırılmaz.
+
+Kapalı çevrimde hedefin yolu (dosyadaki HEDEF_YOL sabiti):
+    ()       hedef durur (S6, varsayılan).
+    L_YOLU   S7 (karar 2026-11-11): YURUME_BASLA_S anından sonra 1.4 m/s ile
+             20 s drone'dan uzaklaşma yönünde düz, sonra 90 derece sağa dönüp
+             20 s düz; sonra durur. "Uzaklaşma yönü" = başlangıçta drone'dan
+             hedefe bakan yatay yön. Açmak için HEDEF_YOL = L_YOLU yapılır
+             (komut satırı seçeneği yok; adı kullanıcıya sorulacak).
 
 Bağlantı: PX4 SITL'in "API/Offboard" (onboard) MAVLink kanalı UDP 14580'i
 dinler ve 14540'a gönderir (ROMFS/px4fmu_common/init.d-posix/px4-rc.mavlink:4-5,
@@ -82,17 +97,25 @@ VERI_UZUNLUGU = 58  # DEBUG_FLOAT_ARRAY data[] uzunluğu
 KAYNAK_SISTEM = 1  # Pi, Pixhawk ile aynı sistemin parçası
 KAYNAK_BILESEN = 191  # MAV_COMP_ID_ONBOARD_COMPUTER
 
-# Kapalı çevrim: hayali yer hedefi (S6/S7 için hedefin yeri, hızı ve yolu
-# kullanıcıya henüz SORULMADI; şimdilik başlangıçta drone'un burnunun
-# önünde, yerde duran bir nokta).
+# Kapalı çevrim: yerde hayali hedef (S6 ve S7 kararları 2026-11-11).
 AF_TGT_HGT_M = 1.0  # hedefin bakılan noktasının yerden yüksekliği (AF_TGT_HGT)
 AF_GND_OFS_M = 0.0  # hedef zemininin kalkış yerine göre yüksekliği (AF_GND_OFS)
-HEDEF_ILERI_M = 20.0  # başlangıçta hedef drone'un kaç m önünde
-HEDEF_HIZ_NED = (0.0, 0.0)  # hedef hızı [m/s] kuzey, doğu (0 = duruyor)
+VARSAYILAN_HEDEF_MESAFE_M = 20.0  # --hedef-mesafe: başlangıçta hedefe yatay uzaklık
+VARSAYILAN_HEDEF_ACI_DERECE = 0.0  # --hedef-aci: burna göre yön, pozitif = sağ
 KONUM_ESKI_S = 0.5  # drone konumu bu süredir gelmediyse mesaj gönderilmez
+
+# Hedefin yolu: (süre [s], yön [derece], hız [m/s]) bacakları. Yön, başlangıçta
+# drone'dan hedefe bakan yatay yöne göredir: 0 = drone'dan uzaklaşma yönü,
+# pozitif = sağa dönüş. Boş = hedef durur (S6). Yürüme YURUME_BASLA_S anında
+# başlar (önce drone duran hedefin istenen mesafesine otursun diye); son
+# bacaktan sonra hedef durur.
+YURUME_HIZI_M_S = 1.4  # S7 (karar 2026-11-11)
+L_YOLU = ((20.0, 0.0, YURUME_HIZI_M_S), (20.0, 90.0, YURUME_HIZI_M_S))  # S7
+HEDEF_YOL: tuple[tuple[float, float, float], ...] = ()  # S7 için L_YOLU
 
 # Senaryo zaman çizelgesi [s] (script başlangıcından)
 SENARYO_BASLA_S = 10.0
+YURUME_BASLA_S = SENARYO_BASLA_S  # kapalı çevrimde hedefin yürümeye başladığı an
 KISA_KESINTI_S = 1.0  # kes: AF_DATA_TOUT (0.5) < bu < AF_DATA_TOUT + AF_LOST_T (1.5)
 KISA_HEDEF_YOK_S = 0.5  # hedef-yok: kısa "hedef yok"
 UZUN_BASLA_S = 20.0
@@ -186,6 +209,40 @@ def kapali_cevrim_los(drone: DroneDurumu, hedef_xy: tuple[float, float]) -> Vekt
         return (0.0, 0.0, 1.0)
     birim = (fark[0] / uzunluk, fark[1] / uzunluk, fark[2] / uzunluk)
     return ned_to_frd(birim, drone.roll, drone.pitch, drone.yaw)
+
+
+def hedef_baslangici(
+    drone: DroneDurumu, mesafe_m: float, aci_derece: float
+) -> tuple[tuple[float, float], float]:
+    """Hayali hedefin başlangıç konumu (NED x, y) ve drone'dan ona bakan yön [rad]."""
+    yon = drone.yaw + math.radians(aci_derece)
+    return (drone.x + mesafe_m * math.cos(yon), drone.y + mesafe_m * math.sin(yon)), yon
+
+
+def hedef_konumu(
+    baslangic: tuple[float, float],
+    yon0: float,
+    yol: tuple[tuple[float, float, float], ...],
+    t: float,
+) -> tuple[tuple[float, float], int]:
+    """t anında hedefin NED x, y konumu ve yürüdüğü bacak (0 = duruyor / henüz başlamadı).
+
+    t: script başlangıcından beri geçen süre [s]; yürüme YURUME_BASLA_S'de başlar.
+    """
+    x, y = baslangic
+    kalan = t - YURUME_BASLA_S
+    bacak = 0
+    for no, (sure, yon_derece, hiz) in enumerate(yol, start=1):
+        if kalan <= 0.0:
+            break
+        adim = min(kalan, sure)
+        yon = yon0 + math.radians(yon_derece)
+        x += hiz * adim * math.cos(yon)
+        y += hiz * adim * math.sin(yon)
+        if kalan < sure:
+            bacak = no
+        kalan -= adim
+    return (x, y), bacak
 
 
 def senaryo_uygula(
@@ -301,6 +358,20 @@ def argumanlari_oku(argv: list[str] | None = None) -> argparse.Namespace:
         help="acik: sabit LOS; kapali: hayali yer hedefi",
     )
     p.add_argument(
+        "--hedef-mesafe",
+        type=float,
+        default=VARSAYILAN_HEDEF_MESAFE_M,
+        metavar="METRE",
+        help="kapalı çevrim: hedefin başlangıçtaki yatay uzaklığı [m]",
+    )
+    p.add_argument(
+        "--hedef-aci",
+        type=float,
+        default=VARSAYILAN_HEDEF_ACI_DERECE,
+        metavar="DERECE",
+        help="kapalı çevrim: hedefin burna göre yönü [derece], pozitif = sağ",
+    )
+    p.add_argument(
         "--los",
         nargs=3,
         type=float,
@@ -326,6 +397,8 @@ def argumanlari_oku(argv: list[str] | None = None) -> argparse.Namespace:
     args = p.parse_args(argv)
     if args.hiz <= 0.0:
         p.error("--hiz pozitif olmalı")
+    if args.hedef_mesafe <= 0.0:
+        p.error("--hedef-mesafe pozitif olmalı")
     return args
 
 
@@ -346,6 +419,8 @@ def main(argv: list[str] | None = None) -> int:
 
     drone = DroneDurumu()
     hedef_xy: tuple[float, float] | None = None
+    hedef_bas: tuple[float, float] = (math.nan, math.nan)
+    hedef_yon0 = math.nan
     if args.cevrim == "kapali":
         bitis = time.monotonic() + 10.0
         while not drone.hazir(time.monotonic()):
@@ -357,12 +432,14 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             gelenleri_oku(baglanti, drone)
             time.sleep(0.01)
-        hedef_xy = (
-            drone.x + HEDEF_ILERI_M * math.cos(drone.yaw),
-            drone.y + HEDEF_ILERI_M * math.sin(drone.yaw),
+        hedef_bas, hedef_yon0 = hedef_baslangici(
+            drone, args.hedef_mesafe, args.hedef_aci
         )
+        hedef_xy = hedef_bas
         print(
-            f"[af_los_gonder] hayali hedef NED x={hedef_xy[0]:.2f} y={hedef_xy[1]:.2f} (yerde)",
+            f"[af_los_gonder] hayali hedef NED x={hedef_xy[0]:.2f} y={hedef_xy[1]:.2f} (yerde), "
+            f"mesafe {args.hedef_mesafe:g} m, burna göre {args.hedef_aci:g} derece, "
+            f"yol bacak sayısı {len(HEDEF_YOL)}",
             flush=True,
         )
 
@@ -381,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     sayac = 0
     gonderilen = 0
     onceki_kip = ""
+    onceki_bacak = 0
 
     try:
         while True:
@@ -394,12 +472,16 @@ def main(argv: list[str] | None = None) -> int:
             sayac += 1
 
             if hedef_xy is not None:
+                hedef_xy, bacak = hedef_konumu(hedef_bas, hedef_yon0, HEDEF_YOL, t)
+                if bacak != onceki_bacak:
+                    print(
+                        f"[af_los_gonder] t={t:6.2f} s: hedef bacak {bacak} "
+                        f"(0 = duruyor), NED x={hedef_xy[0]:.2f} y={hedef_xy[1]:.2f}",
+                        flush=True,
+                    )
+                    onceki_bacak = bacak
                 if not drone.hazir(simdi):
                     continue
-                hedef_xy = (
-                    hedef_xy[0] + HEDEF_HIZ_NED[0] * aralik,
-                    hedef_xy[1] + HEDEF_HIZ_NED[1] * aralik,
-                )
                 los = kapali_cevrim_los(drone, hedef_xy)
             else:
                 los = los_acik
