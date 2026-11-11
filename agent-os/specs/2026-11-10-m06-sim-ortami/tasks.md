@@ -574,3 +574,24 @@ Faz B aynı spec'e bağlıdır, ilk PR merge edildikten sonra yeni bir dalda (`o
 10. Görev Grupları 10, 11, 12 (birbirinden bağımsız, her sırayla) → 13 — Faz A'nın kalanı, aynı PR, merge'den önce
 11. Görev Grubu 14 — çatı repo, ayrı PR (sürümler belli olunca, paralel)
 12. Görev Grupları 15 → 16 → 17 — Faz B, ikinci PR
+
+<details>
+<summary>Ek: Claude'un çalışma sırası tahmini (ekip takvimi değildir)</summary>
+
+Bu tablo, görev listesini oluşturan Claude ajanının işi 15.11'e (issue #7 son teslim) göre sıralamak için yaptığı kaba
+tahmindir. Kimse onaylamadı; bağlayıcı değildir.
+
+| Tarih | Gruplar | Tahmini emek |
+|---|---|---|
+| 10.11 | 1 | ~0.75 gün |
+| 11.11 | 2, 3, 4'ün başı | 0.3 + 0.4 + … |
+| 12.11 | 4, 5 | 0.75 + 0.75 |
+| 13.11 | 6, 7 | 0.6 + 0.5 |
+| 14.11 | 8, 9'un başı | 0.6 + … |
+| 15.11 | 9 (demo) + tampon | 0.4 |
+| 15.11 sonrası, merge öncesi | 10, 11, 12, 13, 14 | 0.5 + 0.6 + 0.3 + 0.75 + 0.2 |
+| Faz B | 15, 16, 17 | 1–1.5 + 0.5 + 1 |
+
+Gecikme olursa demodan hiçbir madde düşürülmez; 10–13 kayar.
+
+</details>
