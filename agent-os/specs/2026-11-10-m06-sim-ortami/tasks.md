@@ -45,21 +45,6 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 | Yusuf Ortatepe | v0.2 üst verisinin teyidi (sınıf, imgsz, önerilen `conf`/`iou`, eğitim sürümleri) | 3, 4 | Spec'teki bayt taramasıyla okunan üst veri kullanılır; sınıf adı `.pt`'den okunur, `--imgsz`/`--conf`/`--sinif` ile değiştirilebilir. Teyit gelince spec "Model dosyası" tablosu güncellenir. |
 | Yusuf Kurt / Yusuf Algan | m15 modunun adı, modülün yeri, parametre öneki, `TEZ_LOS` biçiminin uygunluğu | 5, 10, 13 | `tez_los` mekanizması stok "Hold" adıyla ve iskelet modülle (`c4b4abf342`, ağaç dışında açılır) denenir. `m06_kabul.sh`'taki 3. koşu modül hazır olunca koşulur. |
 
-### Takvim (kaba)
-
-| Tarih | Gruplar | Tahmini emek |
-|---|---|---|
-| 10.11 | 1 | ~0.75 gün |
-| 11.11 | 2, 3, 4'ün başı | 0.3 + 0.4 + … |
-| 12.11 | 4, 5 | 0.75 + 0.75 |
-| 13.11 | 6, 7 | 0.6 + 0.5 |
-| 14.11 | 8, 9'un başı | 0.6 + … |
-| 15.11 | 9 (demo) + tampon | 0.4 |
-| 15.11 sonrası, merge öncesi | 10, 11, 12, 13, 14 | 0.5 + 0.6 + 0.3 + 0.75 + 0.2 |
-| Faz B | 15, 16, 17 | 1–1.5 + 0.5 + 1 |
-
-Kritik yol sıkıdır (1–9 ≈ 5 gün). Gecikme olursa demodan hiçbir madde düşürülmez; 10–13 kayar.
-
 ---
 
 ## Faz A — Kritik Yol: 15.11 En Az Demo
