@@ -136,3 +136,21 @@ Koşu sonunda çalışan PX4/Gazebo süreci kalmadı (`pgrep -x px4`, `pgrep -f 
   `derle.sh`'ın seçeneğidir (`calistir.sh` zaten her açılışta parametreleri sıfırlar). Spec metni düzeltildi.
 - `px4-shutdown` PX4 kapanırken 255 döndürüyor (istemci, sunucu kapanınca bağlantıyı kaybediyor); eski koşularda da
   aynıydı, `Simulation.stop` sonucu kontrol etmiyor, `calistir.sh` Gazebo'yu kapatıyor.
+
+## Ek karar (11.11.2026): IMU_INTEG_RATE, RTL ve geofence
+
+**IMU_INTEG_RATE: simde 250 Hz kalır.** Gerçek araçtaki 200, PX4'ün firmware varsayılanıdır (`imu_parameters.c`); kimse bilerek seçmemiştir. Gerçek Pixhawk 6C'de IMU çok daha hızlı örnekler, 200 Hz yalnız EKF'ye giden entegrasyon penceresidir. Simde Gazebo IMU'su 250 Hz yayınlar (`x500_base` `update_rate 250`). PX4 bu yüzden `px4-rc.simulator`'da varsayılanı 250 yapar ("Simulator IMU data provided at 250 Hz"). 200 Hz'lik pencere 4 ms'lik örneklerin tam katı olmaz, simde düzensiz entegrasyon yaratır. Hız denetleyicisi entegre veriyi değil ham açısal hızı kullandığı için uçuşa etkisi zaten ihmal edilebilir.
+
+**RTL ve geofence: simin kendi değerleri** (Ahmet: "gerçek dron ayarlarını boşver"; `sim.params`):
+
+| Parametre | Değer | Gerekçe |
+|---|---|---|
+| `RTL_RETURN_ALT` | 30 m | Dünyadaki en uzun ağaç ~11 m (çam, ölçek 2.4), takip yüksekliği en çok 15 m. 30 m, ~20 m'lik kampüs ağaçlarını da 10 m payla aşar. |
+| `RTL_DESCEND_ALT` | 10 m | Evin üstünde bu yüksekliğe inip bekler; kalkış yerinin 8 m çevresi ağaçsız. |
+| `GF_MAX_HOR_DIST` | 150 m | Ayrıntılı 120 m'lik zemini ve uzun yürüyüşleri kapsar. Varsayılanı 0'dır (kapalı). |
+| `GF_MAX_VER_DIST` | 40 m | `RTL_RETURN_ALT`'ın ve en yüksek takip yüksekliğinin üstünde. Varsayılanı 0'dır (kapalı). |
+| `GF_ACTION` | 2 (Hold) | Çitte durur, kararı operatör verir. Hem varsayılan hem gerçek araçtaki değer. |
+
+Doğrulama: pytest 93/93, `f0_kabul.sh` GEÇTİ (20/20 parametre PX4'te dosyadaki değerde; Hold sapması yatay 0.06 m, dikey 0.06 m).
+
+Çoklu EKF (`EKF2_MULTI_IMU`, `SENS_IMU_MODE`) alınmadı: simde tek IMU var.
