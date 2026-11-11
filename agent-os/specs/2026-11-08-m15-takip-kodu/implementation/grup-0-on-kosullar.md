@@ -2,13 +2,14 @@
 
 > **Bu dosya ne için?** M15 (AUTO FOLLOW) işinin kod dışı ön koşullarını ve **ekipten gelecek cevapları** tutar. Cevap geldikçe buraya işlenir. Yeni bir oturumda Claude bu dosyayı okuyunca neyin sorulduğunu, neyin cevaplandığını ve cevap gelince **hangi dosyaların değişeceğini** buradan anlar.
 >
-> **Son güncelleme:** 2026-11-10 · **Masaüstü kopyası:** `~/Desktop/M15_Vision_Sorulari.pdf` (bu dosyanın PDF'i; dosya güncellenince PDF yeniden üretilir)
+> **Son güncelleme:** 2026-11-11 · **Masaüstü kopyası:** `~/Desktop/M15_Vision_Sorulari.pdf` (bu dosyanın PDF'i; dosya güncellenince PDF yeniden üretilir)
 
 | # | Ön koşul | Kim | Durum |
 |---|---|---|---|
 | 0.1 | 7 kilitli yol için izin talebi (`tasks.md` 0.1 tablosu) | Kullanıcı → Hüseyin | Bekliyor |
 | 0.3 | Vision ile `AF_LOS` anlaşması (aşağıdaki sorular) | Kullanıcı → Vision (Yusuf Ortatepe) | **Soruldu, cevap bekleniyor** (2026-11-10) |
 | 0.4 | Kamera eğimi → `AF_TRK_ANG` | Kullanıcı → Ahmet (m06) | Bekliyor; SITL'de 30° |
+| 0.5 | **Gerçek uçuştan önce Pixhawk'ta `COM_LOW_BAT_ACT` = 3** (kritik seviyede RTL, acil seviyede Land). PX4 varsayılanı 0 = yalnızca uyarı (`commander_params.c:293`); X500 V2 airframe'i değiştirmiyor. Neden: Hold 3 kez reddedilir ve pilot devralmazsa drone süresiz bekler (rapor §5.1 G5.14). Bütün modları korur | Kullanıcı → takım / Hüseyin | Bekliyor (2026-11-11) |
 
 ---
 
@@ -56,3 +57,4 @@ Kullanıcı Vision'ın cevaplarını getirdiğinde:
 | Tarih | Ne |
 |---|---|
 | 2026-11-10 | İlk sürüm: Vision'a sorulan 9 soru, şu anki varsayımlar, cevap gelince yapılacaklar |
+| 2026-11-11 | 0.5 eklendi: gerçek uçuştan önce `COM_LOW_BAT_ACT` = 3 |

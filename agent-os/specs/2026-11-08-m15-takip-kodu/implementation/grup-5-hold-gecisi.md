@@ -197,7 +197,8 @@ Not: drone'un yönü komutun ~22° gerisinden gelir; PX4'ün tutum kontrolcüsü
 - **Soru 1 → (a):** metin `AUTO FOLLOW: Hold rejected, holding position` kalır.
 - **Soru 2 → (a):** masada hedefsiz girişte Hold böyle kalır.
 - **Soru 3 → (b):** EKF yön sıfırlamasında filtre de sıfırlanır. Uygulandı: `AutoFollow.cpp` yön sıfırlama bloğuna `_filter.reset()` eklendi (yorumuyla). `make px4_sitl` ve `make px4_fmu-v6c_default` uyarısız; 6C flash **1 937 260 B, %98,53** (+8 B); `make tests TESTFILTER=AutoFollowGuidance` geçti (12/12). SITL'de yön sıfırlaması olmadığı için uçuşta görülmedi (doğrulanacak).
-- **Onay bekleyen:** Sapma 2 / §5.1 G5.3: 1 s içinde cevap gelmezse Hold isteğinin tekrarlanması. Kullanıcıya soruldu, cevap yok.
+- **Sapma 2 (G5.3) onaylandı** ("önerdiğin gibi kalsın").
+- **3 retten sonra RTL? (kullanıcının sorusu):** RTL de reddedilir (gereksinimleri Hold'unkileri içerir, `mode_requirements.cpp:110-141`). Pilot hiç devralmazsa drone süresiz yerinde bekler; PX4'ün batarya varsayılanı yalnızca uyarı (`COM_LOW_BAT_ACT` = 0). **Karar:** davranış aynı; gerçek uçuştan önce `COM_LOW_BAT_ACT` = 3 (§5.1 G5.14).
 
 ## 9. Sonraki grup için notlar
 
