@@ -193,6 +193,12 @@ Not: drone'un yönü komutun ~22° gerisinden gelir; PX4'ün tutum kontrolcüsü
 
 **Bilgi 2 — Hold reddi yolu yalnızca birim testinde sınandı** (Bölüm 6 sorun 3). Gerçek uçuşta en olası nedeni GPS'in küresel konumunun bozulup yerel konumun sürmesi; böyle bir durumda drone AUTO FOLLOW'da yerinde bekler ve 3 istekten sonra QGC uyarısı düşer. İlk uçuş testlerinde pilot bunu bilmeli.
 
+**Cevaplar (2026-11-11):**
+- **Soru 1 → (a):** metin `AUTO FOLLOW: Hold rejected, holding position` kalır.
+- **Soru 2 → (a):** masada hedefsiz girişte Hold böyle kalır.
+- **Soru 3 → (b):** EKF yön sıfırlamasında filtre de sıfırlanır. Uygulandı: `AutoFollow.cpp` yön sıfırlama bloğuna `_filter.reset()` eklendi (yorumuyla). `make px4_sitl` ve `make px4_fmu-v6c_default` uyarısız; 6C flash **1 937 260 B, %98,53** (+8 B); `make tests TESTFILTER=AutoFollowGuidance` geçti (12/12). SITL'de yön sıfırlaması olmadığı için uçuşta görülmedi (doğrulanacak).
+- **Onay bekleyen:** Sapma 2 / §5.1 G5.3: 1 s içinde cevap gelmezse Hold isteğinin tekrarlanması. Kullanıcıya soruldu, cevap yok.
+
 ## 9. Sonraki grup için notlar
 
 - Grup 6 (S6/S7): yaw artık 60°/s ile sınırlı; S6'da burnun hedefe dönüş süresi buna göre beklenmeli. `AF_YAW_MIN_D` (1 m) S6–S7'de bakılacak (U4.17).

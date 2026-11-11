@@ -511,3 +511,12 @@ Grup 4 özetiyle 6 nokta soruldu (ayrıntı `implementation/grup-4-sitl-acik-cev
 - **4 — Test göndericisi bağlantı adresi `udpin:0.0.0.0:14540`.** Kullanıcı: **"okey"** → **Karar.**
 - **5 — Test akışı script'i repoya alınsın mı?** Kullanıcı: **"script geçici durmasın, benim bilgisayarımda dursun; ileride repoya almaya bakarız, ama şu an benim PC'de"** → **Karar:** repoya girmez, kullanıcının bilgisayarında kalıcı bir yerde durur. Not: script'ler geçici klasördeydi (scratchpad) ve bilgisayar yeniden açılınca silinmişti; Grup 4 ajanının kayıtlarından (yazdığı dosya içerikleri ve sonradan yaptığı düzeltmeler sırasıyla) geri çıkarıldı, derleme kontrolü geçti. Yer seçenekleri: (a) ev klasöründe repoların dışında · (b) `Auto-Follow/` altında repoların yanında · (c) Autopilot içinde `.git/info/exclude` ile. Öneri (a) `~/m15-sitl-araclari/`. Kullanıcı: **"5a, adı öneri"** → **Karar:** `~/m15-sitl-araclari/` (yanında `BENIOKU.md`: her dosyanın ne yaptığı). Yollar bu klasöre göre düzeltildi; `repl.py` (doküman düzenleme yardımcısı, testle ilgisiz) alınmadı.
 - **6 — Grup 5'ten sonra hedefsiz girişte 1,5 s'de Hold.** Kullanıcı: **"okey"** → **Karar** (A3 ile tutarlı).
+
+### Görev grubu 5 sonrası sorular (2026-11-11)
+
+Ayrıntı `implementation/grup-5-hold-gecisi.md` Bölüm 8, rapor §5.1 G5.3, G5.5, G5.10, G5.12.
+- **1 — Hold 3 istekte de kabul edilmezse QGC uyarısının metni.** Seçenekler: (a) geçici metin `AUTO FOLLOW: Hold rejected, holding position` · (b) başka metin · (c) (a) + PX4 event (flash artar). Öneri (a). Kullanıcı: **"1-a"** → **Karar.**
+- **2 — Masada (disarm) hedefsiz girişte Hold'a geçiliyor, Hold'da arm serbest.** Seçenekler: (a) böyle kalsın · (b) disarm iken Hold isteme · (c) yerdeyken Hold isteme. Öneri (a) (A3, U4.20; Hold yerde kalkış yapmaz `loiter.cpp:93-94`). Kullanıcı: **"2-a"** → **Karar.**
+- **3 — EKF yön sıfırlamasında filtre de sıfırlansın mı?** Seçenekler: (a) hayır · (b) evet (bir satır; konum sıfırlamasıyla aynı). Öneri (b). Kullanıcı: **"3-B"** → **Karar (b)**, uygulandı (flash +8 B).
+- **4 — Ajanın eklediği "1 s içinde cevap gelmezse de tekrar sor" (G5.3).** Onayı soruldu; kullanıcı bu turda cevaplamadı → **bekliyor**.
+- Kullanıcı Grup 5 notunun PDF'ini masaüstüne istedi (`~/Desktop/grup-5-hold-gecisi.pdf`).

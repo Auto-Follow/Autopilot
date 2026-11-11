@@ -241,10 +241,12 @@ void AutoFollow::update_vehicle_state()
 			_filter.reset();
 		}
 
-		// The held / commanded yaw is shifted with an EKF heading reset (as MulticopterPositionControl.cpp:709-711)
+		// The held / commanded yaw is shifted with an EKF heading reset (as MulticopterPositionControl.cpp:709-711).
+		// The measured target position rotates with the heading, so the filter is reset as for a position reset.
 		if (_local_position.heading_reset_counter != _heading_reset_counter) {
 			_heading_reset_counter = _local_position.heading_reset_counter;
 			_yaw_cmd = matrix::wrap_pi(_yaw_cmd + _local_position.delta_heading);
+			_filter.reset();
 		}
 	}
 
