@@ -7,3 +7,5 @@ __pycache__/
 models/dokular/*.jpg
 models/agaclar/*/
 models/*_cevre/
+# Model files never go into the repo (rule 9): ~/auto-follow-modeller/, see modeller.yaml
+*.pt

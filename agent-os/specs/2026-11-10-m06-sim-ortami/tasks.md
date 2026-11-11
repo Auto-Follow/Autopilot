@@ -165,25 +165,25 @@ Kritik yol sıkıdır (1–9 ≈ 5 gün). Gecikme olursa demodan hiçbir madde d
 #### Görev Grubu 3: Model ortamı — sürüm sabitleme, model dosyası, model yolu
 **Bağımlılık:** Görev Grubu 2 · **Emek:** ~0.4 gün · **Bekleyen:** Ortatepe teyidi, Hüseyin'in depolama kararı
 
-- [ ] 3.0 v0.2 modelinin, sabit sürümlü paketlerle laptop CPU'sunda yüklenebilmesi
-  - [ ] 3.1 Testleri yaz: `testler/test_algilama.py`, 1. kısım (4–6 test)
+- [x] 3.0 v0.2 modelinin, sabit sürümlü paketlerle laptop CPU'sunda yüklenebilmesi
+  - [x] 3.1 Testleri yaz: `testler/test_algilama.py`, 1. kısım (4–6 test)
     - Model yolu önceliği: `--model` > `algilama.model` > `~/auto-follow-modeller/person_detection_model_v0.2.pt`
     - Dosya yoksa hata, dosyanın nereden alınacağını söyler
     - sha256 hesaplanır; `modeller.yaml`'daki özetten farklıysa uyarı verilir
     - Sınıf çözümü (bir `names` sözlüğüyle): `Person`/`person` → 0; numara; olmayan ad → mevcut adları listeleyen hata
-  - [ ] 3.2 Sürümleri belirle (uydurulmaz)
+  - [x] 3.2 Sürümleri belirle (uydurulmaz)
     - Scratchpad'de temiz bir Python 3.12 venv'inde CPU `torch`/`torchvision` (PyTorch CPU dizini) ve `ultralytics` kurulur. Önce `.pt`'yi kaydeden 8.4.174 denenir; seçilen sürüm dosyayı yükleyebilmelidir.
     - `ultralytics`'in çektiği `opencv-python`, `analiz-requirements.txt`'teki 5.0.0.93 ile uyumlu olmalıdır
     - `pip freeze` → `tez/env/model-requirements.txt` (bütün bağımlılıklar sabit sürümle; dizin adresi dosyada yorum olarak)
-  - [ ] 3.3 `tez/env/VERSIONS.md`: model paketleri satırı, kurulum komutu, Ultralytics AGPL-3.0 notu (model yalnız yerel simde çalışır, dağıtılmaz)
-  - [ ] 3.4 Ekip venv'ine kur: `$P -m pip install -r tez/env/model-requirements.txt` (dizin seçeneğiyle)
-  - [ ] 3.5 Model dosyasını yerleştir (repo dışı, kural 9)
+  - [x] 3.3 `tez/env/VERSIONS.md`: model paketleri satırı, kurulum komutu, Ultralytics AGPL-3.0 notu (model yalnız yerel simde çalışır, dağıtılmaz)
+  - [x] 3.4 Ekip venv'ine kur: `$P -m pip install -r tez/env/model-requirements.txt` (dizin seçeneğiyle)
+  - [x] 3.5 Model dosyasını yerleştir (repo dışı, kural 9)
     - `mkdir -p ~/auto-follow-modeller && git -C ../Vision show ebff718:models/person_detection_model_v0.2.pt > ~/auto-follow-modeller/person_detection_model_v0.2.pt` (yalnız okuma; Vision reposu değişmez)
     - `sha256sum` → `c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440`, boyut 22 525 930 bayt
-  - [ ] 3.6 `tez/sim/modeller.yaml` (yeni): v0.2 kaydı (ad, sha256, boyut, kaynak: "Vision `model-training` `ebff718`, geçici"). `yolov8s.pt` kaydı TBD olarak açılır; 13. grupta doldurulur.
-  - [ ] 3.7 `araclar/algilama.py`, 1. kısım: `Kutu` (`u0, v0, u1, v1, guven, sinif, sinif_adi`), `Algilayici` arayüzü, model yolu çözümü, sha256, sınıf çözümü. `ultralytics` yalnız `YoloAlgilayici` içinde içe aktarılır.
-  - [ ] 3.8 `YoloAlgilayici`: `device=cpu`, `torch.set_num_threads(cekirdek)` (varsayılan 4), `imgsz` varsayılanı `.pt`'deki eğitim değeri, `conf` 0.25; otomatik model/yazı tipi indirme ve analitik kapalı
-  - [ ] 3.9 Doğrulama
+  - [x] 3.6 `tez/sim/modeller.yaml` (yeni): v0.2 kaydı (ad, sha256, boyut, kaynak: "Vision `model-training` `ebff718`, geçici"). `yolov8s.pt` kaydı TBD olarak açılır; 13. grupta doldurulur.
+  - [x] 3.7 `araclar/algilama.py`, 1. kısım: `Kutu` (`u0, v0, u1, v1, guven, sinif, sinif_adi`), `Algilayici` arayüzü, model yolu çözümü, sha256, sınıf çözümü. `ultralytics` yalnız `YoloAlgilayici` içinde içe aktarılır.
+  - [x] 3.8 `YoloAlgilayici`: `device=cpu`, `torch.set_num_threads(cekirdek)` (varsayılan 4), `imgsz` varsayılanı `.pt`'deki eğitim değeri, `conf` 0.25; otomatik model/yazı tipi indirme ve analitik kapalı
+  - [x] 3.9 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_algilama.py -q
@@ -208,10 +208,12 @@ Kritik yol sıkıdır (1–9 ≈ 5 gün). Gecikme olursa demodan hiçbir madde d
   - [ ] 4.1 Testleri yaz (6–8 test)
     - `test_kusurlar.py`: boş ayarda kare bit bit aynı; Faz B alanı (`gurultu`, `bulaniklik`, `rolling_shutter`, `pozlama`) "Faz B'de uygulanacak" hatası verir; bilinmeyen alan reddedilir
     - `test_algilama.py`, 2. kısım: taklit Ultralytics sonucundan `Kutu`'ya dönüşüm, görüntü sınırına kırpma, piksel kenarı kuralı (`u0 ≤ u < u1`); sahte algılayıcıyla arayüz
+      (Dönüşüm `algilama.to_boxes` olarak 3. grupta duman testi için yazıldı, testi yok; bu alt görev onu sınar ve gerekirse düzeltir.)
     - `test_goruntu.py` (yeni, Test Planı'nda yok): yalnız en yeni kare tutulur, üzerine yazılan kare `atlanan` sayılır; sim ↔ duvar saati eşlemesi
   - [ ] 4.2 `araclar/goruntu.py`: `/x500_tez/kamera/image`'a `subscribe_raw`; geri çağırma yalnız ham bayt + `time.monotonic()` + sayaç saklar; protobuf yalnız işlenecek karede çözülür; kare nesnesi (RGB `uint8` 1296×2304×3, `t`, `varis`, `sira`); `uretilen`/`atlanan` sayaçları; `/world/<dünya>/clock` ile saat eşleme (~100 Hz'e kısılır)
   - [ ] 4.3 `araclar/kusurlar.py`: `KameraKusurlari.uygula(kare, t) -> kare`; Faz A'da geçişsiz; `kusur_ms` ölçülür
   - [ ] 4.4 Model süreci (`multiprocessing`, "spawn"): kare okuyucu + kusur aşaması + algılayıcı; sonuçlar FIFO kuyrukla ana sürece; `basla`, `bitis`, `model_ms`. `--modelsiz` ya da `algilama.etkin: false` iken hiç başlatılmaz.
+    - 3. gruptan hazır: `algilama.model_path` + `inspect_model` (dosya yoksa nereden alınacağını söyler, sha256 + `modeller.yaml` uyarısı), `YoloAlgilayici` (kurucuda ısınma; `last_model_ms`). Sim açılmadan önce ana süreçte `inspect_model` çağrılır; `ModelFile.as_dict()` `ayarlar.algilama`'ya yazılır (spec 8: "model özeti de dahildir"). `algilama.*` ara hatası ve `henuz_bagli_degil["algilama.etkin"]` bu grupta kaldırılır.
   - [ ] 4.5 `senaryo.py`: model süreci kayıttan önce açılır, kayıt bitince kapanır. `algilama.csv` (işlenen kare başına zamanlar, kutu sayısı; seçim/LOS/konum sütunları 5–6. gruplarda dolar) ve `kutular.csv` (bütün kutular) `round(t*1e6)` anahtarıyla yazılır. `uretilen`, `islenen`, `atlanan_kare_orani`, `islenen_kare_hizi_hz`, RTF (0.9 altında uyarı) geçici olarak `ozet.json`'a.
   - [ ] 4.6 `f1_testi.py` `--modelsiz` ile koşar; `ruff.toml`'a `goruntu`, `kusurlar`, `algilama` eklenir
   - [ ] 4.7 Doğrulama

@@ -17,6 +17,7 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | Python (laptop) | 3.12.3 + `requirements-lock.txt` (PX4 derleme paketleri: empy 3.3.4, pymavlink 2.4.50…) | `pip install --user --break-system-packages -r tez/env/requirements-lock.txt` |
 | Raspberry Pi 5 işletim sistemi | **Raspberry Pi OS (64-bit) masaüstlü**, Debian 13 Trixie — imaj `2026-09-15-raspios-trixie-arm64.img.xz` (sha256 `61d95799550aac32788bb3cacc3d471dcc860f8053ce989dec4aecc388b799dd`), Python 3.13.5 | İmaj dosyası Imager'da "Use custom" ile yazılır (listeden seçilmez) |
 | Pi / görüntü işleme Python | **`Vision` reposunda**: NumPy 2.4.6 · OpenCV 5.0.0.93 · pymavlink 2.4.50 · pyserial 3.5 · PyYAML 6.0.3 (laptop 3.12 + Pi 3.13) · picamera2 (Pi'de apt) | `Vision/requirements/*.txt`, repo içi `.venv` |
+| Sim model paketleri (laptop CPU) | **ultralytics 8.4.174 · torch 2.14.1+cpu · torchvision 0.29.2+cpu** (Python 3.12, x86_64) ve bütün bağımlılıkları; sim'deki algılama ölçütleri bunlara bağlıdır | `tez/env/model-requirements.txt`, venv `.venv-tez`, PyTorch CPU dizini (aşağıda) |
 | Agent OS | **v2.1.1** (`6a6495111e`) — v3 kullanılmıyor; profiller `auto-follow` (çatı) + `auto-follow-repo` (Autopilot, Vision) | Çatı repo: `kurulum.sh` → `kurulum/install-agent-os.sh` (resmi `base-install.sh` main=v3 indirir, kullanmayın) |
 
 ## 2. Aynı olması önerilir
@@ -76,6 +77,32 @@ python3 -m venv --system-site-packages ~/Desktop/Projects/Auto-Follow/.venv-tez
 ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/pip install -r ~/Desktop/Projects/Auto-Follow/Autopilot/tez/env/analiz-requirements.txt
 ```
 
+## Sim model paketleri (laptop CPU: ultralytics + torch)
+Simülasyondaki insan algılayıcı (`tez/sim/araclar/algilama.py`) için; yalnız laptop (Ubuntu 24.04, Python 3.12, x86_64).
+Pi'ye kurulmaz (orada Hailo, yol haritası m02/m07), CI'da gerekmez (birim testleri torch'suz çalışır).
+Önce yukarıdaki "Laptop analiz/araç Python ortamı" kurulur, sonra:
+```bash
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pip install \
+  -r ~/Desktop/Projects/Auto-Follow/Autopilot/tez/env/model-requirements.txt \
+  --extra-index-url https://download.pytorch.org/whl/cpu
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pip check        # No broken requirements found.
+```
+- `torch==2.14.1+cpu` / `torchvision==0.29.2+cpu` yalnız PyTorch CPU dizininde vardır (`+cpu` sürümü PyPI'da olamaz);
+  CUDA'lı paketler (birkaç GB) inmez. torchvision 0.29 torch 2.14 için derlenmiştir; pip torch 2.15'i de kabul ederdi, seçilmedi.
+- `ultralytics==8.4.174`: v0.2 model dosyasını kaydeden sürüm. OpenCV, `analiz-requirements.txt`'teki **5.0.0.93** kalır.
+- Her bağımlılık tek bir dosyada sabittir: numpy, matplotlib, psutil, sympy, packaging… `requirements-lock.txt`'te;
+  opencv-python `analiz-requirements.txt`'te; geri kalanı (Ubuntu'nun apt ile verdiği pillow 10.2.0, PyYAML 6.0.1,
+  requests 2.31.0 dahil) `model-requirements.txt`'te. Ekip venv'inde pip yalnız yeni paketleri kurar; torch'un istediği
+  `setuptools` 80.10.2 ve anyio'nun istediği `typing_extensions` 4.16.0 venv içinde apt sürümlerinin (68.1.2, 4.10.0)
+  önüne geçer, apt dosyaları değişmez.
+- **Lisans:** Ultralytics AGPL-3.0'dır. Model yalnız yerel simde çalıştırılır, dağıtılmaz.
+- Kod ultralytics'i otomatik indirme, analitik ve ayar dosyası yazımı kapalı açar (`YOLO_OFFLINE=1`,
+  `YOLO_AUTOINSTALL=0`, ayar dosyası geçici bir klasörde; `~/.config/Ultralytics` oluşmaz). ultralytics'i kendiniz
+  `import` etmeyin, `yolo` komutunu çalıştırmayın: o zaman ayar dosyası `~/.config/Ultralytics`'e yazılır ve internete
+  bakılır. Modeli denemek için: `tez/sim/araclar/model_dene.py`.
+- Model dosyaları repoya girmez (kural 9): `~/auto-follow-modeller/`; bilinen dosyalar ve sha256 özetleri
+  `tez/sim/modeller.yaml`'dadır.
+
 ## VS Code eklentileri
 ```bash
 for e in ms-vscode.cpptools ms-vscode.cpptools-extension-pack ms-vscode.cmake-tools twxs.cmake \
@@ -96,4 +123,6 @@ arm-none-eabi-gcc --version | head -1                  # 13.2.1
 python3 -V                                             # 3.12.3
 ls ~/Applications/                                     # QGroundControl-v5.1.4..., PlotJuggler-3.17.2...
 grep ^version ~/agent-os/config.yml                    # 2.1.1
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -c "from importlib.metadata import version as v; print(v('torch'), v('torchvision'), v('ultralytics'))"   # 2.14.1+cpu 0.29.2+cpu 8.4.174
+sha256sum ~/auto-follow-modeller/person_detection_model_v0.2.pt   # c5f6838b... (tez/sim/modeller.yaml)
 ```

@@ -1,0 +1,25 @@
+# Model files the simulation knows (spec agent-os/specs/2026-11-10-m06-sim-ortami, "Model dosyası").
+#
+# The files themselves never go into a repo (rule 9): they live in ~/auto-follow-modeller/ (default folder,
+# araclar/algilama.py MODEL_DIR) or wherever --model / algilama.model points. araclar/algilama.py compares the sha256
+# of the file a run uses with the record here: a different digest is reported as a warning, a missing file says
+# where to get it (kaynak, alma). The shared storage place for model files is not decided yet (Hüseyin); until then
+# the source is the Vision branch below.
+#
+# Fields: ad (file name), sha256 (64 hex digits; null = not recorded yet), boyut_bayt, kaynak (where it comes
+# from), alma (how to put it into ~/auto-follow-modeller/), aciklama.
+
+modeller:
+  - ad: person_detection_model_v0.2.pt
+    sha256: c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440
+    boyut_bayt: 22525930
+    kaynak: "Vision reposu, model-training dalı, commit ebff718, models/ (Yusuf Ortatepe; geçici, ortak depolama yeri kararı bekliyor)"
+    alma: "mkdir -p ~/auto-follow-modeller && git -C <Vision klasörü> show ebff718:models/person_detection_model_v0.2.pt > ~/auto-follow-modeller/person_detection_model_v0.2.pt"
+    aciklama: "Ultralytics YOLOv8s (yolov8s.pt'den), tek sınıf {0: Person}, eğitim imgsz 640, 100 epoch; kaydeden ultralytics 8.4.174, 2026-10-09; AGPL-3.0"
+
+  - ad: yolov8s.pt
+    sha256: null  # recorded in task group 13 (tasks.md 13.4), when the file is fetched by hand
+    boyut_bayt: null
+    kaynak: "Ultralytics stok COCO YOLOv8s; kıyas için. Adres, boyut ve sha256 Görev grubu 13'te yazılacak"
+    alma: "Görev grubu 13'te yazılacak (elle indirilir; kod indirmez)"
+    aciklama: "COCO, 80 sınıf, 0: person"

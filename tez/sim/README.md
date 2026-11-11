@@ -201,6 +201,26 @@ $P tez/sim/araclar/onizleme.py --dunya cayir --kamera 5,0,12,25,40            # 
 
 Çıktı `tez/sim/sonuclar/<tarih>_onizleme_<ad>/` (videoyu Firefox ile açın).
 
+## Model (PX4'süz deneme)
+
+Simdeki insan algılayıcı Yusuf Ortatepe'nin v0.2 modelidir (Ultralytics YOLOv8s, laptop CPU'sunda). Bir kez kurulur:
+
+```bash
+$P -m pip install -r tez/env/model-requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+mkdir -p ~/auto-follow-modeller && git -C <Vision klasörü> show ebff718:models/person_detection_model_v0.2.pt \
+  > ~/auto-follow-modeller/person_detection_model_v0.2.pt     # model dosyası repoya girmez (kural 9)
+sha256sum ~/auto-follow-modeller/person_detection_model_v0.2.pt   # tez/sim/modeller.yaml'daki özetle aynı olmalı
+```
+
+Modeli bir resimde ya da bir senaryonun Gazebo karelerinde denemek için (kırmızı: model, mavi/turuncu: hakem):
+
+```bash
+$P tez/sim/araclar/model_dene.py --senaryo kalabalik_park --zaman 62,66,73,78   # ~1.5 dk; kareler + *_model.jpg
+$P tez/sim/araclar/model_dene.py --kare resim.jpg                              # herhangi bir PNG/JPG
+```
+
+Sürümler ve AGPL-3.0 notu: `tez/env/VERSIONS.md`. Senaryo koşusunda model 4. görev grubunda bağlanır.
+
 ## Dünyalar
 
 | Dünya | Ne |
@@ -243,7 +263,9 @@ okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modü
 | `tez/sim/models/dokular/KAYNAK.md` | Zemin dokuları ve ağaçların kaynağı ve lisansı |
 | `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kayma düzeltmeleri ve Gazebo hatası önlemi: `KAYNAK.md`) |
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video) |
+| `tez/sim/modeller.yaml` | Bilinen model dosyaları (ad, sha256, boyut, kaynak); dosyalar repo dışında, `~/auto-follow-modeller/` |
+| `tez/env/model-requirements.txt` | Model paketleri (ultralytics, CPU torch/torchvision) ve bağımlılıkları, sabit sürümle |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO), `model_dene.py` (modeli resimde/senaryoda dener) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 

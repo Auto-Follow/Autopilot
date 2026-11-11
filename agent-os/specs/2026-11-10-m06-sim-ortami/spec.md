@@ -69,8 +69,16 @@
 - `YoloAlgilayici`:
   - Ultralytics'i `device=cpu` ile çalıştırır.
   - `torch.set_num_threads(cekirdek)` uygulanır. Varsayılan 4'tür; Gazebo ve PX4'e CPU kalsın diye.
-  - Yalnız verilen dosyayı yükler. Otomatik model ve yazı tipi indirme ile analitik kapalıdır.
+    Uygulamada bulundu: ultralytics ilk tahminde iş parçacığını kendi sayısına (CPU − 1, en çok 8) çeker
+    (`select_device`). Bu yüzden kurucu bir ısınma tahmini yapar, sayıyı ondan sonra kurar ve her karede denetler.
+  - Yalnız verilen dosyayı yükler. Otomatik model ve yazı tipi indirme ile analitik kapalıdır: ultralytics içe
+    aktarılmadan önce `YOLO_OFFLINE=1` (açılıştaki DNS kontrolü ve analitik yok), `YOLO_AUTOINSTALL=0` ve
+    `YOLO_CONFIG_DIR` geçici bir klasör (`sync: false` ayarıyla, süreç bitince silinir; `~/.config/Ultralytics`
+    oluşmaz). Dosya yoksa ultralytics'e hiç verilmez (internette arardı).
   - `ultralytics` modülü yalnız bu sınıf içinde içe aktarılır. Böylece birim testleri torch olmadan çalışır.
+  - Kare RGB gelir; ultralytics numpy kareyi OpenCV BGR sayar, bu yüzden çevrilerek verilir (`model_ms`'e dahil).
+  - `imgsz` modelin adımının (v0.2: 32 px) katı olmalıdır; değilse ultralytics'in sessizce yuvarlaması yerine
+    alan adıyla hata verilir.
 - Model dosyasının yolu şu öncelik sırasıyla belirlenir:
   1. `--model <yol>`
   2. Senaryodaki `algilama.model`
@@ -83,7 +91,10 @@
   - `--imgsz`: varsayılanı `.pt` içindeki eğitim değeridir.
   - `--conf`: varsayılanı 0.25'tir.
 - Dosyanın sha256 özeti her koşuda hesaplanır ve `ozet.json`'a yazılır.
-  - Özet, `tez/sim/modeller.yaml` içindeki bilinen özetle karşılaştırılır; farklıysa uyarı verilir.
+  - Özet, `tez/sim/modeller.yaml` içindeki bilinen özetle karşılaştırılır; farklıysa uyarı verilir. Kayıt önce
+    özetle, bulunamazsa dosya adıyla eşleşir (adı değişmiş bir kopya yine tanınır).
+  - Senaryo koşusuna bağlanması (yol, sha256, `ayarlar.algilama`) 4. görev grubunda, model süreciyle birliktedir;
+    3. grup `algilama.py`'deki parçaları ve deneme aracı `araclar/model_dene.py`'yi verdi.
   - v0.2 bilgileri "Belgeler > Model dosyası" bölümündedir.
   - Kıyas için stok COCO `yolov8s.pt` aynı klasöre elle konur ve `--model` ile seçilir. Onun sha256 özeti uygulamada yazılır.
 - Model ayrı bir süreçte çalışır (`multiprocessing`, "spawn" başlatma).
@@ -463,23 +474,25 @@ flowchart LR
 | `tez/sim/kur.sh` | değişir | Sonda model klasörü ve sha256 kontrolü (indirmez) |
 | `tez/sim/modeller.yaml` | yeni | Bilinen model dosyaları: ad, sha256, boyut, kaynak |
 | `araclar/goruntu.py`, `kusurlar.py`, `algilama.py` | yeni | Kare okuyucu, kusur aşaması (Faz A kapalı), algılayıcı arayüzü + YOLO + model süreci |
+| `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli |
 | `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme |
 | `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
 | `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler |
-| `araclar/senaryo.py`, `hedef.py`, `rapor.py`, `onizleme.py` | değişir | Yeni alanlar, bayraklar, süreçler, ölçütler, MP4 |
+| `araclar/senaryo.py`, `hedef.py`, `rapor.py`, `onizleme.py` | değişir | Yeni alanlar, bayraklar, süreçler, ölçütler, MP4. 3. grupta: `onizleme.capture()` / `people_of()` ayrıldı, `hedef.read_detection()` herkese açık oldu (`model_dene.py` kullanır) |
 | `araclar/f0_testi.py`, `f1_testi.py` | değişir | Stok modlar + parametre doğrulaması; `--modelsiz` |
 | `senaryolar/*.yaml`, `senaryolar/takip_yuruyen.yaml` | değişir / yeni | `drone.mod` → `takip`; Follow Me 8/8 senaryosu |
 | `testler/test_*.py` | yeni | "Test Planı"ndaki birim testleri |
 | `tez/sim/ruff.toml` | değişir | `known-first-party`'ye yeni modüller |
 | `tez/sim/README.md` | değişir | (b) yolu, kurulum, kılavuz, AMD, QGC; `TEZ_` ön eki ve "kilit listesinde izinli iki dosya" ifadeleri düzeltilir |
-| `tez/env/model-requirements.txt` | yeni | `ultralytics`, `torch`/`torchvision` (CPU) ve bütün bağımlılıklar sabit sürümle (TBD) |
+| `tez/env/model-requirements.txt` | yeni | `ultralytics` 8.4.174, `torch` 2.14.1+cpu, `torchvision` 0.29.2+cpu ve bütün bağımlılıklar sabit sürümle (3. grup) |
 | `tez/env/VERSIONS.md` | değişir | Model paketleri, video apt paketleri, `libfuse2t64`, AGPL notu, `DRI_PRIME` |
 
 Sürüm sabitliği (kural 4) için:
 - `ultralytics`, `torch` ve `torchvision` sürümleri uydurulmaz. Uygulamada Python 3.12 / x86_64 için kurulabilir olan CPU sürümü denenir ve temiz bir venv'den `pip freeze` ile alınır. `ultralytics`'in çektiği `opencv-python`, `analiz-requirements.txt`'teki 5.0.0.93 ile uyumlu olmalıdır.
 - `.pt` dosyası Ultralytics 8.4.174 ile kaydedilmiş. Seçilecek sürüm bu dosyayı yükleyebilmelidir.
+- **Sonuç (11.11, 3. grup):** `ultralytics` 8.4.174, `torch` 2.14.1+cpu, `torchvision` 0.29.2+cpu (PyTorch CPU dizini), OpenCV 5.0.0.93 değişmedi. Her bağımlılık tek bir dosyada sabittir (numpy, matplotlib… `requirements-lock.txt`; opencv `analiz-requirements.txt`; geri kalanı `model-requirements.txt`). Ekip venv'inin kopyasında ve yalıtılmış bir venv'de `pip check` temiz, v0.2 yüklendi. Ayrıntı ve gerekçeler: `implementation/gorev-grubu-03.md`.
 - Çatıdaki `agent-os/product/tech-stack.md` ve `docs/02-ortak-yazilim-surumleri.md` ayrı bir çatı PR'ında güncellenir (Hüseyin).
 
 ### Başlangıç parametreleri
@@ -723,7 +736,9 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 | Boyut | 22 525 930 bayt |
 | sha256 | `c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440` |
 | Dosyadaki üst veri | Ultralytics `DetectionModel`; taban `yolov8s.pt`; görev `detect`; tek sınıf `{0: 'Person'}`; eğitim `imgsz` 640, 100 epoch, batch 32, doğrulama `iou` 0.7; kaydeden sürüm 8.4.174; tarih 2026-10-09; veri `/content/person-1/data.yaml`; lisans AGPL-3.0 |
-| Okunma şekli | Dosya çalıştırılmadan, bayt taramasıyla okunan ön bilgidir; Ortatepe teyit edecek |
+| Ultralytics ile yükleyince (11.11, 3. grup) | Üst satırın hepsi doğrulandı (ultralytics 8.4.174 + torch 2.14.1+cpu). Ek olarak: adım (stride) 32 px; 11.1 M parametre; optimizer SGD, `lr0` 0.002, `seed` 42, önceden eğitilmiş ağırlıkla; `conf` eğitimde verilmemiş (önerilen değer yok, varsayılan 0.25 kalır); son (sadeleştirilmiş) checkpoint. Dosyadaki eğitim doğrulama ölçütleri (Ortatepe'nin veri setinde, bizim ölçümümüz değil): precision 0.949, recall 0.878, mAP50 0.933, mAP50-95 0.582 |
+| Okunma şekli | İlk satır bayt taramasıyla okundu; 11.11'de dosya ultralytics ile yüklenerek doğrulandı. Ortatepe'nin teyidi (önerdiği `conf`/`iou`, eğitimdeki torch sürümü, veri setinde eğik/üstten görüntü olup olmadığı) bekleniyor |
+| Laptop CPU'sunda hız (11.11, Ryzen 7 5800H, Gazebo kapalıyken) | `imgsz` 640, 4 çekirdek: kare başına `model_ms` ≈ 56–66 ms (kare ortalaması; ilk çağrı ≈ 1.0–1.1 s, kurucuda ısınma olarak); 8 çekirdek ≈ 46 ms; `imgsz` 1280, 4 çekirdek ≈ 230–475 ms. Sim koşusu sırasındaki değer 4. grupta ölçülür |
 
 ## Varsayımlar
 
@@ -896,4 +911,5 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - **Yusuf Ortatepe'den:** "Model dosyası" bölümündeki üst verinin teyidi; önerdiği `conf`/`iou`; eğitimde kullandığı `ultralytics`/`torch` sürümleri; veri setinde eğik açıdan (dron) görüntü olup olmadığı; v0.2'nin doğru seçim olup olmadığı. Soru listesi repo dışında (`~/Desktop/Follow/Yusuf_Ortatepe_model_sorulari.txt`).
 - **Yusuf Kurt / Yusuf Algan'dan:** mod adı, modülün yeri (harici `tez/px4` mi, ağaç içi + kilit listesi mi), parametre öneki, `TEZ_LOS` biçiminin uygunluğu, `time_usec` ihtiyacı (PX4 bu alanı düşürüyor).
 - **Ortak spec'ler** (m03/m04/m05) yazılınca "Varsayımlar" ve ilgili kod güncellenir: `TEZ_LOS` biçimi, frame, zaman damgası, "hedef yok".
-- **Uygulamada sabitlenecek sürümler (TBD):** `ultralytics`, `torch`/`torchvision` (CPU) ve bağımlılıkları; GStreamer, `python3-gi` ve `ffmpeg` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti.
+- **Uygulamada sabitlenecek sürümler (TBD):** GStreamer, `python3-gi` ve `ffmpeg` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta sabitlendi.)
+- **`imgsz` seçimi (3. grupta bulundu, karar Ortatepe/Hüseyin ile):** 45° kameradan 10 m'de insan ≈ 150–200 px boyundadır; `imgsz` 640'ta modele ≈ 42–56 px olarak girer (640/2304 ölçeği). `kalabalik_park`'ın 4 karesinde (`model_dene.py`, sabit kamera 10 m / 45°) v0.2 640'ta görünen kişilerin 62 s'de 4/4'ünü, 66 s'de 3/5'ini (hedef ve beyaz-bej giysili kişi kaçtı), 73 s'de 3/4'ünü (beyaz-bej yine; hedef çamın arkasında), 78 s'de 2/3'ünü (sarılı kişi) buldu. Aynı kareler 1280'de bu kaçırılanların hepsini buldu ama ≈ 4–8 kat yavaş (CPU'da ≈ 230–475 ms). Varsayılan `.pt`'deki 640 kalır; ölçüt 4./7. gruplarda koşu içinde çıkar. Gözlemdir, ölçüt değildir.

@@ -84,16 +84,23 @@ def camera_sdf(x: float, y: float, z: float, pitch_deg: float, yaw_deg: float, r
 """
 
 
-def world_text(args: argparse.Namespace, extra: str, out: Path) -> tuple[Path, str]:
-    """World file with the preview camera (and the scenario's target, if any); returns (path, world name)."""
-    if args.senaryo:
-        sc = hedef.load(args.senaryo)
+def world_text(scenario: str | None, world: str | None, extra: str, out: Path) -> tuple[Path, str]:
+    """World file with the preview camera (and the scenario's people, if a scenario is given); returns (path, world
+    name)."""
+    if scenario:
+        sc = hedef.load(scenario)
         path = hedef.write_world(sc, out, extra)
         return path, sc.world
-    text = (SIM_DIR / "worlds" / f"{args.dunya}.sdf").read_text(encoding="utf-8")
+    text = (SIM_DIR / "worlds" / f"{world}.sdf").read_text(encoding="utf-8")
     path = out / "dunya.sdf"
     path.write_text(text.replace("</world>", extra + "  </world>", 1), encoding="utf-8")
-    return path, args.dunya
+    return path, world
+
+
+def people_of(scenario: str | None) -> dict[int, str]:
+    """Segmentation label -> column prefix of everybody in the scenario (only the world: nobody but a target)."""
+    others = len(hedef.load(scenario).others) if scenario else 0
+    return {hedef.TARGET_LABEL: "hedef"} | {hedef.OTHER_LABEL + i: f"insan{i + 1}" for i in range(others)}
 
 
 class Frames:
@@ -158,6 +165,40 @@ class Frames:
             return self.last > end + 0.2
 
 
+def capture(world: Path, frames: Frames, out: Path) -> bool:
+    """Run Gazebo without a window on the world until `frames` has every frame it waits for (Gazebo's log goes to
+    out/sim.log); False if Gazebo stopped or the frames did not come."""
+    env = dict(os.environ)
+    env["GZ_SIM_RESOURCE_PATH"] = f"{SIM_DIR / 'models'}:{SIM_DIR / 'worlds'}:{REPO / 'Tools/simulation/gz/models'}"
+    env["GZ_SIM_SERVER_CONFIG_PATH"] = str(SIM_DIR / "server.config")
+    log = (out / "sim.log").open("w")
+    proc = subprocess.Popen(
+        ["gz", "sim", "-s", "-r", "--headless-rendering", "--verbose=1", str(world)], env=env, stdout=log, stderr=log
+    )
+    end = max(frames.wanted + ([frames.video[1]] if frames.video else []))
+    print(f"Gazebo açıldı; {end:.0f} s simülasyon zamanı bekleniyor...", flush=True)
+    try:
+        t_wall = time.monotonic()
+        while not frames.done():
+            if proc.poll() is not None:
+                print(f"Gazebo kapandı (bkz. {out / 'sim.log'})", file=sys.stderr)
+                return False
+            if time.monotonic() - t_wall > 120 + 4 * end:
+                print("Zaman aşımı: kareler gelmedi", file=sys.stderr)
+                return False
+            time.sleep(0.5)
+    finally:
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        log.close()
+    if frames.people:
+        time.sleep(0.5)  # the last segmentation frames
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
@@ -194,41 +235,12 @@ def main() -> int:
     out = args.cikti or SIM_DIR / "sonuclar" / f"{dt.datetime.now():%Y%m%d_%H%M%S}_onizleme_{name}"
     out.mkdir(parents=True, exist_ok=True)
     rate = VIDEO_FPS if video else 20
-    world, _ = world_text(args, camera_sdf(*cam, rate, args.etiket), out)
-    people = None
-    if args.etiket:
-        others = len(hedef.load(args.senaryo).others) if args.senaryo else 0
-        people = {hedef.TARGET_LABEL: "hedef"} | {hedef.OTHER_LABEL + i: f"insan{i + 1}" for i in range(others)}
-
-    env = dict(os.environ)
-    env["GZ_SIM_RESOURCE_PATH"] = f"{SIM_DIR / 'models'}:{SIM_DIR / 'worlds'}:{REPO / 'Tools/simulation/gz/models'}"
-    env["GZ_SIM_SERVER_CONFIG_PATH"] = str(SIM_DIR / "server.config")
+    world, _ = world_text(args.senaryo, args.dunya, camera_sdf(*cam, rate, args.etiket), out)
+    people = people_of(args.senaryo) if args.etiket else None
     frames = Frames(wanted, video, people)
-    log = (out / "sim.log").open("w")
-    proc = subprocess.Popen(
-        ["gz", "sim", "-s", "-r", "--headless-rendering", "--verbose=1", str(world)], env=env, stdout=log, stderr=log
-    )
-    end = max(wanted + ([video[1]] if video else []))
-    print(f"Gazebo açıldı; {end:.0f} s simülasyon zamanı bekleniyor...", flush=True)
-    try:
-        t_wall = time.monotonic()
-        while not frames.done():
-            if proc.poll() is not None:
-                print(f"Gazebo kapandı (bkz. {out / 'sim.log'})", file=sys.stderr)
-                return 1
-            if time.monotonic() - t_wall > 120 + 4 * end:
-                print("Zaman aşımı: kareler gelmedi", file=sys.stderr)
-                return 1
-            time.sleep(0.5)
-    finally:
-        proc.send_signal(signal.SIGINT)
-        try:
-            proc.wait(15)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+    if not capture(world, frames, out):
+        return 1
 
-    if people:
-        time.sleep(0.5)  # the last segmentation frames
     for t, img in sorted(frames.photos.items()):
         path = out / f"kare_{t:07.2f}.png"
         PilImage.fromarray(frames.annotate(t, img) if people else img).save(path)

@@ -286,7 +286,7 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
             "= dron PX4 Hold'da bekler"
         )
     _check_keys(drone, {"yukseklik_m"}, "drone")
-    detection = _detection(_block(d, "algilama", "{etkin: true, conf: 0.25}"))
+    detection = read_detection(_block(d, "algilama", "{etkin: true, conf: 0.25}"))
     tracking = _tracking(_block(d, "takip", "{kaynak: yok}"), detection.enabled, cli)
 
     target = d.get("hedef") or {}
@@ -419,7 +419,8 @@ def _commands(value: object, where: str) -> list[str]:
     return list(value)
 
 
-def _detection(d: dict) -> Detection:
+def read_detection(d: dict) -> Detection:
+    """The algilama block (YAML keys) -> Detection; also model_dene.py's options, so both follow one set of rules."""
     _check_keys(d, set(DETECTION_FIELDS), "algilama")
     default = Detection()
     model = d.get("model")
