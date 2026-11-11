@@ -132,20 +132,20 @@ Kritik yol sıkıdır (1–9 ≈ 5 gün). Gecikme olursa demodan hiçbir madde d
 #### Görev Grubu 2: Senaryo şeması ve komut satırı
 **Bağımlılık:** Görev Grubu 1 · **Emek:** ~0.3 gün
 
-- [ ] 2.0 Faz A'nın bütün senaryo alanlarını ve bayraklarını tek yerde tanımlamak
-  - [ ] 2.1 Testleri yaz: `test_hedef.py`'ye (5–7 test)
+- [x] 2.0 Faz A'nın bütün senaryo alanlarını ve bayraklarını tek yerde tanımlamak
+  - [x] 2.1 Testleri yaz: `test_hedef.py`'ye (5–7 test)
     - Yeni bloklar varsayılanlarıyla okunur (`takip`, `algilama`, `gecikme`, `kusurlar`, `video`; spec "Senaryo alanları" tablosu)
     - Yanlış alan adı ya da değer, alan adıyla reddedilir (`_check_keys`, `_number` deseni)
     - `takip.kaynak: tez_los` iken `mod_adi` zorunlu
     - `algilama.etkin: false` iken `takip.los: model` reddedilir
     - `takip.px4_parametreleri` ad kuralı (1. gruptaki ayrıştırıcıyla aynı)
     - Komut satırı YAML'ı ezer; geçerli ayarların hepsi `ayarlar` sözlüğünde toplanır
-  - [ ] 2.2 `hedef.py`: yeni bloklar ve doğrulama (`kusurlar` burada yalnız sözlük olarak alınır; anahtarları 4. grupta `kusurlar.py` doğrular)
-  - [ ] 2.3 `senaryo.py` bayrakları: `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz`, `--takip`, `--mod-adi`, `--los`, `--param` (çoklu), `--px4-baslat` (çoklu), `--gecikme-ms`, `--qgc`, `--videosuz`, `--kareleri-sakla`
+  - [x] 2.2 `hedef.py`: yeni bloklar ve doğrulama (`kusurlar` burada yalnız sözlük olarak alınır; anahtarları 4. grupta `kusurlar.py` doğrular)
+  - [x] 2.3 `senaryo.py` bayrakları: `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz`, `--takip`, `--mod-adi`, `--los`, `--param` (çoklu), `--px4-baslat` (çoklu), `--gecikme-ms`, `--qgc`, `--videosuz`, `--kareleri-sakla`
     - Geçerli ayarlar (PX4'e yüklenen parametreler dahil) `ozet.json` → `ayarlar` alanına yazılır
-  - [ ] 2.4 `senaryolar/takip_yuruyen.yaml`: `yuruyen_insan` yolu, `takip: {kaynak: follow_me, los: model}`, yükseklik 8 m, `FLW_TGT_DST 8`
-  - [ ] 2.5 Ara durum kuralı: Sonraki gruplarda bağlanacak bir ayar varsayılan dışında verilirse (ör. `follow_me`, `tez_los`, `gecikme.ek_ms ≠ 0`, `--qgc`) `senaryo.py` koşuyu başlatmadan "Görev grubu N'de bağlanacak" hatası verir. Bu hata ilgili grupta kaldırılır; sessizce yok sayılan ayar olmaz.
-  - [ ] 2.6 Doğrulama
+  - [x] 2.4 `senaryolar/takip_yuruyen.yaml`: `yuruyen_insan` yolu, `takip: {kaynak: follow_me, los: model}`, yükseklik 8 m, `FLW_TGT_DST 8`
+  - [x] 2.5 Ara durum kuralı: Sonraki gruplarda bağlanacak bir ayar varsayılan dışında verilirse (ör. `follow_me`, `tez_los`, `gecikme.ek_ms ≠ 0`, `--qgc`) `senaryo.py` koşuyu başlatmadan "Görev grubu N'de bağlanacak" hatası verir. Bu hata ilgili grupta kaldırılır; sessizce yok sayılan ayar olmaz.
+  - [x] 2.6 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_hedef.py -q
@@ -396,10 +396,10 @@ Kritik yol sıkıdır (1–9 ≈ 5 gün). Gecikme olursa demodan hiçbir madde d
 **Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.5 gün · **Bekleyen:** Kurt/Algan modülü (o arada iskelet modül ağaç dışında)
 
 - [ ] 10.0 m15 modunun sime kolayca takılıp aynı senaryo, ölçüt ve videoyla denenebilmesi
-  - [ ] 10.1 Testleri yaz (2–4 test): `calistir.sh`'a giden argüman listesinin oluşturulması (`takip.px4_baslat` + `--px4-baslat`, `takip.px4_parametreleri` + `--param` sırası); "unresponsive" kontrolünün yalnız harici modlu koşuda açılması
+  - [ ] 10.1 Testleri yaz (2–4 test): `calistir.sh`'a giden argüman listesinin oluşturulması (`takip.px4_baslat` + `--px4-baslat`, `takip.px4_parametreleri` + `--param` sırası); "unresponsive" kontrolünün yalnız harici modlu koşuda açılması. (`takip.px4_parametreleri` + `--param` sırası 2. grupta `test_hedef.py`'de sınandı.)
   - [ ] 10.2 `derle.sh --harici <klasör>` → `EXTERNAL_MODULES_LOCATION`; bayrak yoksa `tez/px4/src/CMakeLists.txt` varsa o, yoksa stok; çıktı her zaman `build/px4_sitl_tez`; klasör önbellektekinden farklıysa CMake yeniden yapılandırılır
   - [ ] 10.3 `calistir.sh --px4-baslat "<komut>"` (çoklu): `px4-logger status` başarılı olana kadar en çok 90 s beklenir; komut `rootfs` içinde `bin/px4-<komut>` ile çalışır, çıktısı sim log'una yazılır
-  - [ ] 10.4 `senaryo.py`/`simulasyon.py`: `takip.px4_baslat`, `takip.px4_parametreleri`, `--px4-baslat` bağlanır; harici modlu koşu sonunda `sim.log`'da "unresponsive" aranır. 2. gruptaki ilgili ara hatalar kaldırılır.
+  - [ ] 10.4 `senaryo.py`/`simulasyon.py`: `takip.px4_baslat`, `takip.px4_parametreleri`, `--px4-baslat` bağlanır; harici modlu koşu sonunda `sim.log`'da "unresponsive" aranır. 2. gruptaki ilgili ara hatalar kaldırılır. (`takip.px4_parametreleri` ve `--param` 2. grupta bağlandı ve koşuda PX4'ten geri okunuyor; burada yalnız `px4_baslat` kalır.)
   - [ ] 10.5 README "C. Kendi PX4 modülünü takmak" bölümü (spec "Takım Arkadaşı Kılavuzu" C1–C8); iskelet modül notları (`PARENT_SCOPE`, `DEPENDS` yok, `register_ext_component_request`, 24 karakter) `c4b4abf342`'ye atıfla
   - [ ] 10.6 Doğrulama
 

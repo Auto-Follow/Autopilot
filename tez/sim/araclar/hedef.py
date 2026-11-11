@@ -6,6 +6,8 @@ animates actors only on the rendering side and does not publish their pose. sena
 rendered target against this computation with an overhead camera (dogrulama.py).
 """
 
+import copy
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,6 +16,7 @@ import dunya
 import numpy as np
 import yaml
 
+import parametreler
 import yuruyus
 
 SIM_DIR = Path(__file__).resolve().parent.parent
@@ -27,10 +30,21 @@ SUCCESS_KEYS = {
     "en_uzun_kayip_max_s": "hedefin kadrajdan çıktığı en uzun aralık, en fazla [s]",
     "yatay_mesafe_max_m": "dron ile hedef arasındaki yatay mesafe, en fazla [m]",
 }
-# takip.kaynak: who steers the drone after takeoff. Only "yok" (open loop, PX4 "Hold") so far; the others are
-# wired in later task groups of spec 2026-11-10-m06-sim-ortami (group number in the error message).
-TRACKING_SOURCES = {"yok"}
-LATER_TRACKING_SOURCES = {"follow_me": 6, "tez_los": 5}
+# Faz A blocks of spec 2026-11-10-m06-sim-ortami ("Senaryo alanları"). takip.kaynak: who steers the drone after
+# takeoff: yok = open loop (PX4 "Hold"), follow_me = stock Follow Me ("Follow Target"), tez_los = an external mode
+# chosen by takip.mod_adi. takip.los: where the line of sight sent as TEZ_LOS comes from, (i) the model's box or
+# (ii) the referee (kayit.py los_govde).
+TRACKING_SOURCES = ("yok", "follow_me", "tez_los")
+LOS_SOURCES = ("model", "hakem")
+TRACKING_KEYS = {"kaynak", "mod_adi", "los", "px4_baslat", "px4_parametreleri"}
+# YAML key -> attribute of Detection / Delay; the command line flag that replaces it, if there is one
+DETECTION_FIELDS = {"etkin": "enabled", "model": "model", "imgsz": "imgsz", "conf": "conf", "sinif": "class_name"}
+DETECTION_FIELDS |= {"cekirdek": "cores"}
+DELAY_FIELDS = {"ek_ms": "extra_ms", "titresim_ms": "jitter_ms", "saat_ofset_ms": "clock_offset_ms"}
+DELAY_FIELDS |= {"saat_kayma_ppm": "clock_drift_ppm"}
+FLAGS = {"algilama.model": "--model", "algilama.imgsz": "--imgsz", "algilama.conf": "--conf"}
+FLAGS |= {"algilama.sinif": "--sinif", "gecikme.ek_ms": "--gecikme-ms"}
+TAKEOFF_PARAM = "MIS_TAKEOFF_ALT"  # px4_baglanti.takeoff sets it from drone.yukseklik_m
 BEHAVIOUR_KEYS = {"dogal", "tohum", "hiz_dalgalanma", "yol_sapmasi_m"}
 PERSON_KEYS = {"baslangic", "yol", "davranis", "kiyafet"}
 TARGET_LABEL = 1  # segmentation label of the target; the other people get OTHER_LABEL + i
@@ -85,13 +99,72 @@ class Person:
     clothes: Clothes = field(default_factory=Clothes)
 
 
+@dataclass(frozen=True)
+class Tracking:
+    """takip: who steers the drone after takeoff and what goes to PX4."""
+
+    source: str = "yok"  # TRACKING_SOURCES
+    mode_name: str | None = None  # AVAILABLE_MODES name of the mode tez_los switches to (required there)
+    los: str | None = "model"  # LOS_SOURCES; None = no LOS (model off and nothing to steer, source "yok")
+    px4_start: tuple[str, ...] = ()  # PX4 commands after start: takip.px4_baslat, then --px4-baslat
+    px4_params: tuple[parametreler.Param, ...] = ()  # takip.px4_parametreleri, then --param (load order)
+
+
+@dataclass(frozen=True)
+class Detection:
+    """algilama: the person detector that runs on the drone camera's frames."""
+
+    enabled: bool = True  # false: no model process (--modelsiz)
+    model: Path | None = None  # None: the default model file (~/auto-follow-modeller/, task group 3)
+    imgsz: int | None = None  # [px] model input size; None: the training size stored in the .pt
+    conf: float = 0.25  # (0..1] confidence threshold
+    class_name: str | int | None = None  # class name or number; None: the class named "person" (any case)
+    cores: int = 4  # torch threads; the rest of the CPU stays with Gazebo and PX4
+
+
+@dataclass(frozen=True)
+class Delay:
+    """gecikme: artificial delay on the capture -> PX4 path and the clock model of the sent time stamps."""
+
+    extra_ms: float = 0.0  # [ms]
+    jitter_ms: float = 0.0  # [ms] uniform, seeded
+    clock_offset_ms: float = 0.0  # [ms]
+    clock_drift_ppm: float = 0.0  # [ppm]
+
+
+@dataclass(frozen=True)
+class Video:
+    mp4: bool = True  # kosu.mp4 after the run (--videosuz: false)
+    qgc: bool = False  # live H.264 RTP to QGroundControl (--qgc)
+    keep_frames: bool = False  # keep the MP4's frames (--kareleri-sakla; command line only)
+
+
+@dataclass(frozen=True)
+class CommandLine:
+    """senaryo.py options that replace the scenario's values; None / False / empty keeps the YAML value."""
+
+    model: str | None = None  # --model
+    imgsz: int | None = None  # --imgsz
+    conf: float | None = None  # --conf
+    class_name: str | None = None  # --sinif (name or number)
+    no_model: bool = False  # --modelsiz
+    source: str | None = None  # --takip
+    mode_name: str | None = None  # --mod-adi
+    los: str | None = None  # --los
+    params: tuple[str, ...] = ()  # --param NAME=VALUE, loaded after takip.px4_parametreleri
+    px4_start: tuple[str, ...] = ()  # --px4-baslat, run after takip.px4_baslat
+    delay_ms: float | None = None  # --gecikme-ms (gecikme.ek_ms)
+    qgc: bool = False  # --qgc
+    no_video: bool = False  # --videosuz
+    keep_frames: bool = False  # --kareleri-sakla
+
+
 @dataclass
 class Scenario:
     name: str
     description: str
     world: str
     altitude: float
-    tracking_source: str
     start: tuple[float, float]
     start_time: float
     end_wait: float
@@ -102,6 +175,15 @@ class Scenario:
     source: Path | None = None
     clothes: Clothes = field(default_factory=Clothes)  # of the target
     others: list[Person] = field(default_factory=list)
+    tracking: Tracking = field(default_factory=Tracking)
+    detection: Detection = field(default_factory=Detection)
+    delay: Delay = field(default_factory=Delay)
+    defects: dict = field(default_factory=dict)  # kusurlar; its fields are checked by kusurlar.py (task group 4)
+    video: Video = field(default_factory=Video)
+
+    @property
+    def tracking_source(self) -> str:
+        return self.tracking.source
 
     @property
     def end_time(self) -> float:
@@ -134,9 +216,37 @@ def _number(d: dict, key: str, where: str, default: float | None = None, minimum
     value = d.get(key, default)
     if not isinstance(value, int | float) or isinstance(value, bool):
         raise ValueError(f"{where}.{key}: sayı olmalı, gelen: {value!r}")
+    if not math.isfinite(value):
+        raise ValueError(f"{where}.{key}: sonlu bir sayı olmalı, gelen: {value}")
     if value < minimum:
         raise ValueError(f"{where}.{key}: en az {minimum} olmalı, gelen: {value}")
     return float(value)
+
+
+def _integer(d: dict, key: str, where: str, default: int | None = None, minimum: int = 0) -> int:
+    value = d.get(key, default)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{where}.{key}: tam sayı olmalı, gelen: {value!r}")
+    if value < minimum:
+        raise ValueError(f"{where}.{key}: en az {minimum} olmalı, gelen: {value}")
+    return value
+
+
+def _flag(d: dict, key: str, where: str, default: bool) -> bool:
+    value = d.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{where}.{key}: true/false olmalı, gelen: {value!r}")
+    return value
+
+
+def _block(d: dict, key: str, example: str) -> dict:
+    """A block of the scenario (absent or empty = {}); anything but a dict is refused with an example."""
+    value = d.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key}: sözlük (alan: değer) olmalı, ör. {key}: {example}; gelen: {value!r}")
+    return value
 
 
 def _check_keys(d: dict, allowed: set[str], where: str) -> None:
@@ -156,14 +266,18 @@ def find_scenario(name_or_path: str) -> Path:
     raise FileNotFoundError(f"Senaryo bulunamadı: {name_or_path}. Mevcut senaryolar: {', '.join(known)}")
 
 
-def load(name_or_path: str) -> Scenario:
-    """Read and check a scenario file; every mistake is reported with the field it is in."""
+def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario:
+    """Read and check a scenario file, with senaryo.py's options in place of the YAML values they replace; every
+    mistake is reported with the field it is in."""
     path = find_scenario(name_or_path)
     d = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(d, dict):
         raise ValueError(f"{path.name}: YAML sözlük (alan: değer) olmalı")
     top_keys = {"ad", "aciklama", "dunya", "drone", "takip", "hedef", "diger_insanlar", "zamanlama", "basari"}
+    top_keys |= {"algilama", "gecikme", "kusurlar", "video"}
     _check_keys(d, top_keys, path.name)
+    cli = command_line or CommandLine()
+    d = _with_command_line(d, cli)
 
     drone = d.get("drone") or {}
     if "mod" in drone:
@@ -172,7 +286,8 @@ def load(name_or_path: str) -> Scenario:
             "= dron PX4 Hold'da bekler"
         )
     _check_keys(drone, {"yukseklik_m"}, "drone")
-    tracking_source = _tracking_source(d.get("takip") or {})
+    detection = _detection(_block(d, "algilama", "{etkin: true, conf: 0.25}"))
+    tracking = _tracking(_block(d, "takip", "{kaynak: yok}"), detection.enabled, cli)
 
     target = d.get("hedef") or {}
     _check_keys(target, PERSON_KEYS | {"tur"}, "hedef")
@@ -194,7 +309,6 @@ def load(name_or_path: str) -> Scenario:
         description=str(d.get("aciklama", "")),
         world=world,
         altitude=_number(drone, "yukseklik_m", "drone", 10.0, minimum=2.0),
-        tracking_source=tracking_source,
         start=_point(target.get("baslangic"), "hedef.baslangic"),
         start_time=_number(timing, "baslama_s", "zamanlama", 60.0, minimum=20.0),
         end_wait=_number(timing, "son_bekleme_s", "zamanlama", 5.0),
@@ -202,6 +316,11 @@ def load(name_or_path: str) -> Scenario:
         success={k: _number(success, k, "basari") for k in success},
         source=path,
         clothes=_clothes(target.get("kiyafet") or {}, "hedef.kiyafet"),
+        tracking=tracking,
+        detection=detection,
+        delay=_delay(_block(d, "gecikme", "{ek_ms: 0}")),
+        defects=copy.deepcopy(_block(d, "kusurlar", "{}")),
+        video=_video(_block(d, "video", "{mp4: true, qgc: false}"), cli.keep_frames),
     )
     sc.track, sc.walk_end = yuruyus.plan(
         sc.start, sc.start_time, _steps(sc.start, target.get("yol"), "hedef.yol"), sc.behaviour
@@ -215,20 +334,229 @@ def load(name_or_path: str) -> Scenario:
     return sc
 
 
-def _tracking_source(d: object) -> str:
-    if not isinstance(d, dict):
-        raise ValueError("takip: {kaynak: yok} biçiminde olmalı")
-    _check_keys(d, {"kaynak"}, "takip")
+def _with_command_line(d: dict, cli: CommandLine) -> dict:
+    """The scenario with the command line's values put into its blocks; they are checked afterwards like YAML values
+    (--param and --px4-baslat add to the scenario's lists instead, see _tracking)."""
+    values = {
+        ("takip", "kaynak"): cli.source,
+        ("takip", "mod_adi"): cli.mode_name,
+        ("takip", "los"): cli.los,
+        ("algilama", "etkin"): False if cli.no_model else None,
+        ("algilama", "model"): cli.model,
+        ("algilama", "imgsz"): cli.imgsz,
+        ("algilama", "conf"): cli.conf,
+        ("algilama", "sinif"): cli.class_name,
+        ("gecikme", "ek_ms"): cli.delay_ms,
+        ("video", "mp4"): False if cli.no_video else None,
+        ("video", "qgc"): True if cli.qgc else None,
+    }
+    merged = dict(d)
+    for (block, key), value in values.items():
+        current = merged.get(block) or {}
+        if value is not None and isinstance(current, dict):  # a broken block is reported by its own check
+            merged[block] = {**current, key: value}
+    return merged
+
+
+def _tracking(d: dict, detection_on: bool, cli: CommandLine) -> Tracking:
+    _check_keys(d, TRACKING_KEYS, "takip")
     source = d.get("kaynak", "yok")
-    if source in LATER_TRACKING_SOURCES:
-        raise ValueError(
-            f"takip.kaynak: {source!r} henüz bağlanmadı (Görev grubu {LATER_TRACKING_SOURCES[source]}'da "
-            "bağlanacak); şimdilik yalnız 'yok'"
-        )
     if source not in TRACKING_SOURCES:
-        known = sorted(TRACKING_SOURCES | set(LATER_TRACKING_SOURCES))
-        raise ValueError(f"takip.kaynak: {known} olmalı, gelen: {source!r}")
-    return source
+        raise ValueError(f"takip.kaynak: {list(TRACKING_SOURCES)} olmalı (--takip), gelen: {source!r}")
+    mode_name = d.get("mod_adi")
+    if mode_name is not None and not (isinstance(mode_name, str) and mode_name.strip()):
+        raise ValueError(f"takip.mod_adi: PX4 mod adı (metin) olmalı, gelen: {mode_name!r}")
+    if source == "tez_los" and mode_name is None:
+        raise ValueError(
+            "takip.mod_adi: takip.kaynak tez_los iken zorunlu: PX4'ün AVAILABLE_MODES listesindeki (QGC'de görünen) "
+            "ad; komut satırında --mod-adi"
+        )
+    starts = _commands(_or_empty(d, "px4_baslat", []), "takip.px4_baslat") + _commands(
+        list(cli.px4_start), "--px4-baslat"
+    )
+    params = _or_empty(d, "px4_parametreleri", {})
+    if not isinstance(params, dict):
+        raise ValueError(f"takip.px4_parametreleri: {{AD: sayı}} sözlüğü olmalı, gelen: {params!r}")
+    px4_params = parametreler.from_mapping(params) + [parametreler.parse_assignment(text) for text in cli.params]
+    for p in px4_params:
+        if p.name == TAKEOFF_PARAM:
+            raise ValueError(f"{p.source}: {p.name}: kalkış yüksekliğini drone.yukseklik_m verir; burada yazılmaz")
+    return Tracking(source, mode_name, _los(d, source, detection_on), tuple(starts), tuple(px4_params))
+
+
+def _los(d: dict, source: str, detection_on: bool) -> str | None:
+    """takip.los; not given = the model's box while the model runs. LOS (i) needs the model's boxes."""
+    los = d.get("los")
+    if los is not None and los not in LOS_SOURCES:
+        raise ValueError(f"takip.los: {list(LOS_SOURCES)} olmalı (--los), gelen: {los!r}")
+    if detection_on:
+        return los or "model"
+    if los == "model":
+        raise ValueError(
+            "takip.los: model, algılama kapalıyken (algilama.etkin: false / --modelsiz) kullanılamaz: model kutusu "
+            "yok; hakem seçin (--los hakem) ya da algılamayı açın"
+        )
+    if los is None and source != "yok":
+        raise ValueError(
+            f"takip.los: algılama kapalıyken takip.kaynak {source} bir LOS kaynağı ister: takip.los: hakem "
+            "(--los hakem) yazın ya da algılamayı açın"
+        )
+    return los  # "hakem", or None: open loop without a model, no LOS at all
+
+
+def _or_empty(d: dict, key: str, empty: object) -> object:
+    """d[key]; a key written without a value (YAML null) counts as empty, any other value is checked by the caller."""
+    value = d.get(key)
+    return empty if value is None else value
+
+
+def _commands(value: object, where: str) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError(f'{where}: komut listesi olmalı, ör. ["<modül> start"]; gelen: {value!r}')
+    for i, command in enumerate(value):
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError(f"{where}[{i}]: PX4 komutu (metin) olmalı, gelen: {command!r}")
+    return list(value)
+
+
+def _detection(d: dict) -> Detection:
+    _check_keys(d, set(DETECTION_FIELDS), "algilama")
+    default = Detection()
+    model = d.get("model")
+    if model is not None:
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError(f"algilama.model: model dosyasının yolu olmalı (--model), gelen: {model!r}")
+        model = Path(model).expanduser().absolute()  # a relative path is relative to the working folder
+    imgsz = _integer(d, "imgsz", "algilama", minimum=32) if d.get("imgsz") is not None else None
+    conf = _number(d, "conf", "algilama", default.conf)
+    if not 0 < conf <= 1:
+        raise ValueError(f"algilama.conf: 0'dan büyük, en fazla 1 olmalı (güven eşiği), gelen: {conf}")
+    return Detection(
+        enabled=_flag(d, "etkin", "algilama", default.enabled),
+        model=model,
+        imgsz=imgsz,
+        conf=conf,
+        class_name=_class_name(d.get("sinif")),
+        cores=_integer(d, "cekirdek", "algilama", default.cores, minimum=1),
+    )
+
+
+def _class_name(value: object) -> str | int | None:
+    """algilama.sinif / --sinif: a class number (also written as text, "0") or a class name of the model."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise ValueError(f"algilama.sinif: sınıf adı ya da 0 veya daha büyük bir numara olmalı, gelen: {value!r}")
+
+
+def _delay(d: dict) -> Delay:
+    _check_keys(d, set(DELAY_FIELDS), "gecikme")
+    signed = {"saat_ofset_ms", "saat_kayma_ppm"}  # the clock may be early or late, fast or slow
+    values = {
+        attr: _number(d, key, "gecikme", 0.0, minimum=-math.inf if key in signed else 0.0)
+        for key, attr in DELAY_FIELDS.items()
+    }
+    return Delay(**values)
+
+
+def _video(d: dict, keep_frames: bool) -> Video:
+    _check_keys(d, {"mp4", "qgc"}, "video")
+    default = Video()
+    return Video(_flag(d, "mp4", "video", default.mp4), _flag(d, "qgc", "video", default.qgc), keep_frames)
+
+
+def start_params(sc: Scenario, files: tuple[Path, ...] = parametreler.FILES) -> dict[str, parametreler.Param]:
+    """Every PX4 start parameter of the run in load order (files -> takip.px4_parametreleri -> --param)."""
+    return parametreler.merge(*(parametreler.read_file(f) for f in files), sc.tracking.px4_params)
+
+
+def settings(sc: Scenario) -> dict:
+    """Every setting the run uses, for ozet.json "ayarlar": the scenario's blocks after the command line, all PX4
+    start parameters with their source, and the defaults that are not in effect yet (see not_in_effect)."""
+    t, a, v = sc.tracking, sc.detection, sc.video
+    detection = {key: getattr(a, attr) for key, attr in DETECTION_FIELDS.items()}
+    detection["model"] = str(a.model) if a.model is not None else None
+    return {
+        "takip": {"kaynak": t.source, "mod_adi": t.mode_name, "los": t.los, "px4_baslat": list(t.px4_start)},
+        "algilama": detection,
+        "gecikme": {key: getattr(sc.delay, attr) for key, attr in DELAY_FIELDS.items()},
+        "kusurlar": copy.deepcopy(sc.defects),
+        "video": {"mp4": v.mp4, "qgc": v.qgc, "kareleri_sakla": v.keep_frames},
+        "px4_parametreleri": {n: {"deger": p.value, "kaynak": p.source} for n, p in start_params(sc).items()},
+        "henuz_bagli_degil": not_in_effect(sc),
+    }
+
+
+# Settings that later task groups of spec 2026-11-10-m06-sim-ortami wire in (tasks.md 2.5). unwired() stops a run
+# that gives one of them a value other than its default, before the simulation starts; nothing is silently ignored.
+# not_in_effect() lists the defaults that do not act yet. Each task group deletes its lines when it wires them in.
+def unwired(sc: Scenario) -> list[str]:
+    """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet."""
+    t, a, v = sc.tracking, sc.detection, sc.video
+    found: list[tuple[str, int]] = []
+    if t.source == "tez_los":
+        found.append(("takip.kaynak: tez_los (--takip)", 5))
+    if t.source == "follow_me":
+        found.append(("takip.kaynak: follow_me (--takip)", 6))
+    if t.los == "hakem":
+        found.append(("takip.los: hakem (--los)", 5))
+    if t.px4_start:
+        found.append(("takip.px4_baslat / --px4-baslat", 10))
+    if a.enabled:  # the model's own settings do not matter while it is off
+        found += [(text, 4) for text in _changed("algilama", a, Detection(), DETECTION_FIELDS)]
+    found += [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
+    if sc.defects:
+        found.append((f"kusurlar: {sc.defects}", 4))
+    if v.qgc:
+        found.append(("video.qgc: true (--qgc)", 11))
+    if v.keep_frames:
+        found.append(("--kareleri-sakla", 8))
+    return [f"{what}: {in_group(group)} bağlanacak" for what, group in found]
+
+
+def not_in_effect(sc: Scenario) -> dict[str, int]:
+    """Settings left at a default that a later task group wires in -> that group; they do not act in this run."""
+    found = {}
+    if sc.detection.enabled:
+        found["algilama.etkin"] = 4  # no model process yet
+    if sc.tracking.los == "model":
+        found["takip.los"] = 5  # no TEZ_LOS is sent yet
+    if sc.video.mp4:
+        found["video.mp4"] = 8  # no kosu.mp4 yet
+    return found
+
+
+def check_wired(sc: Scenario) -> None:
+    """Raise ValueError (one line per setting) if the run asks for something a later task group wires in."""
+    found = unwired(sc)
+    if found:
+        lines = "".join(f"\n  - {line}" for line in found)
+        raise ValueError(f"bu ayarlar henüz bağlanmadı, simülasyon açılmadı:{lines}")
+
+
+def _changed(block: str, value: object, default: object, names: dict[str, str]) -> list[str]:
+    """'<block>.<key>: <value> (<flag>)' for every field of a settings block that differs from its default."""
+    found = []
+    for key, attr in names.items():
+        if getattr(value, attr) != getattr(default, attr):
+            flag = FLAGS.get(f"{block}.{key}")
+            found.append(f"{block}.{key}: {getattr(value, attr)}" + (f" ({flag})" if flag else ""))
+    return found
+
+
+LOCATIVE_UNITS = {1: "de", 2: "de", 3: "te", 4: "te", 5: "te", 6: "da", 7: "de", 8: "de", 9: "da"}
+LOCATIVE_TENS = {1: "da", 2: "de"}  # on, yirmi
+
+
+def in_group(number: int) -> str:
+    """ "Görev grubu 6'da": the Turkish locative suffix follows how the number is read (altı'da, dört'te, on'da)."""
+    suffix = LOCATIVE_UNITS[number % 10] if number % 10 else LOCATIVE_TENS[number // 10]
+    return f"Görev grubu {number}'{suffix}"
 
 
 def _person(d: object, where: str, start_time: float) -> Person:

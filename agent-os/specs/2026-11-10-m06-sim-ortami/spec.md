@@ -194,13 +194,32 @@
 - Mevcut 3 senaryo `takip: {kaynak: yok}` olarak güncellenir. Yeni `senaryolar/takip_yuruyen.yaml` eklenir: `yuruyen_insan` yolu, `follow_me`, 8 m yükseklik / 8 m geride, LOS kaynağı model.
 - Yanlış alan adı ya da değer, hangi alan olduğu söylenerek reddedilir (`hedef._check_keys` deseni). Ayrıca:
   - `tez_los` için `mod_adi` zorunludur.
-  - `algilama.etkin: false` iken `takip.los: model` reddedilir.
+  - `algilama.etkin: false` iken `takip.los: model` reddedilir. `los` hiç verilmemişse ve algılama kapalıysa: `yok`
+    kaynağında LOS yoktur (`ayarlar.takip.los: null`; F1 böyle koşar), `follow_me`/`tez_los` ise `los: hakem` ister.
+  - `takip.px4_parametreleri` ve `--param`, `.params` dosyalarıyla aynı ad ve sayı kuralından geçer
+    (`araclar/parametreler.py`). `MIS_TAKEOFF_ALT` reddedilir: kalkış yüksekliğini `drone.yukseklik_m` verir ve
+    `px4_baglanti.takeoff` onu zaten yazar; aksi hâlde verilen değer sessizce ezilirdi.
 - `senaryo.py`'ye eklenen bayraklar:
   - `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz`
   - `--takip`, `--mod-adi`, `--los`
   - `--param AD=DEĞER` ve `--px4-baslat KOMUT` (ikisi de birden çok verilebilir)
   - `--gecikme-ms`, `--qgc`, `--videosuz`, `--kareleri-sakla`
 - Komut satırı YAML'daki değeri ezer. Koşuda geçerli olan ayarların hepsi `ozet.json` içindeki `ayarlar` alanına yazılır. Bunlara PX4'e yüklenen parametreler ve model özeti de dahildir.
+  - Komut satırı değerleri doğrulamadan önce senaryonun bloklarına yerleşir (`hedef.load(ad, CommandLine)`); hata
+    mesajı YAML alan adını ve bayrağı birlikte söyler. `--param` ve `--px4-baslat` senaryonun listesinin sonuna
+    eklenir (yükleme sırası korunur). `--kareleri-sakla` yalnız komut satırındadır (`ayarlar.video.kareleri_sakla`).
+  - `ayarlar.px4_parametreleri`: yüklenen her başlangıç parametresi (dosyalar + senaryo + `--param`) için istenen
+    değer (`deger`), kaynağı (`kaynak`: dosya:satır # yorum, `takip.px4_parametreleri` ya da `--param`) ve koşuda
+    kalkıştan önce PX4'ten geri okunan değer (`px4`, `PARAM_REQUEST_READ`). PX4 istenen değeri tutmuyorsa koşu
+    kalkıştan önce durur ("TAMAMLANMADI"; 1. maddedeki `param set` istisnası). `takip.px4_parametreleri` ve
+    `--param` bu yüzden 2. görev grubunda bağlandı; 10. grup yalnız `px4_baslat`'ı bağlar.
+  - Ara durum (m06 sürerken, tasks.md 2.5): sonraki bir görev grubunda bağlanacak ayar varsayılan dışında verilirse
+    `senaryo.py` simülasyonu açmadan "`<alan>`: Görev grubu N'de bağlanacak" hatasıyla durur (`hedef.check_wired`;
+    `senaryo.run` de aynı kontrolü yapar). Varsayılanı henüz etkin olmayan ayarlar `ayarlar.henuz_bagli_degil`'de
+    grup numarasıyla listelenir (ör. `{"algilama.etkin": 4, "takip.los": 5, "video.mp4": 8}`). Her grup kendi
+    satırlarını `hedef.unwired` / `hedef.not_in_effect`'ten siler.
+  - `ozet.json`'daki eski `takip_kaynagi` alanı `ayarlar.takip.kaynak`'a taşındı (`ayarlar.takip.mod`: seçilen PX4
+    modunun adı).
 - `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` (`calistir.sh`) ve `--temiz` (`derle.sh`) aynen kalır. `calistir.sh` her açılışta parametreleri zaten sıfırlar.
 
 **9. Ölçütler, rapor ve MP4 video**
@@ -484,19 +503,22 @@ Karşılaştırmanın sonucu (11.11, `implementation/gorev-grubu-01.md`): 22.08'
 
 ### Senaryo alanları (Faz A, yeni)
 
-| Alan | Değerler, varsayılan | Not |
-|---|---|---|
-| `takip.kaynak` | `yok` \| `follow_me` \| `tez_los`; `yok` | Mod: Hold / "Follow Target" / `mod_adi` |
-| `takip.mod_adi` | metin | `tez_los`'ta zorunlu; AVAILABLE_MODES'taki ad |
-| `takip.los` | `model` \| `hakem`; `model` | LOS kaynağı (i) / (ii) |
-| `takip.px4_baslat` | metin listesi; boş | PX4 açıldıktan sonraki komutlar |
-| `takip.px4_parametreleri` | {AD: sayı}; boş | Başlangıçta en son yüklenir |
-| `algilama.etkin` | `true` | `false`: model süreci yok |
-| `algilama.model`, `imgsz`, `conf`, `sinif`, `cekirdek` | yol; `.pt`'deki; 0.25; adı `person` olan; 4 | Komut satırı ezer |
-| `gecikme.ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm` | hepsi 0 | Yakalama → PX4 yolu |
-| `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış |
-| `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc` |
-| `drone.mod` | kaldırılır | Yerine `takip.kaynak` |
+Şema 2. görev grubunda tamamlandı (`araclar/hedef.py`): bütün alanlar okunur ve doğrulanır. Son sütundaki grup
+gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmadan durur (8. madde, "Ara durum").
+
+| Alan | Değerler, varsayılan | Not | Bağlandığı görev grubu |
+|---|---|---|---|
+| `takip.kaynak` | `yok` \| `follow_me` \| `tez_los`; `yok` | Mod: Hold / "Follow Target" / `mod_adi`; `--takip` | `yok`: 1 · `tez_los`: 5 · `follow_me`: 6 |
+| `takip.mod_adi` | metin | `tez_los`'ta zorunlu; AVAILABLE_MODES'taki ad; `--mod-adi` | 5 |
+| `takip.los` | `model` \| `hakem`; `model` (algılama kapalı + `yok`: LOS yok) | LOS kaynağı (i) / (ii); algılama kapalıyken `model` olamaz; `--los` | 5 |
+| `takip.px4_baslat` | metin listesi; boş | PX4 açıldıktan sonraki komutlar; `--px4-baslat` sona eklenir | 10 |
+| `takip.px4_parametreleri` | {AD: sayı}; boş | Dosyalardan sonra, `--param`'dan önce yüklenir; koşuda PX4'ten geri okunur; `MIS_TAKEOFF_ALT` yazılmaz | 2 |
+| `algilama.etkin` | `true` | `false` / `--modelsiz`: model süreci yok | `false`: 2 (model zaten yok) · `true`: 4 |
+| `algilama.model`, `imgsz`, `conf`, `sinif`, `cekirdek` | yol (`~` açılır); `.pt`'deki (tam sayı ≥ 32); 0.25 ((0, 1]); adı `person` olan (ad ya da numara ≥ 0); 4 (≥ 1) | Komut satırı ezer (`--model`, `--imgsz`, `--conf`, `--sinif`) | 4 |
+| `gecikme.ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm` | hepsi 0 (ilk ikisi ≥ 0) | Yakalama → PX4 yolu; `--gecikme-ms` = `ek_ms` | 12 |
+| `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış; 2. grupta yalnız sözlük olduğu denetlenir | 4 |
+| `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc`; `--kareleri-sakla` yalnız komut satırında | `mp4: false`: 2 (video zaten yok) · `mp4`, `--kareleri-sakla`: 8 · `qgc`: 11 |
+| `drone.mod` | kaldırılır | Yerine `takip.kaynak` | 1 |
 
 ### Teslim sırası ve 15.11'deki en az demo
 

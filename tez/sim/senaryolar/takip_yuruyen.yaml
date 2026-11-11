@@ -1,0 +1,48 @@
+# Takip eden yürüyüş: yuruyen_insan'ın yolu, bu kez dron hedefi stok PX4 Follow Me ile 8 m geriden izler.
+#
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo takip_yuruyen
+#
+# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
+# Kamera raporunun stad ayarı 8/8: 8 m yükseklik, 8 m geride; 45° kamera yerde dronun ~3.6–17.5 m önünü görür.
+# Döngü: Gazebo kamerası → model (kutu) → düz zemin konum hesabı → FOLLOW_TARGET → PX4 "Follow Target" → dron.
+# Takip kaynağı follow_me m06'nın 6. görev grubunda bağlanır; o zamana kadar senaryo.py koşuyu sim açılmadan
+# "Görev grubu 6'da bağlanacak" diyerek durdurur.
+
+ad: takip_yuruyen
+aciklama: >
+  İnsan dronun 10 m önünde durur; 60. saniyede doğuya yürür, 3 s durur, kuzeye koşar, sonra batıya yürür
+  (yuruyen_insan'ın yolu). Dron 8 m yükseklikten stok PX4 Follow Me ile hedefi 8 m geriden izler; hedefin konumu
+  model kutusundan düz zemin hesabıyla bulunur.
+
+dunya: duz_alan
+
+drone:
+  yukseklik_m: 8
+
+takip:
+  kaynak: follow_me         # yok | follow_me (stok Follow Me, PX4 "Follow Target") | tez_los (+ mod_adi)
+  los: model                # TEZ_LOS'un kaynağı: model (model kutusu) | hakem (doğru cevap, "mükemmel algılayıcı")
+  px4_parametreleri:        # parametre dosyalarından sonra, --param'dan önce yüklenir; koşuda PX4'ten geri okunur
+    FLW_TGT_DST: 8          # Follow Me: hedefin 8 m gerisinde dur (kamera raporu, stad 8/8)
+  # FLW_TGT_HT verilmezse drone.yukseklik_m kullanılır (6. görev grubu)
+
+# Diğer bloklar varsayılanlarıyla (spec "Senaryo alanları"; komut satırı bayrakları bunları ezer):
+# algilama: {etkin: true, model: ~/auto-follow-modeller/person_detection_model_v0.2.pt, conf: 0.25, cekirdek: 4}
+# gecikme: {ek_ms: 0, titresim_ms: 0, saat_ofset_ms: 0, saat_kayma_ppm: 0}
+# kusurlar: {}
+# video: {mp4: true, qgc: false}
+
+hedef:
+  tur: insan
+  baslangic: [10, 0]
+  yol:
+    - {nokta: [22, 0], hiz_mps: 1.4}
+    - {dur_s: 3}
+    - {nokta: [22, 10], hiz_mps: 3.0}
+    - {nokta: [12, 10], hiz_mps: 1.4}
+
+zamanlama:
+  baslama_s: 60
+  son_bekleme_s: 5
+
+basari: {}

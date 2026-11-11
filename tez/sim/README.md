@@ -85,7 +85,19 @@ P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
 $P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan              # Gazebo penceresiyle (~3 dakika)
 $P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --ekransiz   # pencere yok
 $P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --dogrula    # + tepe kamerasıyla hedef konumu kontrolü
+$P tez/sim/araclar/senaryo.py --senaryo yuruyen_insan --param FLW_TGT_DST=10   # bir PX4 parametresi daha
+$P tez/sim/araclar/senaryo.py --help                               # bütün bayraklar
 ```
+
+Bayraklar senaryodaki değeri ezer: `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz` (algılama), `--takip`,
+`--mod-adi`, `--los`, `--param AD=DEĞER` ve `--px4-baslat KOMUT` (ikisi de birden çok verilebilir), `--gecikme-ms`,
+`--qgc`, `--videosuz`, `--kareleri-sakla`. Koşunun geçerli ayarlarının hepsi `ozet.json` → `ayarlar`'a yazılır.
+
+**Ara durum (m06 sürerken):** m06'nın sonraki görev gruplarında bağlanacak bir ayar varsayılan dışında verilirse
+koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (ör. `takip.kaynak: follow_me (--takip): Görev
+grubu 6'da bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok`, `--modelsiz`,
+`--videosuz`, `takip.px4_parametreleri` ve `--param`. Varsayılanı henüz etkin olmayan ayarlar (algılama, TEZ_LOS,
+MP4) `ozet.json` → `ayarlar.henuz_bagli_degil`'de listelenir.
 
 Senaryo yöneticisi dünyayı (temel dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve takip kaynağının
 moduna alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu yazar. Çıktı `tez/sim/sonuclar/<tarih>_<ad>/`
@@ -95,19 +107,32 @@ moduna alır, hedef yürürken doğru cevabı kaydeder, iner, kapatır ve raporu
 |---|---|
 | `rapor.html` | Sonuç (GEÇTİ / KALDI / TAMAMLANMADI), ölçütler, üstten harita, mesafe ve kamera görüntüsü grafikleri |
 | `dogru_cevap.csv` | **Dron kamerasının her karesi için bir satır** (~30 Hz, karenin sim zamanıyla): dron konumu ve duruşu (roll/pitch/yaw, PX4 yönleriyle), kamera konumu, hedef konumu/hızı, hedefin o karedeki pikseli (ayak, merkez, baş) ve kadrajda olup olmadığı, kameradan hedefe menzil ve **doğru görüş vektörü** (aşağıda) |
-| `ozet.json` | Ölçütler ve sonuç (makineyle okunur); kameranın kalibrasyonu ve gövdeye montajı (ofset, C_cb) |
+| `ozet.json` | Ölçütler ve sonuç (makineyle okunur); `ayarlar`: koşunun geçerli ayarları (senaryo + komut satırı) ve her başlangıç parametresinin istenen değeri, kaynağı ve PX4'ten geri okunan değeri; kameranın kalibrasyonu ve gövdeye montajı (ofset, C_cb) |
 | `ucus.ulg` | PX4 uçuş kaydı (PlotJuggler / pyulog) |
 | `dunya.sdf`, `senaryo.yaml`, `sim.log` | Koşunun girdileri ve logu |
 
 Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu), `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
 kısa koşu, sert geri dönüş) — ikisi düz alanda — ve `kalabalik_park` (çayırda hedef + dört kişi: patikada yürüyen,
-çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır). Yeni senaryo yazmak için birini
-kopyalayın. Alanlar:
+çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır). `takip_yuruyen`:
+`yuruyen_insan`'ın yolu, dron 8 m'den stok Follow Me ile 8 m geriden izler (takip kaynağı `follow_me`, m06'nın 6.
+görev grubunda bağlanır). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
 
 - `dunya`: `duz_alan` (tek renk düz alan, hızlı) veya `cayir` (aşağıda "Dünyalar")
 - `drone.yukseklik_m`
-- `takip.kaynak`: şimdilik yalnız `yok` (dron PX4 Hold'da bekler, açık döngü; varsayılan). `follow_me` ve `tez_los`
-  m06'nın sonraki görev gruplarında bağlanır. Eski `drone.mod` alanı kaldırıldı.
+- `takip` (varsayılan `{kaynak: yok}`; eski `drone.mod` alanı kaldırıldı):
+  - `kaynak`: `yok` (dron PX4 "Hold"da bekler, açık döngü), `follow_me` (stok Follow Me, "Follow Target") veya
+    `tez_los` (adı `mod_adi`'de verilen harici mod; orada `mod_adi` zorunlu). Mod her zaman adıyla seçilir.
+  - `los`: PX4'e `TEZ_LOS` olarak giden görüş vektörünün kaynağı: `model` (model kutusu, varsayılan) veya `hakem`
+    (doğru cevap). Algılama kapalıyken `model` olamaz; `follow_me`/`tez_los` o zaman `hakem` ister.
+  - `px4_baslat`: PX4 açıldıktan sonra çalışacak komutlar (liste)
+  - `px4_parametreleri`: `{AD: sayı}`; parametre dosyalarından sonra, `--param`'dan önce yüklenir, aynı ad ve sayı
+    kuralı (`MIS_TAKEOFF_ALT` yazılmaz, onu `drone.yukseklik_m` verir). Koşuda her başlangıç parametresi PX4'ten geri
+    okunur; PX4 istenen değeri tutmuyorsa koşu kalkıştan önce durur.
+- `algilama` (varsayılan açık): `etkin`, `model` (yol), `imgsz` (varsayılanı `.pt`'deki), `conf` (0.25), `sinif`
+  (ad ya da numara; varsayılan adı `person` olan), `cekirdek` (4)
+- `gecikme` (hepsi 0): `ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm`
+- `kusurlar` (varsayılan `{}`, kapalı)
+- `video`: `mp4` (true), `qgc` (false)
 - `hedef.baslangic: [x, y]` ve `hedef.yol`: sırayla `{nokta: [x, y], hiz_mps: v}` (v > 2 m/s koşu) veya `{dur_s: s}`
 - `hedef.davranis` (isteğe bağlı): hedef **insan gibi** hareket eder (`araclar/yuruyus.py`): ilk adımda yürüme hızına
   çıkar (yürürken 2 m/s², koşarken 2.5 m/s²), köşeleri yayla döner (yarıçap v²/1.5 m/s²; 1.4 m/s'de ~1.3 m),

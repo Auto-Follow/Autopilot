@@ -1,5 +1,6 @@
 """Scenario files: validation messages, the target path and its ground truth."""
 
+import json
 import re
 from pathlib import Path
 
@@ -115,14 +116,11 @@ def test_tracking_source_defaults_to_none(tmp_path: Path) -> None:
     assert hedef.load(write(tmp_path, GOOD.replace("takip: {kaynak: yok}\n", ""))).tracking_source == "yok"
 
 
-def test_drone_mode_is_gone_and_later_sources_are_refused(tmp_path: Path) -> None:
-    """drone.mod selected the removed skeleton mode; follow_me / tez_los are wired in later task groups."""
+def test_drone_mode_is_gone(tmp_path: Path) -> None:
+    """drone.mod selected the removed skeleton mode; takip.kaynak replaces it."""
     old = GOOD.replace("drone: {yukseklik_m: 10}", "drone: {yukseklik_m: 10, mod: tez}")
     with pytest.raises(ValueError, match=r"drone\.mod: .*takip\.kaynak"):
         hedef.load(write(tmp_path, old))
-    for source, group in (("follow_me", 6), ("tez_los", 5)):
-        with pytest.raises(ValueError, match=rf"takip\.kaynak: .*Görev grubu {group}"):
-            hedef.load(write(tmp_path, GOOD.replace("kaynak: yok", f"kaynak: {source}")))
 
 
 def test_unknown_scenario_lists_the_known_ones() -> None:
@@ -216,3 +214,211 @@ def test_skin_colours(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     text = (meshes / clothes.skin_file()).read_text()
     assert text.count("0.7800 0.7800 0.7600 1") == 2 and text.count("0.0300 0.0300 0.0350 1") == 2
     assert text.count("0.9000 0.6800 0.5500 1") == 2
+
+
+# --- Faz A scenario blocks and command line (spec 2026-11-10-m06-sim-ortami "Senaryo alanları", task group 2) ---
+
+FULL = GOOD.replace(
+    "takip: {kaynak: yok}\n",
+    """takip:
+  kaynak: tez_los
+  mod_adi: Tez Auto Follow
+  los: hakem
+  px4_baslat: [tez_auto_follow start]
+  px4_parametreleri: {FLW_TGT_DST: 9, MPC_XY_VEL_MAX: 0.5}
+algilama: {model: ~/modeller/m.pt, imgsz: 960, conf: 0.4, sinif: Person, cekirdek: 2}
+gecikme: {ek_ms: 200, titresim_ms: 20, saat_ofset_ms: -5, saat_kayma_ppm: 50}
+kusurlar: {gurultu: {sigma: 2}}
+video: {mp4: false, qgc: true}
+""",
+)
+
+
+def test_new_blocks_have_defaults_and_are_read(tmp_path: Path) -> None:
+    """takip, algilama, gecikme, kusurlar, video: absent = the defaults of the spec table; written = read."""
+    sc = hedef.load(write(tmp_path, GOOD.replace("takip: {kaynak: yok}\n", "")))
+    assert sc.tracking == hedef.Tracking(source="yok", mode_name=None, los="model", px4_start=(), px4_params=())
+    assert sc.detection == hedef.Detection(enabled=True, model=None, imgsz=None, conf=0.25, class_name=None, cores=4)
+    assert sc.delay == hedef.Delay(extra_ms=0.0, jitter_ms=0.0, clock_offset_ms=0.0, clock_drift_ppm=0.0)
+    assert sc.defects == {} and sc.video == hedef.Video(mp4=True, qgc=False, keep_frames=False)
+    assert sc.tracking_source == "yok"
+
+    sc = hedef.load(write(tmp_path, FULL))
+    t = sc.tracking
+    assert (t.source, t.mode_name, t.los, t.px4_start) == (
+        "tez_los",
+        "Tez Auto Follow",
+        "hakem",
+        ("tez_auto_follow start",),
+    )
+    assert [(p.name, p.value, p.source) for p in t.px4_params] == [
+        ("FLW_TGT_DST", 9, "takip.px4_parametreleri"),
+        ("MPC_XY_VEL_MAX", 0.5, "takip.px4_parametreleri"),
+    ]
+    assert sc.detection == hedef.Detection(True, Path.home() / "modeller" / "m.pt", 960, 0.4, "Person", 2)
+    assert sc.delay == hedef.Delay(200.0, 20.0, -5.0, 50.0)
+    assert sc.defects == {"gurultu": {"sigma": 2}}  # only a dict here; kusurlar.py checks its fields (group 4)
+    assert sc.video == hedef.Video(mp4=False, qgc=True)
+
+
+@pytest.mark.parametrize(
+    "block, message",
+    [
+        ("algilama: {esik: 0.3}", "algilama: bilinmeyen alan"),
+        ("algilama: {etkin: evet}", "algilama.etkin: true/false"),
+        ("algilama: {conf: 1.5}", "algilama.conf: 0'dan büyük"),
+        ("algilama: {imgsz: 640.5}", "algilama.imgsz: tam sayı"),
+        ("algilama: {imgsz: 16}", "algilama.imgsz: en az 32"),
+        ("algilama: {cekirdek: 0}", "algilama.cekirdek: en az 1"),
+        ("algilama: {sinif: -1}", "algilama.sinif"),
+        ("algilama: {model: 3}", "algilama.model"),
+        ("algilama: true", "algilama: sözlük"),
+        ("gecikme: {ek_ms: -1}", "gecikme.ek_ms: en az 0"),
+        ("gecikme: {saat_ofset_ms: .nan}", "gecikme.saat_ofset_ms: sonlu"),
+        ("gecikme: {kayma: 1}", "gecikme: bilinmeyen alan"),
+        ("kusurlar: [gurultu]", "kusurlar: sözlük"),
+        ("video: {mp4: 1}", "video.mp4: true/false"),
+        ("video: {kareleri_sakla: true}", "video: bilinmeyen alan"),
+        ("takip: {los: lazer}", "takip.los: ['model', 'hakem']"),
+        ("takip: {px4_baslat: modul start}", "takip.px4_baslat: komut listesi"),
+        ("takip: {px4_baslat: ['']}", "takip.px4_baslat[0]"),
+        ("takip: {kaynak: tez_los, mod_adi: 3}", "takip.mod_adi: PX4 mod adı"),
+    ],
+)
+def test_new_block_mistakes_name_the_field(tmp_path: Path, block: str, message: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(message)):
+        hedef.load(write(tmp_path, GOOD.replace("takip: {kaynak: yok}\n", block + "\n")))
+
+
+def test_tez_los_needs_a_mode_name(tmp_path: Path) -> None:
+    """The external mode is chosen by its AVAILABLE_MODES name (never by number): tez_los without one is refused."""
+    with pytest.raises(ValueError, match=r"takip\.mod_adi: .*zorunlu.*--mod-adi"):
+        hedef.load(write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: tez_los")))
+    cli = hedef.CommandLine(mode_name="Tez Auto Follow")
+    assert hedef.load(write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: tez_los")), cli).tracking.mode_name == (
+        "Tez Auto Follow"
+    )
+    assert hedef.load(write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: tez_los, mod_adi: Hold"))).tracking == (
+        hedef.Tracking(source="tez_los", mode_name="Hold")
+    )
+    with pytest.raises(ValueError, match=r"takip\.mod_adi"):
+        hedef.load(write(tmp_path, GOOD), hedef.CommandLine(source="tez_los"))
+
+
+def test_model_los_needs_the_detector(tmp_path: Path) -> None:
+    """LOS (i) comes from the model's boxes: with the model off it is refused, follow_me / tez_los then need hakem."""
+    off = GOOD.replace("takip: {kaynak: yok}", "takip: {kaynak: yok, los: model}\nalgilama: {etkin: false}")
+    with pytest.raises(ValueError, match=r"takip\.los: model.*algılama kapalı"):
+        hedef.load(write(tmp_path, off))
+    explicit = write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: yok, los: model"))
+    with pytest.raises(ValueError, match=r"takip\.los: model.*algılama kapalı"):
+        hedef.load(explicit, hedef.CommandLine(no_model=True))
+    # no LOS asked for: the open loop without a model has none (F1 runs like this from group 4 on)
+    sc = hedef.load(write(tmp_path, GOOD), hedef.CommandLine(no_model=True))
+    assert (sc.detection.enabled, sc.tracking.los) == (False, None)
+    follow = write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: follow_me"))
+    with pytest.raises(ValueError, match=r"takip\.los: .*follow_me.*hakem"):
+        hedef.load(follow, hedef.CommandLine(no_model=True))
+    sc = hedef.load(follow, hedef.CommandLine(no_model=True, los="hakem"))
+    assert (sc.detection.enabled, sc.tracking.los) == (False, "hakem")
+
+
+@pytest.mark.parametrize(
+    "params, command_line, message",
+    [
+        ("{flw_tgt_dst: 8}", (), "takip.px4_parametreleri: 'flw_tgt_dst' PX4 parametre adı değil"),
+        ("{FLW_TGT_DISTANCE_M: 8}", (), "takip.px4_parametreleri: 'FLW_TGT_DISTANCE_M' PX4 parametre adı değil"),
+        ("{FLW_TGT_DST: sekiz}", (), "takip.px4_parametreleri: FLW_TGT_DST: değer sayı olmalı"),
+        ("[FLW_TGT_DST]", (), "takip.px4_parametreleri: {AD: sayı}"),
+        ("{MIS_TAKEOFF_ALT: 5}", (), "takip.px4_parametreleri: MIS_TAKEOFF_ALT: kalkış yüksekliğini drone.yukseklik_m"),
+        ("{}", ("flw_tgt_dst=8",), "--param 'flw_tgt_dst=8'"),
+        ("{}", ("MIS_TAKEOFF_ALT=5",), "--param: MIS_TAKEOFF_ALT: kalkış yüksekliğini drone.yukseklik_m"),
+    ],
+)
+def test_px4_parameters_follow_the_file_rules(
+    tmp_path: Path, params: str, command_line: tuple[str, ...], message: str
+) -> None:
+    """takip.px4_parametreleri and --param go through the .params parser of group 1 (same name and number rules)."""
+    text = GOOD.replace("takip: {kaynak: yok}", f"takip: {{kaynak: yok, px4_parametreleri: {params}}}")
+    with pytest.raises(ValueError, match=re.escape(message)):
+        hedef.load(write(tmp_path, text), hedef.CommandLine(params=command_line))
+
+
+def test_command_line_overrides_the_scenario_into_the_settings(tmp_path: Path) -> None:
+    """senaryo.py flags replace the YAML values; ozet.json "ayarlar" holds every setting the run uses."""
+    import senaryo
+
+    text = GOOD.replace(
+        "takip: {kaynak: yok}",
+        "takip: {kaynak: yok, px4_parametreleri: {FLW_TGT_DST: 9, MPC_XY_VEL_MAX: 8}}\n"
+        "algilama: {conf: 0.4, cekirdek: 2}\nvideo: {qgc: false}",
+    )
+    argv = ["--senaryo", write(tmp_path, text), "--takip", "tez_los", "--mod-adi", "Tez Auto Follow", "--los", "hakem"]
+    argv += ["--model", "~/m.pt", "--imgsz", "960", "--conf", "0.5", "--sinif", "0", "--modelsiz"]
+    argv += ["--param", "FLW_TGT_DST=10", "--param", "FLW_TGT_HT=12", "--px4-baslat", "tez_auto_follow start"]
+    argv += ["--gecikme-ms", "200", "--qgc", "--videosuz", "--kareleri-sakla"]
+    args = senaryo.parser().parse_args(argv)
+    s = senaryo.settings(hedef.load(args.senaryo, senaryo.command_line(args)))
+
+    assert set(s) == {"takip", "algilama", "gecikme", "kusurlar", "video", "px4_parametreleri", "henuz_bagli_degil"}
+    assert s["takip"] == {
+        "kaynak": "tez_los",
+        "mod": "Tez Auto Follow",
+        "mod_adi": "Tez Auto Follow",
+        "los": "hakem",
+        "px4_baslat": ["tez_auto_follow start"],
+    }
+    assert s["algilama"] == {
+        "etkin": False,
+        "model": str(Path.home() / "m.pt"),
+        "imgsz": 960,
+        "conf": 0.5,
+        "sinif": 0,
+        "cekirdek": 2,
+    }
+    assert s["gecikme"] == {"ek_ms": 200.0, "titresim_ms": 0.0, "saat_ofset_ms": 0.0, "saat_kayma_ppm": 0.0}
+    assert s["video"] == {"mp4": False, "qgc": True, "kareleri_sakla": True} and s["kusurlar"] == {}
+    params = s["px4_parametreleri"]
+    # every start parameter, load order files -> scenario -> --param: the last one wins and says where it came from
+    assert params["FLW_TGT_DST"] == {"deger": 10, "kaynak": "--param"}
+    assert params["MPC_XY_VEL_MAX"] == {"deger": 8, "kaynak": "takip.px4_parametreleri"}
+    assert params["FLW_TGT_HT"] == {"deger": 12, "kaynak": "--param"}
+    assert params["IMU_GYRO_CUTOFF"]["kaynak"].startswith("gercek_dron.params:")
+    assert params["SDLOG_PROFILE"]["deger"] == 163
+    assert s["henuz_bagli_degil"] == {}  # model off, LOS from the referee, no MP4: nothing waits for a later group
+    json.dumps(s)  # straight into ozet.json
+
+
+def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
+    """tasks.md 2.5: a setting a later task group wires in, given with a non-default value, stops the run before the
+    simulation starts and names the group; left at its default it is listed as not in effect yet."""
+    good = write(tmp_path, GOOD)
+    sc = hedef.load(good)
+    hedef.check_wired(sc)  # defaults only: the run may start
+    assert hedef.settings(sc)["henuz_bagli_degil"] == {"algilama.etkin": 4, "takip.los": 5, "video.mp4": 8}
+    later = [
+        (hedef.CommandLine(source="follow_me"), "takip.kaynak: follow_me (--takip): Görev grubu 6'da bağlanacak"),
+        (hedef.CommandLine(source="tez_los", mode_name="Hold"), "takip.kaynak: tez_los (--takip): Görev grubu 5'te"),
+        (hedef.CommandLine(los="hakem"), "takip.los: hakem (--los): Görev grubu 5'te"),
+        (hedef.CommandLine(conf=0.5), "algilama.conf: 0.5 (--conf): Görev grubu 4'te"),
+        (hedef.CommandLine(px4_start=("x start",)), "takip.px4_baslat / --px4-baslat: Görev grubu 10'da"),
+        (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
+        (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
+        (hedef.CommandLine(keep_frames=True), "--kareleri-sakla: Görev grubu 8'de"),
+    ]
+    for cli, message in later:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            hedef.check_wired(hedef.load(good, cli))
+    # wired already: start parameters, no model (nothing runs one yet), no video (nothing makes one yet)
+    hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
+    with pytest.raises(ValueError, match=re.escape("kusurlar: {'gurultu': 1}: Görev grubu 4'te")):
+        hedef.check_wired(hedef.load(write(tmp_path, GOOD + "kusurlar: {gurultu: 1}\n")))
+
+    # the Follow Me scenario (tasks.md 2.4): the walk of yuruyen_insan at 8 m; only its tracking source waits
+    follow, walk = hedef.load("takip_yuruyen"), hedef.load("yuruyen_insan")
+    assert (follow.altitude, follow.tracking.source, follow.tracking.los) == (8.0, "follow_me", "model")
+    assert [(p.name, p.value) for p in follow.tracking.px4_params] == [("FLW_TGT_DST", 8)]
+    assert np.array_equal(follow.track.x, walk.track.x) and np.array_equal(follow.track.y, walk.track.y)
+    with pytest.raises(ValueError, match="Görev grubu 6'da bağlanacak") as error:
+        hedef.check_wired(follow)
+    assert str(error.value).count("bağlanacak") == 1

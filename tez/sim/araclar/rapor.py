@@ -276,7 +276,9 @@ def write(
     camera: dict | None,
     camera_mount: dict | None,
     ulog: Path | None,
+    settings: dict | None = None,
 ) -> dict:
+    """Write dogru_cevap.csv, ozet.json and rapor.html; `settings` is the run's "ayarlar" (senaryo.settings)."""
     df = pd.DataFrame(rows)
     if not df.empty:
         df.to_csv(out / "dogru_cevap.csv", index=False, float_format="%.4f")
@@ -296,10 +298,10 @@ def write(
 
     summary = {
         "senaryo": sc.name,
-        "takip_kaynagi": sc.tracking_source,
         "sonuc": result,
         "tarih": dt.datetime.now().isoformat(timespec="seconds"),
         "commit": _git_commit(),
+        "ayarlar": settings or {},
         "olcutler": m,
         "basari": [{"alan": k, "esik": th, "deger": v, "gecti": ok} for k, _, th, v, ok in success],
         "dogrulama": checks,
