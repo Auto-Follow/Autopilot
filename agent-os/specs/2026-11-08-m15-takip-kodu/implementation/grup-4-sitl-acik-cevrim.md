@@ -269,6 +269,14 @@ Süreler son kabul edilen mesajdan (logda 0,48–0,50 s ve 1,48–1,50 s; fark, 
 4. **Test göndericisi bağlantı adresi:** `udpin:0.0.0.0:14540` (Bölüm 2) uygun mu?
 5. **Pilot / analiz script'i:** Bu gruptaki test akışını (kalkış, mod değişimi, log kopyalama) yöneten script geçici tutuldu. Tekrarlanabilirlik için `tez/sitl/` altına alınsın mı? Alınacaksa adı sizin.
 
+**Cevaplar (2026-11-11):**
+1. Kullanıcı "biraz aç" dedi; örnekli anlatım verildi. Öneri: "önceki numara" yalnızca `AF_DATA_TOUT` boyunca hiç `AF_LOS` mesajı gelmezse unutulsun. **Cevap bekleniyor.**
+2. `AF_YAW_MIN_D` 1 m kalır, S6–S7'de bakılır (**"okey"**).
+3. **Ayrı yaw hız sınırı parametresi Grup 5'te eklenir** (kullanıcı: "sen şimdiden ekle, parametre dursun"); adı ve varsayılanı soruldu.
+4. `udpin:0.0.0.0:14540` onaylandı (**"okey"**).
+5. Script'ler **repoya girmez, kullanıcının bilgisayarında kalıcı durur** ("ileride repoya almaya bakarız"). Geçici klasör bilgisayar yeniden açılınca silinmişti; script'ler bu grubun ajan kayıtlarından geri çıkarıldı (pilot, senaryo, ön kontrol, analiz script'leri, `sitl.sh`, `run.sh`). Kalıcı yeri soruldu.
+6. Grup 5'ten sonra hedefsiz girişte 1,5 s'de Hold (**"okey"**).
+
 ## 10. Kontroller (4.12)
 
 | Kontrol | Sonuç |

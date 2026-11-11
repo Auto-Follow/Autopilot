@@ -650,7 +650,7 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | D2 | G2-5b'de süre nasıl ölçülür? | — | Sıra kontrolünü geçen son mesajın işlendiği çevrimden sayılır; unutma bir sonraki mesaj işlenirken uygulanır (etkisi aynı). Hesap saf fonksiyonda (`keep_previous_seq`, kod içi ad, sözlüğe girmez), birim testli | Kullanıcıya görünen ad eklenmez; test edilebilir | Kod içi |
 | D3 | EKF sayaçları | — | Yatay (`xy_reset_counter`) ve dikey (`z_reset_counter`) ayrı ele alınır: yatayda tutulan konum, dikeyde tutulan irtifa kaydırılır; ikisi de filtreyi sıfırlar (önceki gibi) | Her sıçrama yalnızca kendi eksenini kaydırsın | Kod içi |
 | D4 | Pi yavaş gönderirse (2 Hz'den yavaş) | — | Her mesajda önceki numara unutulmuş olur; bilerek bırakıldı | Eski/tekrar mesaj yine yaş kontrolüyle (`CHECK_AGE`, 0,5 s) atılır | Kod içi |
-| D5 | EKF yön (heading) sıfırlamasında tutulan yaw | kaydır · kaydırma | Kaydırılmadı (karar 4 yalnızca konumu kapsıyor) | Açık soru; kullanıcıya sorulacak (§11) | Açık |
+| D5 | EKF yön (heading) sıfırlamasında tutulan yaw | a) kaydır · b) kaydırma | **a**: tutulan yaw `delta_heading` kadar kaydırılır (`heading_reset_counter`); Grup 5'te uygulanacak | PX4 setpoint'i yalnızca bir kez kaydırıyor (`MulticopterPositionControl.cpp:709-711`); kaydırma olmazsa drone eski açıyı tutturmak için gereksiz döner. Kullanıcı: "1a olsun, Grup 5'te ekle" (2026-11-10) | Kullanıcı |
 
 **Görev grubu 4 (SITL açık çevrim, test göndericisi)** — ayrıntı `implementation/grup-4-sitl-acik-cevrim.md` Bölüm 2, 3, 6:
 
@@ -671,6 +671,11 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | U4.13 | S5 `ufuk`/`uzak` için ek oturum | — | Temel LOS 30° ile tekrar (`21_10_47.ulg`) | İlk koşuda açık çevrim eğim etkisi sonucu karıştırdı | Kod içi |
 | U4.14 | Oturum sonu | — | Pilot kapanmadan önce `logger stop`; süreçler PID ile | Pilot kapanınca "Manual control lost" → RTL oluyordu; `px4-shutdown` takılıyor (Grup 1) | Kod içi |
 | U4.15 | Sözlükteki RC anahtarı cümlesi | — | "`COM_FLTMODEx` bizim mod numarasıyla" → "değer 100 = External Mode 1 = `nav_state` 23" (sözlük, spec Bölüm 9 alıntısı, §4.8) | SITL'de 23 değil 100 çalıştı (`ManualControl.cpp:595`); yazım düzeltmesi, karar değil | Kod içi |
+| U4.16 | Test göndericisi bağlantı adresi (U4.1'in onayı) | a) `udpin:0.0.0.0:14540` · b) `udpout:127.0.0.1:14580` | a | Bkz. U4.1. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
+| U4.17 | `AF_YAW_MIN_D` (hedef neredeyse altındayken yaw dondurma mesafesi) | 1 m kalsın · büyütülsün | 1 m kalır; S6–S7 kapalı çevrimde bakılır | S3'teki dönme açık çevrimden; normal takipte drone hedefe ~15,6 m uzakta. Gerekirse QGC'den değişir, kod gerekmez. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
+| U4.18 | Ayrı yaw hız sınırı | PX4'ün 200°/s'si (`MC_YAWRATE_MAX`) · ayrı parametre şimdi · S6–S7'ye göre karar | **Ayrı parametre şimdi eklenecek** (Grup 5); adı ve varsayılan değeri kullanıcıya soruldu | Öneri "S6–S7'ye bakalım" idi; kullanıcı: "sen şimdiden ekle, parametre dursun" (2026-11-11) | Kullanıcı |
+| U4.19 | Test akışı ve ölçüm script'leri | repoya al (`tez/sitl/`) · kullanıcının bilgisayarında kalıcı tut | **Kullanıcının bilgisayarında, repoda değil**; ileride repoya alınabilir. Yeri ve klasör adı kullanıcıya soruldu | Kullanıcı: "script geçici durmasın, benim bilgisayarımda dursun, ileride repoya almaya bakarız" (2026-11-11). Script'ler geçici klasörde bilgisayar yeniden açılınca silinmişti; ajan kayıtlarından geri çıkarıldı | Kullanıcı |
+| U4.20 | Hedefsiz girişte Hold (Grup 5'ten sonra) | — | Masa testinde hedefsiz moda girilirse 1,5 s sonra Hold istenir | A3 ile tutarlı. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
 
 ---
 
@@ -776,14 +781,14 @@ Yol haritasındaki m15 yalnızca "iskelet derlenir" diyor; bu spec, issue #6'yı
 Grup 1'in 3 sorusu (QGC grup adı, lisans başlığı, `module.yaml` dili) ve Grup 2'nin 6 sorusu cevaplandı; seçilenler §5.1'de.
 
 Uygulamadan açık kalan:
-- **Grup 4'ten 5 soru** (`implementation/grup-4-sitl-acik-cevrim.md` Bölüm 9):
-  1. **Sıra no sürekli aynı gelirse** (donmuş Pi): Karar 5b-a gereği her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor; spec S5'teki "uzun bozuk veri hedef kaybı yoluna girer" cümlesiyle çelişiyor. Seçenekler: şimdiki gibi · unutma süresi daha uzun (ör. 1,5 s) · aynı numara hiç kabul edilmesin.
-  2. **`AF_YAW_MIN_D` = 1 m** hedef neredeyse altındayken yaw'ı sakin tutmaya yetmeyebilir (S3'te dönme).
-  3. **Yaw hız sınırı:** PX4'ün 200°/s'si mi, ayrı bir sınır mı?
-  4. **Test göndericisi bağlantı adresi** `udpin:0.0.0.0:14540` uygun mu?
-  5. **Test akışı script'i** `tez/sitl/` altına alınsın mı (ad sizin)?
+- **Grup 4'ten 5 soru** (`implementation/grup-4-sitl-acik-cevrim.md` Bölüm 9). Kullanıcının cevapları (2026-11-11), ayrıntı §5.1 U4.16–U4.20:
+  1. **Sıra no sürekli aynı gelirse** (donmuş Pi): Karar 5b-a gereği her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor; spec S5'teki "uzun bozuk veri hedef kaybı yoluna girer" cümlesiyle çelişiyor. Kullanıcı daha ayrıntılı anlatım istedi; anlatıldı, **cevap bekleniyor**.
+  2. `AF_YAW_MIN_D` = 1 m kalır, S6–S7'de bakılır (**karar**).
+  3. **Ayrı yaw hız sınırı parametresi Grup 5'te eklenecek** (karar); **adı ve varsayılanı soruldu**.
+  4. Bağlantı adresi `udpin:0.0.0.0:14540` onaylandı (**karar**).
+  5. Test akışı script'leri repoya girmez, kullanıcının bilgisayarında kalıcı durur (**karar**); **yeri ve klasör adı soruldu**.
 - **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor).
-- **EKF yön (heading) sıfırlaması:** KAYIP_BEKLE / HOLD_ISTENDI'de tutulan yaw, PX4'ün yön tahmini sıçrarsa (`delta_heading`) kaydırılmıyor; drone o kadar dönebilir. Karar 4 yalnızca konumu kapsıyor. PX4 `mc_pos_control` yalnızca bir kez, gelen setpoint'i kaydırıyor (`MulticopterPositionControl.cpp:709-711`). Kullanıcıya sorulacak (§5.1 D5).
+- **EKF yön (heading) sıfırlaması:** karar verildi (§5.1 D5, a): tutulan yaw `delta_heading` kadar kaydırılacak; **Grup 5'te uygulanacak**.
 
 Bekleyen dış bağımlılıklar:
 - Hüseyin: 7 kilitli yol için onay.
