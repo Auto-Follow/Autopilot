@@ -16,6 +16,7 @@ import dunya
 import numpy as np
 import yaml
 
+import kusurlar
 import parametreler
 import yuruyus
 
@@ -178,7 +179,7 @@ class Scenario:
     tracking: Tracking = field(default_factory=Tracking)
     detection: Detection = field(default_factory=Detection)
     delay: Delay = field(default_factory=Delay)
-    defects: dict = field(default_factory=dict)  # kusurlar; its fields are checked by kusurlar.py (task group 4)
+    defects: dict = field(default_factory=dict)  # kusurlar (kusurlar.py; all off in Faz A)
     video: Video = field(default_factory=Video)
 
     @property
@@ -319,7 +320,7 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
         tracking=tracking,
         detection=detection,
         delay=_delay(_block(d, "gecikme", "{ek_ms: 0}")),
-        defects=copy.deepcopy(_block(d, "kusurlar", "{}")),
+        defects=_defects(_block(d, "kusurlar", "{}")),
         video=_video(_block(d, "video", "{mp4: true, qgc: false}"), cli.keep_frames),
     )
     sc.track, sc.walk_end = yuruyus.plan(
@@ -455,6 +456,12 @@ def _class_name(value: object) -> str | int | None:
     raise ValueError(f"algilama.sinif: sınıf adı ya da 0 veya daha büyük bir numara olmalı, gelen: {value!r}")
 
 
+def _defects(d: dict) -> dict:
+    """kusurlar: checked by the camera defects stage itself; a Faz B field stops here, before anything starts."""
+    kusurlar.check(d)
+    return copy.deepcopy(d)
+
+
 def _delay(d: dict) -> Delay:
     _check_keys(d, set(DELAY_FIELDS), "gecikme")
     signed = {"saat_ofset_ms", "saat_kayma_ppm"}  # the clock may be early or late, fast or slow
@@ -498,7 +505,7 @@ def settings(sc: Scenario) -> dict:
 # not_in_effect() lists the defaults that do not act yet. Each task group deletes its lines when it wires them in.
 def unwired(sc: Scenario) -> list[str]:
     """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet."""
-    t, a, v = sc.tracking, sc.detection, sc.video
+    t, v = sc.tracking, sc.video
     found: list[tuple[str, int]] = []
     if t.source == "tez_los":
         found.append(("takip.kaynak: tez_los (--takip)", 5))
@@ -508,11 +515,7 @@ def unwired(sc: Scenario) -> list[str]:
         found.append(("takip.los: hakem (--los)", 5))
     if t.px4_start:
         found.append(("takip.px4_baslat / --px4-baslat", 10))
-    if a.enabled:  # the model's own settings do not matter while it is off
-        found += [(text, 4) for text in _changed("algilama", a, Detection(), DETECTION_FIELDS)]
     found += [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
-    if sc.defects:
-        found.append((f"kusurlar: {sc.defects}", 4))
     if v.qgc:
         found.append(("video.qgc: true (--qgc)", 11))
     if v.keep_frames:
@@ -523,8 +526,6 @@ def unwired(sc: Scenario) -> list[str]:
 def not_in_effect(sc: Scenario) -> dict[str, int]:
     """Settings left at a default that a later task group wires in -> that group; they do not act in this run."""
     found = {}
-    if sc.detection.enabled:
-        found["algilama.etkin"] = 4  # no model process yet
     if sc.tracking.los == "model":
         found["takip.los"] = 5  # no TEZ_LOS is sent yet
     if sc.video.mp4:

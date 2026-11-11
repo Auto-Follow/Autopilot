@@ -1,14 +1,21 @@
-"""Model file, its sha256 record and the class of a detector, without ultralytics or torch."""
+"""Model file, its sha256 record, the class of a detector, its boxes and one frame through the model stage, without
+ultralytics, torch or Gazebo."""
 
+import csv
 import hashlib
+import math
 import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
+from gz.msgs10.image_pb2 import Image
 
 import algilama
+import goruntu
 import hedef
+import kusurlar
 
 SCENARIO = """
 ad: model_deneme
@@ -115,3 +122,120 @@ def test_class_is_resolved_from_the_model_names() -> None:
 def test_the_module_does_not_need_ultralytics_or_torch() -> None:
     assert "ultralytics" not in sys.modules and "torch" not in sys.modules
     assert isinstance(algilama.YoloAlgilayici, type)  # importing it alone loads neither
+
+
+class Tensor:
+    """What ultralytics' Boxes fields offer on the CPU: .numpy()."""
+
+    def __init__(self, values: list) -> None:
+        self.values = np.asarray(values, dtype=np.float32)
+
+    def numpy(self) -> np.ndarray:
+        return self.values
+
+
+class Boxes:
+    def __init__(self, xyxy: list, conf: list, cls: list) -> None:
+        self.xyxy, self.conf, self.cls = Tensor(xyxy), Tensor(conf), Tensor(cls)
+
+
+class Result:
+    """A stand-in for ultralytics.engine.results.Results of one frame."""
+
+    def __init__(self, *boxes: list) -> None:
+        self.boxes = Boxes(*boxes)
+
+
+def test_ultralytics_result_becomes_boxes_clipped_to_the_frame() -> None:
+    names, size = {0: "Person"}, (2304, 1296)
+    result = Result(
+        [[10, 20, 110, 220], [-5, -3, 50, 40], [2300.5, 1200, 2400, 1400], [2400, 10, 2500, 20]],
+        [0.5, 0.9, 0.7, 0.3],
+        [0, 0, 0, 0],
+    )
+    boxes = algilama.boxes_of(result, names, size)
+    assert [b.guven for b in boxes] == pytest.approx([0.9, 0.7, 0.5])  # most confident first
+    assert (boxes[0].u0, boxes[0].v0, boxes[0].u1, boxes[0].v1) == (0.0, 0.0, 50.0, 40.0)  # clipped top left
+    # pixel edges (u0 <= u < u1): a box over the last column ends at the width, not at width - 1
+    assert (boxes[1].u0, boxes[1].u1, boxes[1].v1) == (2300.5, 2304.0, 1296.0)
+    assert (boxes[2].u0, boxes[2].v0, boxes[2].u1, boxes[2].v1) == (10.0, 20.0, 110.0, 220.0)
+    assert all(b.sinif == 0 and b.sinif_adi == "Person" for b in boxes)
+    assert len(boxes) == 3  # the box completely outside the frame covers no pixel and is dropped
+    assert algilama.boxes_of(Result(np.zeros((0, 4)), [], []), names, size) == []
+
+    a = algilama.Kutu(0, 0, 10, 10, 1.0, 0, "Person")
+    assert algilama.iou(a, a) == pytest.approx(1.0)
+    assert algilama.iou(a, algilama.Kutu(5, 0, 15, 10, 1.0, 0, "Person")) == pytest.approx(50 / 150)
+    assert algilama.iou(a, algilama.Kutu(10, 0, 20, 10, 1.0, 0, "Person")) == 0.0  # touching edges share no pixel
+    assert algilama.iou(a, (math.nan,) * 4) == 0.0  # referee box of a target that is not visible
+
+
+def image_bytes(t: float, width: int = 4, height: int = 2) -> bytes:
+    msg = Image(width=width, height=height, step=3 * width, pixel_format_type=3)
+    msg.header.stamp.sec, msg.header.stamp.nsec = int(t), round((t - int(t)) * 1e9)
+    msg.data = np.arange(3 * width * height, dtype=np.uint8).tobytes()
+    return msg.SerializeToString()
+
+
+class FakeDetector:
+    """Any detector with algila(): Vision's (m08/m10) plugs in the same way."""
+
+    def __init__(self) -> None:
+        self.seen: list[np.ndarray] = []
+
+    def algila(self, kare_rgb: np.ndarray) -> list[algilama.Kutu]:
+        self.seen.append(kare_rgb)
+        return [algilama.Kutu(1, 0, 3, 2, 0.8, 0, "Person")]
+
+
+def test_one_frame_through_the_defects_stage_and_a_detector() -> None:
+    raw = image_bytes(61.032)
+    skipped = [goruntu.Arrival(1, 99.95, image_bytes(60.996)[: goruntu.HEAD_BYTES])]
+    detector = FakeDetector()
+    r = algilama.process(
+        raw, goruntu.Arrival(2, 100.0, raw[:256]), skipped, kusurlar.KameraKusurlari({}), detector, 100.01
+    )
+    assert detector.seen[0].tobytes() == np.arange(24, dtype=np.uint8).tobytes()  # the frame, unchanged
+    assert (r.t, r.sira, r.varis, r.basla) == (pytest.approx(61.032), 2, 100.0, 100.01)
+    assert r.kutular == (algilama.Kutu(1, 0, 3, 2, 0.8, 0, "Person"),)
+    assert [(s.sira, s.t) for s in r.atlanan] == [(1, pytest.approx(60.996))]
+    assert r.bitis >= r.basla and min(r.cozme_ms, r.kusur_ms, r.model_ms) >= 0.0
+
+
+def test_detection_log_rows_boxes_and_books(tmp_path: Path) -> None:
+    clock = goruntu.SimClock()
+    for k in range(2001):  # real time: wall 1000 s = sim 50 s
+        clock.add(sim=50.0 + k * 0.01, wall=1000.0 + k * 0.01)
+    log = algilama.DetectionLog(tmp_path, clock)
+    box = algilama.Kutu(100, 200, 140, 300, 0.9, 0, "Person")
+    frames = [59.86, 59.90, 59.94, 59.98, 60.02, 60.06, 60.10, 60.14, 60.18]  # [s sim] camera frames, sira 1..9
+    for j in (2, 5, 8):  # every third frame is processed, the two before it were replaced while the model worked
+        t = frames[j]
+        skipped = tuple(goruntu.Skipped(k + 1, frames[k], 0.0) for k in (j - 2, j - 1))
+        varis = 1000.0 + (t - 50.0) + 0.020  # arrives 20 ms after capture, waits 5 ms, 65 ms of work
+        r = algilama.FrameResult(t, j + 1, varis, varis + 0.005, varis + 0.070, 2.0, 0.0, 60.0, (box,), skipped)
+        log.add(r, alinma=r.bitis + 0.001)
+    log.close()
+
+    with (tmp_path / "algilama.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert [int(r["t_us"]) for r in rows] == [59_940_000, 60_060_000, 60_180_000]  # the key of dogru_cevap.csv
+    assert [r["sira"] for r in rows] == ["3", "6", "9"] and rows[1]["onceki_atlanan"] == "2"
+    assert float(rows[1]["ulasma_ms"]) == pytest.approx(20.0, abs=0.01)  # sim ms, through the clock
+    assert float(rows[1]["bekleme_ms"]) == pytest.approx(5.0, abs=0.01)
+    assert float(rows[1]["teslim_ms"]) == pytest.approx(1.0, abs=0.01)
+    assert (rows[1]["kutu_sayisi"], float(rows[1]["model_ms"])) == ("1", 60.0)
+    with (tmp_path / "kutular.csv").open(encoding="utf-8") as f:
+        boxes = list(csv.DictReader(f))
+    assert [b["t_us"] for b in boxes] == ["59940000", "60060000", "60180000"] and float(boxes[0]["u1"]) == 140.0
+
+    target = {"hedef_kutu_u0": 100, "hedef_kutu_v0": 200, "hedef_kutu_u1": 140, "hedef_kutu_v1": 300, "gorunur": True}
+    referee = [{"t": t} | target for t in frames + [60.19]]  # 60.19: a camera frame the reader never got
+    m = log.metrics(60.0, 60.2, referee)
+    # window 60.0..60.2 s: received 60.02 .. 60.18 (5), processed 60.06 and 60.18, skipped 60.02, 60.10, 60.14
+    assert (m["uretilen"], m["islenen"], m["atlanan"]) == (5, 2, 3)
+    assert (m["kamera_karesi"], m["okuyucuya_ulasmayan"]) == (6, 1)
+    assert m["atlanan_kare_orani"] == pytest.approx(1 - 2 / 5)
+    assert m["islenen_kare_hizi_hz"] == pytest.approx(2 / 0.2)
+    assert (m["model_ms_ort"], m["ulasma_ms_ort"]) == (pytest.approx(60.0), pytest.approx(20.0, abs=0.01))
+    assert (m["iou05_kare_sayisi"], m["iou_max"], m["hedef_gorunur_islenen"]) == (2, 1.0, 2)

@@ -228,7 +228,7 @@ FULL = GOOD.replace(
   px4_parametreleri: {FLW_TGT_DST: 9, MPC_XY_VEL_MAX: 0.5}
 algilama: {model: ~/modeller/m.pt, imgsz: 960, conf: 0.4, sinif: Person, cekirdek: 2}
 gecikme: {ek_ms: 200, titresim_ms: 20, saat_ofset_ms: -5, saat_kayma_ppm: 50}
-kusurlar: {gurultu: {sigma: 2}}
+kusurlar: {}
 video: {mp4: false, qgc: true}
 """,
 )
@@ -257,7 +257,7 @@ def test_new_blocks_have_defaults_and_are_read(tmp_path: Path) -> None:
     ]
     assert sc.detection == hedef.Detection(True, Path.home() / "modeller" / "m.pt", 960, 0.4, "Person", 2)
     assert sc.delay == hedef.Delay(200.0, 20.0, -5.0, 50.0)
-    assert sc.defects == {"gurultu": {"sigma": 2}}  # only a dict here; kusurlar.py checks its fields (group 4)
+    assert sc.defects == {}  # Faz A: every camera defect off (a Faz B field is refused, test_kusurlar.py)
     assert sc.video == hedef.Video(mp4=False, qgc=True)
 
 
@@ -277,6 +277,8 @@ def test_new_blocks_have_defaults_and_are_read(tmp_path: Path) -> None:
         ("gecikme: {saat_ofset_ms: .nan}", "gecikme.saat_ofset_ms: sonlu"),
         ("gecikme: {kayma: 1}", "gecikme: bilinmeyen alan"),
         ("kusurlar: [gurultu]", "kusurlar: sözlük"),
+        ("kusurlar: {gurultu: {sigma: 2}}", "kusurlar.gurultu: Faz B'de uygulanacak"),
+        ("kusurlar: {bulanik: 1}", "kusurlar: bilinmeyen alan"),
         ("video: {mp4: 1}", "video.mp4: true/false"),
         ("video: {kareleri_sakla: true}", "video: bilinmeyen alan"),
         ("takip: {los: lazer}", "takip.los: ['model', 'hakem']"),
@@ -395,12 +397,11 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     good = write(tmp_path, GOOD)
     sc = hedef.load(good)
     hedef.check_wired(sc)  # defaults only: the run may start
-    assert hedef.settings(sc)["henuz_bagli_degil"] == {"algilama.etkin": 4, "takip.los": 5, "video.mp4": 8}
+    assert hedef.settings(sc)["henuz_bagli_degil"] == {"takip.los": 5, "video.mp4": 8}
     later = [
         (hedef.CommandLine(source="follow_me"), "takip.kaynak: follow_me (--takip): Görev grubu 6'da bağlanacak"),
         (hedef.CommandLine(source="tez_los", mode_name="Hold"), "takip.kaynak: tez_los (--takip): Görev grubu 5'te"),
         (hedef.CommandLine(los="hakem"), "takip.los: hakem (--los): Görev grubu 5'te"),
-        (hedef.CommandLine(conf=0.5), "algilama.conf: 0.5 (--conf): Görev grubu 4'te"),
         (hedef.CommandLine(px4_start=("x start",)), "takip.px4_baslat / --px4-baslat: Görev grubu 10'da"),
         (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
         (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
@@ -409,10 +410,10 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     for cli, message in later:
         with pytest.raises(ValueError, match=re.escape(message)):
             hedef.check_wired(hedef.load(good, cli))
-    # wired already: start parameters, no model (nothing runs one yet), no video (nothing makes one yet)
+    # wired already: start parameters, no model, no video (nothing makes one yet), the model's settings (group 4)
     hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
-    with pytest.raises(ValueError, match=re.escape("kusurlar: {'gurultu': 1}: Görev grubu 4'te")):
-        hedef.check_wired(hedef.load(write(tmp_path, GOOD + "kusurlar: {gurultu: 1}\n")))
+    model = hedef.CommandLine(model="~/m.pt", imgsz=960, conf=0.5, class_name="Person")
+    hedef.check_wired(hedef.load(write(tmp_path, GOOD + "algilama: {cekirdek: 2}\n"), model))
 
     # the Follow Me scenario (tasks.md 2.4): the walk of yuruyen_insan at 8 m; only its tracking source waits
     follow, walk = hedef.load("takip_yuruyen"), hedef.load("yuruyen_insan")

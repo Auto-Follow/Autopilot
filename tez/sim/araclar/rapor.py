@@ -232,8 +232,10 @@ def _git_commit() -> str:
 def _fmt(value: float | None, key: str = "") -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "–"
-    if key.startswith(("kadrajda", "gorunur", "segmentasyon")):
+    if key.startswith(("kadrajda", "gorunur", "segmentasyon", "atlanan_kare")):
         return f"%{100 * value:.1f}"
+    if isinstance(value, int):
+        return str(value)
     return f"{value:.2f}"
 
 
@@ -252,6 +254,21 @@ METRIC_LABELS = {
     "dron_yatay_hareket_max_m": "Dronun kalkış noktasından en büyük yatay uzaklığı [m]",
     "egim_max_deg": "Dronun en büyük eğimi (ULog) [°]",
     "kayit_suresi_s": "Kayıt süresi [s]",
+    "rtf_ort": "Gerçek zaman oranı (RTF), kayıt penceresi ortalaması",
+    "rtf_min_5s": "RTF, en yavaş 5 s'lik dilim",
+    "uretilen": "Model sürecine ulaşan kamera karesi (kayıt penceresi)",
+    "islenen": "Modelin işlediği kare",
+    "atlanan": "Model meşgulken atlanan kare",
+    "atlanan_kare_orani": "Atlanan kare oranı",
+    "islenen_kare_hizi_hz": "İşlenen kare hızı [kare/sim-s]",
+    "okuyucuya_ulasmayan": "Kameranın üretip model sürecine hiç ulaşmayan kare",
+    "model_ms_ort": "Model süresi (model_ms), ortalama [ms]",
+    "model_ms_p95": "Model süresi, p95 [ms]",
+    "ulasma_ms_ort": "Karenin model sürecine ulaşma gecikmesi, ortalama [sim ms]",
+    "bekleme_ms_ort": "Karenin modeli bekleme süresi, ortalama [ms]",
+    "islem_ms_ort": "Kare başına toplam işlem (çözme + kusur + model), ortalama [ms]",
+    "iou05_kare_sayisi": "Hedefle IoU ≥ 0.5 model kutusu bulunan işlenmiş kare (geçici kontrol)",
+    "iou_max": "Hedefle en iyi IoU",
 }
 
 
@@ -277,13 +294,18 @@ def write(
     camera_mount: dict | None,
     ulog: Path | None,
     settings: dict | None = None,
+    more_metrics: dict | None = None,
+    sections: dict | None = None,
 ) -> dict:
-    """Write dogru_cevap.csv, ozet.json and rapor.html; `settings` is the run's "ayarlar" (senaryo.settings)."""
+    """Write dogru_cevap.csv, ozet.json and rapor.html; `settings` is the run's "ayarlar" (senaryo.settings),
+    `more_metrics` go into "olcutler" (model, frame and RTF numbers, task group 4), `sections` are more top level
+    parts of ozet.json (e.g. "kare_defteri")."""
     df = pd.DataFrame(rows)
     if not df.empty:
         df.to_csv(out / "dogru_cevap.csv", index=False, float_format="%.4f")
     m = metrics(sc, df) if not df.empty else {}
     m.update(ulog_summary(ulog))
+    m.update(more_metrics or {})
     success = evaluate(sc, m)
     verify_ok = dogrulama.passed(checks)
     if checks:
@@ -303,6 +325,7 @@ def write(
         "commit": _git_commit(),
         "ayarlar": settings or {},
         "olcutler": m,
+        **(sections or {}),
         "basari": [{"alan": k, "esik": th, "deger": v, "gecti": ok} for k, _, th, v, ok in success],
         "dogrulama": checks,
         "olaylar": events,

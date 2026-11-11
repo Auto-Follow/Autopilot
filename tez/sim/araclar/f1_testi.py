@@ -2,7 +2,8 @@
 """F1 acceptance test: run the walking-human scenario twice (no window, overhead check) and compare the runs.
 
 Passes when both runs complete, the rendered target is within dogrulama.LIMIT (0.3 m) of the ground truth in each
-run, and the two runs see the target at the same place (within 0.15 m) at the same sim times. ~6 minutes.
+run, and the two runs see the target at the same place (within 0.15 m) at the same sim times. ~4 minutes.
+The runs are without the model (--modelsiz): F1 checks the world and the target, not the detector.
 
     ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/f1_testi.py   (or f1_kabul.sh)
 """
@@ -21,7 +22,7 @@ SAME_RUN_LIMIT = 0.15  # [m]
 
 
 def main() -> int:
-    sc = hedef.load(SCENARIO)
+    sc = hedef.load(SCENARIO, hedef.CommandLine(no_model=True))  # --modelsiz: no model process
     runs = []
     for i in (1, 2):
         print(f"=== Koşu {i} ===", flush=True)

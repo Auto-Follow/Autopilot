@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# F1 acceptance run, no window (~6 minutes): the walking-human scenario twice, compared (see f1_testi.py).
+# F1 acceptance run, no window (~4 minutes): the walking-human scenario twice without the model (--modelsiz),
+# compared (see f1_testi.py).
 #
 #   tez/sim/araclar/f1_kabul.sh
 #

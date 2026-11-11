@@ -47,15 +47,26 @@
 **2. Kare okuyucu ve kamera kusurları aşaması**
 - `araclar/goruntu.py` `/x500_tez/kamera/image` konusuna `subscribe_raw` ile abone olur.
   - Geri çağırma yalnız ham baytı, varış anını (`time.monotonic`) ve sayacı saklar.
-  - Protobuf yalnız işlenecek karede çözülür. 9 MB'lık bir kareyi saf Python protobuf ile çözmek ~14 ms sürer.
+  - Protobuf yalnız işlenecek karede çözülür. 9 MB'lık bir kareyi saf Python protobuf ile çözmek ~14 ms sürer
+    (uygulamada, ekip venv'inde ölçülen `cozme_ms` ort. 1.3–1.6 ms; kare verisi kopyalanmadan salt okunur görünüm olur).
+  - Uygulamada eklendi (4. grup): yerine yenisi gelen karenin yalnız ilk 256 baytı (başlığı) saklanır ve model kareyi
+    alırken çözülür (`goruntu.stamp`). Böylece atlanan her karenin sim zamanı da bilinir ve kayıt penceresindeki
+    sayılar (`uretilen`, `atlanan`) tahminsiz çıkar. Kare verisi yalnız işlenen karede çözülür.
 - Kare nesnesi şunları taşır:
   - RGB `uint8` dizi (1296×2304×3).
   - `t`: Gazebo başlık damgası. Bu sim zamanıdır ve SITL lockstep'te PX4 zamanıyla aynıdır.
   - `varis`: duvar saatiyle varış anı.
   - `sira`: kare sayacı.
 - Okuyucu yalnız en yeni kareyi tutar. Model meşgulken gelen kare bir öncekinin üstüne yazılır ve `atlanan` olarak sayılır. Kuyruk büyümez, eski kare işlenmez.
+  - Defter (`ozet.json` → `kare_defteri`, model sürecinin bütün ömrü): okuyucuya gelen = işlenen + atlanan + bekleyen;
+    işlenenlerin hepsi ana sürece ve `algilama.csv`'ye ulaşır (`tutarli: true`). Kayıt penceresinde ayrıca hakemin
+    kamera karesi sayısıyla (`camera_info`) karşılaştırılır: `okuyucuya_ulasmayan` (gz-transport'ta kaybolan kare).
 - Sim gerçek zamanda akar. Gazebo Python'u beklemez; model yavaşsa sim yavaşlamaz, kareler atlanır.
 - Gecikme ölçümü için sim saati ile duvar saati eşlenir. Eşleme `/world/<dünya>/clock` konusundan tutulur (abonelik ~100 Hz'e kısılır).
+  - Uygulamada bulundu (4. grup): eşleme, geri çağırmanın çalıştığı an yerine Gazebo'nun saat mesajına yayın anında
+    yazdığı sistem saatiyle (`Clock.system`) yapılır. Ana süreç meşgulken (hakemin segmentasyon karelerinin saf Python
+    çözümü, MAVLink) geri çağırma onlarca ms gecikiyor ve eşleme kayıyordu: ilk koşuda `ulasma_ms` ortalaması −5 ms
+    çıktı. Düzeltmeden sonra 31 ms. Boştaki bir süreçte alış − `system` farkı 0.09–0.31 ms ölçüldü.
 - `araclar/kusurlar.py` görüntü ile model arasında bir aşamadır: `KameraKusurlari.uygula(kare, t) -> kare`. Senaryonun `kusurlar:` alanından ayarlanır.
   - Faz A'da alan boştur, yani kusurlar kapalıdır ve kare bit bit değişmeden geçer.
   - Faz B alan adları ayrılmıştır: `gurultu`, `bulaniklik`, `rolling_shutter`, `pozlama`. Faz A'da biri açılırsa "Faz B'de uygulanacak" hatası verilir.
@@ -101,7 +112,15 @@
   - Amaç: GIL çekişmesinden ve gz-transport'un fork sonrası sorunlarından kaçınmak.
   - Sonuçlar ana sürece FIFO kuyrukla gelir.
   - `--modelsiz` ya da `algilama.etkin: false` verilirse model süreci hiç başlatılmaz (F1 testi bunu kullanır).
+  - Uygulamada (4. grup): süreç, simülasyon açılmadan ve çıktı klasörüne bir şey yazılmadan önce açılır ve modelin
+    yüklenmesi beklenir; model bir ayarı reddederse (`--sinif`, `--imgsz`) koşu Gazebo açılmadan çıkış kodu 2 ile
+    durur. Model, Gazebo kare yayınlamaya başladığı andan kayıt bitene kadar çalışır (gerçek araçta da model hep
+    açıktır); kayıt bitince kapanır, iniş modelsiz yapılır. Ctrl+C'de model süreci SIGINT'i yok sayar, ana süreç onu
+    durdurur, defter yine gelir.
 - Kare başına `model_ms` (ön işleme + çıkarım + son işleme) loglanır.
+  - Uygulamada `model_ms`, algılayıcının `algila()` çağrısının çevresinden ölçülür (renk çevirme ve kutu dönüşümü
+    dahil); Vision'ın takacağı başka bir `Algilayici` da aynı ölçümü alır. Ayrıca `cozme_ms` (mesajın çözülmesi) ve
+    `kusur_ms` ayrı yazılır.
 - Lisans: Ultralytics AGPL-3.0'dır. Model yalnız yerel simde çalıştırılır, dağıtılmaz.
 
 **4. Gecikme zinciri, kare atlama ve zaman ölçümü**
@@ -124,6 +143,10 @@
   - PX4 v1.17.0 bu alanı `DEBUG_VECT` ve `FOLLOW_TARGET` için kullanmaz; uORB damgası mesajın varış anıdır.
   - Bu yüzden saat kaymasının stok PX4 tüketicileri üzerinde etkisi yoktur. Ortak ICD zaman damgalı bir mesaj seçerse anlam kazanır (bkz. "Varsayımlar").
 - Gerçek zaman oranı (RTF) koşu boyunca ölçülür. 0.9'un altına düşerse raporda uyarı çıkar; model CPU'yu Gazebo'dan alıyor olabilir.
+  - Uygulamada: `rtf_ort` (kayıt penceresi) ve `rtf_min_5s` (en yavaş 5 s'lik dilim), saat eşlemesinden. Ölçülen
+    (11.11, `kalabalik_park`): modelsiz 0.998–1.000, model 4 çekirdek **0.84** (uyarı çıkar), model 2 çekirdek 0.93.
+    Kameraya pasif bir abone (bütün 9 MB'lık kareleri alan ama işlemeyen) RTF'yi düşürmedi (1.000); düşüşün
+    sebebi modelin hesap yüküdür. Karar bekliyor (bkz. "Açık Konular").
 - Faz A varsayılanları: yapay gecikme ve saat ayarlarının hepsi 0'dır; yalnız doğal gecikme ölçülür.
 
 **5. İki LOS kaynağı, hedef seçimi ve `TEZ_LOS` gönderimi**
@@ -227,8 +250,9 @@
   - Ara durum (m06 sürerken, tasks.md 2.5): sonraki bir görev grubunda bağlanacak ayar varsayılan dışında verilirse
     `senaryo.py` simülasyonu açmadan "`<alan>`: Görev grubu N'de bağlanacak" hatasıyla durur (`hedef.check_wired`;
     `senaryo.run` de aynı kontrolü yapar). Varsayılanı henüz etkin olmayan ayarlar `ayarlar.henuz_bagli_degil`'de
-    grup numarasıyla listelenir (ör. `{"algilama.etkin": 4, "takip.los": 5, "video.mp4": 8}`). Her grup kendi
-    satırlarını `hedef.unwired` / `hedef.not_in_effect`'ten siler.
+    grup numarasıyla listelenir (ör. `{"takip.los": 5, "video.mp4": 8}`; 4. grup `algilama.etkin` satırını ve
+    `algilama.*` / `kusurlar` ara hatalarını sildi). Her grup kendi satırlarını `hedef.unwired` /
+    `hedef.not_in_effect`'ten siler.
   - `ozet.json`'daki eski `takip_kaynagi` alanı `ayarlar.takip.kaynak`'a taşındı (`ayarlar.takip.mod`: seçilen PX4
     modunun adı).
 - `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` (`calistir.sh`) ve `--temiz` (`derle.sh`) aynen kalır. `calistir.sh` her açılışta parametreleri zaten sıfırlar.
@@ -236,7 +260,13 @@
 **9. Ölçütler, rapor ve MP4 video**
 - Her koşu `tez/sim/sonuclar/<tarih>_<ad>/` altına şunları yazar (git'e girmez):
   - `algilama.csv`: işlenen kare başına zamanlar, seçilen kutu, LOS, durum ve konum hesabı.
-  - `kutular.csv`: modelin bulduğu bütün kutular.
+    4. grupta yazılan sütunlar: `t_us` (= `round(t*1e6)`), `t`, `sira`, `onceki_atlanan`, duvar saatinde (`monotonic`)
+    `varis`, `basla`, `bitis`, `alinma` (sonuç ana sürece ulaştı) ve sim saniyesinde `varis_sim`, `basla_sim`,
+    `bitis_sim`; `ulasma_ms` (sim ms), `bekleme_ms`, `cozme_ms`, `kusur_ms`, `model_ms`, `islem_ms` (bitiş − başlama),
+    `teslim_ms` (FIFO'da geçen süre), `kutu_sayisi`. Seçim/LOS/konum sütunları 5–6. gruplarda eklenir. Model sürecinin
+    bütün ömrünü kapsar (kalkış dahil); ölçütler yalnız kayıt penceresinden hesaplanır. Dosyalar ilk sonuçla açılır.
+  - `kutular.csv`: modelin bulduğu bütün kutular (`t_us`, `t`, `sira`, `kutu` (0 = en güvenli), `u0 v0 u1 v1`,
+    `guven`, `sinif`, `sinif_adi`).
   - `dogru_cevap.csv`: mevcut hakem dosyası.
   - `ozet.json` ve `rapor.html`: yeni bölümlerle.
   - `kosu.mp4` ve `ucus.ulg`.
@@ -529,7 +559,7 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 | `algilama.etkin` | `true` | `false` / `--modelsiz`: model süreci yok | `false`: 2 (model zaten yok) · `true`: 4 |
 | `algilama.model`, `imgsz`, `conf`, `sinif`, `cekirdek` | yol (`~` açılır); `.pt`'deki (tam sayı ≥ 32); 0.25 ((0, 1]); adı `person` olan (ad ya da numara ≥ 0); 4 (≥ 1) | Komut satırı ezer (`--model`, `--imgsz`, `--conf`, `--sinif`) | 4 |
 | `gecikme.ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm` | hepsi 0 (ilk ikisi ≥ 0) | Yakalama → PX4 yolu; `--gecikme-ms` = `ek_ms` | 12 |
-| `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış; 2. grupta yalnız sözlük olduğu denetlenir | 4 |
+| `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış (yazılırsa senaryo yüklenirken "Faz B'de uygulanacak"); alanları `kusurlar.check` denetler | 4 |
 | `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc`; `--kareleri-sakla` yalnız komut satırında | `mp4: false`: 2 (video zaten yok) · `mp4`, `--kareleri-sakla`: 8 · `qgc`: 11 |
 | `drone.mod` | kaldırılır | Yerine `takip.kaynak` | 1 |
 
@@ -738,7 +768,8 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 | Dosyadaki üst veri | Ultralytics `DetectionModel`; taban `yolov8s.pt`; görev `detect`; tek sınıf `{0: 'Person'}`; eğitim `imgsz` 640, 100 epoch, batch 32, doğrulama `iou` 0.7; kaydeden sürüm 8.4.174; tarih 2026-10-09; veri `/content/person-1/data.yaml`; lisans AGPL-3.0 |
 | Ultralytics ile yükleyince (11.11, 3. grup) | Üst satırın hepsi doğrulandı (ultralytics 8.4.174 + torch 2.14.1+cpu). Ek olarak: adım (stride) 32 px; 11.1 M parametre; optimizer SGD, `lr0` 0.002, `seed` 42, önceden eğitilmiş ağırlıkla; `conf` eğitimde verilmemiş (önerilen değer yok, varsayılan 0.25 kalır); son (sadeleştirilmiş) checkpoint. Dosyadaki eğitim doğrulama ölçütleri (Ortatepe'nin veri setinde, bizim ölçümümüz değil): precision 0.949, recall 0.878, mAP50 0.933, mAP50-95 0.582 |
 | Okunma şekli | İlk satır bayt taramasıyla okundu; 11.11'de dosya ultralytics ile yüklenerek doğrulandı. Ortatepe'nin teyidi (önerdiği `conf`/`iou`, eğitimdeki torch sürümü, veri setinde eğik/üstten görüntü olup olmadığı) bekleniyor |
-| Laptop CPU'sunda hız (11.11, Ryzen 7 5800H, Gazebo kapalıyken) | `imgsz` 640, 4 çekirdek: kare başına `model_ms` ≈ 56–66 ms (kare ortalaması; ilk çağrı ≈ 1.0–1.1 s, kurucuda ısınma olarak); 8 çekirdek ≈ 46 ms; `imgsz` 1280, 4 çekirdek ≈ 230–475 ms. Sim koşusu sırasındaki değer 4. grupta ölçülür |
+| Laptop CPU'sunda hız (11.11, Ryzen 7 5800H, Gazebo kapalıyken) | `imgsz` 640, 4 çekirdek: kare başına `model_ms` ≈ 56–66 ms (kare ortalaması; ilk çağrı ≈ 1.0–1.1 s, kurucuda ısınma olarak); 8 çekirdek ≈ 46 ms; `imgsz` 1280, 4 çekirdek ≈ 230–475 ms |
+| Sim koşusu sırasında (11.11, 4. grup, `kalabalik_park`, PX4 + Gazebo açık, kayıt penceresi) | 4 çekirdek: `model_ms` ort. 85 ms (p95 92), işlenen 13.7 kare/sim-s, atlanan %55, RTF 0.84; 2 çekirdek: `model_ms` 135 ms, 7.8 kare/sim-s, atlanan %74, RTF 0.93. Kare model sürecine ≈ 31 ms'de ulaşır, modeli ≈ 18 ms bekler; sonuç kareden ≈ 120–140 sim-ms sonra hazırdır. Geçici IoU kontrolü: hedefin göründüğü 325 işlenmiş karenin 237'sinde bir model kutusu hedefle IoU ≥ 0.5 (en iyi 0.94) |
 
 ## Varsayımlar
 
@@ -912,4 +943,8 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - **Yusuf Kurt / Yusuf Algan'dan:** mod adı, modülün yeri (harici `tez/px4` mi, ağaç içi + kilit listesi mi), parametre öneki, `TEZ_LOS` biçiminin uygunluğu, `time_usec` ihtiyacı (PX4 bu alanı düşürüyor).
 - **Ortak spec'ler** (m03/m04/m05) yazılınca "Varsayımlar" ve ilgili kod güncellenir: `TEZ_LOS` biçimi, frame, zaman damgası, "hedef yok".
 - **Uygulamada sabitlenecek sürümler (TBD):** GStreamer, `python3-gi` ve `ffmpeg` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta sabitlendi.)
+- **Model çekirdek sayısı ve RTF (4. grupta bulundu, karar kullanıcı/Hüseyin ile):** varsayılan 4 çekirdekte model
+  Gazebo'yu yavaşlatıyor (RTF 0.84 < 0.9; modelsiz 1.00). 2 çekirdekte RTF 0.93 ama model 135 ms, kare hızı 7.8/s.
+  RTF < 1 iken sim dünyası yavaş aktığı için model sim saatine göre olduğundan hızlı görünür (85 ms duvar ≈ 72 sim-ms).
+  Seçenekler: 4'te kalıp uyarıyla yaşamak, 2–3 çekirdek, Gazebo yükünü azaltmak. Varsayılan şimdilik spec'teki 4.
 - **`imgsz` seçimi (3. grupta bulundu, karar Ortatepe/Hüseyin ile):** 45° kameradan 10 m'de insan ≈ 150–200 px boyundadır; `imgsz` 640'ta modele ≈ 42–56 px olarak girer (640/2304 ölçeği). `kalabalik_park`'ın 4 karesinde (`model_dene.py`, sabit kamera 10 m / 45°) v0.2 640'ta görünen kişilerin 62 s'de 4/4'ünü, 66 s'de 3/5'ini (hedef ve beyaz-bej giysili kişi kaçtı), 73 s'de 3/4'ünü (beyaz-bej yine; hedef çamın arkasında), 78 s'de 2/3'ünü (sarılı kişi) buldu. Aynı kareler 1280'de bu kaçırılanların hepsini buldu ama ≈ 4–8 kat yavaş (CPU'da ≈ 230–475 ms). Varsayılan `.pt`'deki 640 kalır; ölçüt 4./7. gruplarda koşu içinde çıkar. Gözlemdir, ölçüt değildir.

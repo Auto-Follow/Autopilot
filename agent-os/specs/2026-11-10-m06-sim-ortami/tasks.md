@@ -189,19 +189,19 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 #### Görev Grubu 4: Kare okuyucu, kusur aşaması, model süreci ve `algilama.csv`
 **Bağımlılık:** Görev Grubu 3 · **Emek:** ~0.75 gün
 
-- [ ] 4.0 Gazebo kamera görüntüsünün laptopta okunup modelden geçirilmesi; gecikme ve kare atlamanın ölçülmesi
-  - [ ] 4.1 Testleri yaz (6–8 test)
+- [x] 4.0 Gazebo kamera görüntüsünün laptopta okunup modelden geçirilmesi; gecikme ve kare atlamanın ölçülmesi
+  - [x] 4.1 Testleri yaz (6–8 test)
     - `test_kusurlar.py`: boş ayarda kare bit bit aynı; Faz B alanı (`gurultu`, `bulaniklik`, `rolling_shutter`, `pozlama`) "Faz B'de uygulanacak" hatası verir; bilinmeyen alan reddedilir
     - `test_algilama.py`, 2. kısım: taklit Ultralytics sonucundan `Kutu`'ya dönüşüm, görüntü sınırına kırpma, piksel kenarı kuralı (`u0 ≤ u < u1`); sahte algılayıcıyla arayüz
       (Dönüşüm `algilama.to_boxes` olarak 3. grupta duman testi için yazıldı, testi yok; bu alt görev onu sınar ve gerekirse düzeltir.)
     - `test_goruntu.py` (yeni, Test Planı'nda yok): yalnız en yeni kare tutulur, üzerine yazılan kare `atlanan` sayılır; sim ↔ duvar saati eşlemesi
-  - [ ] 4.2 `araclar/goruntu.py`: `/x500_tez/kamera/image`'a `subscribe_raw`; geri çağırma yalnız ham bayt + `time.monotonic()` + sayaç saklar; protobuf yalnız işlenecek karede çözülür; kare nesnesi (RGB `uint8` 1296×2304×3, `t`, `varis`, `sira`); `uretilen`/`atlanan` sayaçları; `/world/<dünya>/clock` ile saat eşleme (~100 Hz'e kısılır)
-  - [ ] 4.3 `araclar/kusurlar.py`: `KameraKusurlari.uygula(kare, t) -> kare`; Faz A'da geçişsiz; `kusur_ms` ölçülür
-  - [ ] 4.4 Model süreci (`multiprocessing`, "spawn"): kare okuyucu + kusur aşaması + algılayıcı; sonuçlar FIFO kuyrukla ana sürece; `basla`, `bitis`, `model_ms`. `--modelsiz` ya da `algilama.etkin: false` iken hiç başlatılmaz.
+  - [x] 4.2 `araclar/goruntu.py`: `/x500_tez/kamera/image`'a `subscribe_raw`; geri çağırma yalnız ham bayt + `time.monotonic()` + sayaç saklar; protobuf yalnız işlenecek karede çözülür; kare nesnesi (RGB `uint8` 1296×2304×3, `t`, `varis`, `sira`); `uretilen`/`atlanan` sayaçları; `/world/<dünya>/clock` ile saat eşleme (~100 Hz'e kısılır)
+  - [x] 4.3 `araclar/kusurlar.py`: `KameraKusurlari.uygula(kare, t) -> kare`; Faz A'da geçişsiz; `kusur_ms` ölçülür
+  - [x] 4.4 Model süreci (`multiprocessing`, "spawn"): kare okuyucu + kusur aşaması + algılayıcı; sonuçlar FIFO kuyrukla ana sürece; `basla`, `bitis`, `model_ms`. `--modelsiz` ya da `algilama.etkin: false` iken hiç başlatılmaz.
     - 3. gruptan hazır: `algilama.model_path` + `inspect_model` (dosya yoksa nereden alınacağını söyler, sha256 + `modeller.yaml` uyarısı), `YoloAlgilayici` (kurucuda ısınma; `last_model_ms`). Sim açılmadan önce ana süreçte `inspect_model` çağrılır; `ModelFile.as_dict()` `ayarlar.algilama`'ya yazılır (spec 8: "model özeti de dahildir"). `algilama.*` ara hatası ve `henuz_bagli_degil["algilama.etkin"]` bu grupta kaldırılır.
-  - [ ] 4.5 `senaryo.py`: model süreci kayıttan önce açılır, kayıt bitince kapanır. `algilama.csv` (işlenen kare başına zamanlar, kutu sayısı; seçim/LOS/konum sütunları 5–6. gruplarda dolar) ve `kutular.csv` (bütün kutular) `round(t*1e6)` anahtarıyla yazılır. `uretilen`, `islenen`, `atlanan_kare_orani`, `islenen_kare_hizi_hz`, RTF (0.9 altında uyarı) geçici olarak `ozet.json`'a.
-  - [ ] 4.6 `f1_testi.py` `--modelsiz` ile koşar; `ruff.toml`'a `goruntu`, `kusurlar`, `algilama` eklenir
-  - [ ] 4.7 Doğrulama
+  - [x] 4.5 `senaryo.py`: model süreci kayıttan önce açılır, kayıt bitince kapanır. `algilama.csv` (işlenen kare başına zamanlar, kutu sayısı; seçim/LOS/konum sütunları 5–6. gruplarda dolar) ve `kutular.csv` (bütün kutular) `round(t*1e6)` anahtarıyla yazılır. `uretilen`, `islenen`, `atlanan_kare_orani`, `islenen_kare_hizi_hz`, RTF (0.9 altında uyarı) geçici olarak `ozet.json`'a.
+  - [x] 4.6 `f1_testi.py` `--modelsiz` ile koşar; `ruff.toml`'a `goruntu`, `kusurlar`, `algilama` eklenir
+  - [x] 4.7 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_kusurlar.py tez/sim/testler/test_algilama.py tez/sim/testler/test_goruntu.py -q
@@ -232,6 +232,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
   - [ ] 5.3 `araclar/gecikme.py`, 1. kısım: sıra koruyan hat ve `serbest` damgası, ek gecikme 0 (yapay gecikme ve saat modeli 12. grupta)
   - [ ] 5.4 `px4_baglanti.py`: tek gönderim kilidi (GCS heartbeat iş parçacığıyla çakışmaz), `send_los` (iki taraflı doğrulama); işlenen kare başına bir mesaj, en çok 30 Hz, aynı kare iki kez gitmez; hedef yoksa NaN
   - [ ] 5.5 Takip iş parçacığı (`senaryo.py`): model sonucu → seçim → LOS → gecikme hattı → gönderim → `algilama.csv` satırı (seçilen kutu, LOS, durum, `ulasma_ms`, `bekleme_ms`, `uctan_uca_ms`). `TEZ_LOS` her kaynakta gider, `yok` dahil.
+    (4. gruptan hazır: `algilama.ModelProcess` her `FrameResult`'ı sırayla bir iş parçacığında `on_result(sonuç, alinma)`'ya verir; `algilama.DetectionLog` satırı yazar ve sütunları `ROW_COLUMNS`'tadır; `goruntu.SimClock.to_sim` duvar saatini sim saatine çevirir. Ölçülen: sonucun FIFO'dan ana sürece geçişi (`teslim_ms`) ort. ≈ 9–10 ms, en çok ≈ 78–84 ms; ana süreçteki GIL çekişmesinden (hakemin segmentasyon çözümü), gönderim gecikmesine girer.)
   - [ ] 5.6 Mod adla seçilir (`Vehicle.modes`, AVAILABLE_MODES): `yok` → "Hold", `tez_los` → `takip.mod_adi`; ad yoksa koşu başlamadan mevcut adları listeleyen hata. Mod numarası koda gömülmez. 2. gruptaki `tez_los` ve `--los hakem` ara hataları kaldırılır.
   - [ ] 5.7 Doğrulama
 
