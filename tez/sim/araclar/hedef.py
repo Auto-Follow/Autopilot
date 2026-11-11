@@ -507,12 +507,8 @@ def unwired(sc: Scenario) -> list[str]:
     """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet."""
     t, v = sc.tracking, sc.video
     found: list[tuple[str, int]] = []
-    if t.source == "tez_los":
-        found.append(("takip.kaynak: tez_los (--takip)", 5))
     if t.source == "follow_me":
         found.append(("takip.kaynak: follow_me (--takip)", 6))
-    if t.los == "hakem":
-        found.append(("takip.los: hakem (--los)", 5))
     if t.px4_start:
         found.append(("takip.px4_baslat / --px4-baslat", 10))
     found += [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
@@ -526,8 +522,6 @@ def unwired(sc: Scenario) -> list[str]:
 def not_in_effect(sc: Scenario) -> dict[str, int]:
     """Settings left at a default that a later task group wires in -> that group; they do not act in this run."""
     found = {}
-    if sc.tracking.los == "model":
-        found["takip.los"] = 5  # no TEZ_LOS is sent yet
     if sc.video.mp4:
         found["video.mp4"] = 8  # no kosu.mp4 yet
     return found

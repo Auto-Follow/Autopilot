@@ -130,6 +130,70 @@ def ulog_summary(path: Path | None) -> dict:
         return {"ulog_hatasi": f"{type(e).__name__}: {e}"}
 
 
+TEZ_LOS_NAME = "TEZ_LOS"  # px4_baglanti.TEZ_LOS_NAME (not imported: the report does not need pymavlink)
+DEBUG_NAME_CHARS = 10  # debug_vect.name is char[10]
+
+
+def debug_names(data: dict) -> np.ndarray:
+    """The name of every debug_vect sample from pyulog's columns (one int8 column per character, name[0] ...)."""
+    chars = np.stack([np.asarray(data[f"name[{i}]"]) for i in range(DEBUG_NAME_CHARS)], axis=1).astype(np.uint8)
+    return np.array([bytes(row).split(b"\0", 1)[0].decode("ascii", "replace") for row in chars])
+
+
+PX4_MATCH_S = 0.06  # [s] a logged TEZ_LOS belongs to a sent one with the same values at most this far in time
+PX4_MATCH_VALUE = 2e-6  # tez_los.csv keeps 6 decimals, PX4 float32
+
+
+def tez_los_in_ulog(data: dict, start: float, end: float, sent: list[dict] | None = None) -> dict:
+    """TEZ_LOS samples PX4 logged (debug_vect, SDLOG_PROFILE 163) in the window start..end [s]: PX4's time stamp
+    is the message's arrival (mavlink_receiver), PX4's clock is the sim clock in SITL. Other DEBUG_VECT senders share
+    the topic, so only the name TEZ_LOS counts.
+
+    With `sent` (tez_los.csv rows that went out: t, x, y, z, gonderim_sim) every logged message with a direction is
+    matched to the sent one with the same values nearest in time: PX4 arrival - capture is the end-to-end delay as the
+    autopilot sees it (PX4 drops time_usec, so the values are the only link; a NaN message is ambiguous)."""
+    t = np.asarray(data["timestamp"], dtype=float) / 1e6
+    inside = (t >= start) & (t <= end) & (debug_names(data) == TEZ_LOS_NAME)
+    count = int(inside.sum())
+    m = {"tez_los_px4_sayisi": count, "tez_los_px4_hizi_hz": count / (end - start) if end > start else math.nan}
+    if sent is None:
+        return m
+    with_dir = [a for a in sent if not math.isnan(a["x"])]
+    vals = np.array([[a["x"], a["y"], a["z"]] for a in with_dir]).reshape(-1, 3)
+    sent_t = np.array([a["gonderim_sim"] for a in with_dir])
+    captured = np.array([a["t"] for a in with_dir])
+    logged = np.stack([np.asarray(data[k], dtype=float) for k in "xyz"], axis=1)
+    delays, gaps = [], []
+    for i in np.flatnonzero(inside & np.isfinite(logged[:, 0])):
+        same = np.all(np.abs(vals - logged[i]) < PX4_MATCH_VALUE, axis=1) & (np.abs(sent_t - t[i]) < PX4_MATCH_S)
+        found = np.flatnonzero(same)
+        if found.size:
+            j = found[np.argmin(np.abs(sent_t[found] - t[i]))]
+            delays.append((t[i] - captured[j]) * 1000.0)
+            gaps.append((t[i] - sent_t[j]) * 1000.0)
+    m["tez_los_px4_eslesen"] = len(delays)
+    for name, values in (("uctan_uca_px4_ms", delays), ("px4_varis_eksi_gonderim_ms", gaps)):
+        m[f"{name}_ort"] = float(np.mean(values)) if values else math.nan
+        m[f"{name}_p95"] = float(np.percentile(values, 95)) if values else math.nan
+    m["px4_varis_eksi_gonderim_ms_min"] = float(np.min(gaps)) if gaps else math.nan
+    return m
+
+
+def ulog_tez_los(path: Path | None, start: float, end: float, sent: list[dict] | None = None) -> dict:
+    """tez_los_in_ulog of a ULog file; a log without debug_vect has 0 messages."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        from pyulog import ULog
+
+        ulog = ULog(str(path), ["debug_vect"])
+        if not ulog.data_list:
+            return {"tez_los_px4_sayisi": 0, "tez_los_px4_hizi_hz": 0.0}
+        return tez_los_in_ulog(ulog.get_dataset("debug_vect").data, start, end, sent)
+    except Exception as e:  # noqa: BLE001 - the report must still be written
+        return {"ulog_tez_los_hatasi": f"{type(e).__name__}: {e}"}
+
+
 def evaluate(sc: Scenario, m: dict) -> list[tuple[str, str, float, float, bool]]:
     """(key, description, threshold, value, passed) for every success threshold in the scenario."""
     checks = []
@@ -232,7 +296,9 @@ def _git_commit() -> str:
 def _fmt(value: float | None, key: str = "") -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "–"
-    if key.startswith(("kadrajda", "gorunur", "segmentasyon", "atlanan_kare")):
+    if key.startswith(("kadrajda", "gorunur", "segmentasyon", "atlanan_kare", "secili_kare", "secim_dogru")) or (
+        key == "tez_los_px4_orani"
+    ):
         return f"%{100 * value:.1f}"
     if isinstance(value, int):
         return str(value)
@@ -269,6 +335,25 @@ METRIC_LABELS = {
     "islem_ms_ort": "Kare başına toplam işlem (çözme + kusur + model), ortalama [ms]",
     "iou05_kare_sayisi": "Hedefle IoU ≥ 0.5 model kutusu bulunan işlenmiş kare (geçici kontrol)",
     "iou_max": "Hedefle en iyi IoU",
+    "secili_kare_orani": "Bir kutunun hedef seçildiği işlenmiş kare",
+    "secim_dogru_orani": "Hedef görünürken seçilen kutunun hedef olduğu kare (IoU ≥ 0.5)",
+    "kilit_kaybi_sayisi": "Kilit kaybı (10 işlenmiş karede eşleşme yok)",
+    "yeniden_kilit_sayisi": "Hakemle yeniden kilit",
+    "los_i_ii_fark_ort_deg": "LOS (i) model ile LOS (ii) hakem arası açı, ortalama [°] (seçilen kutu hedefken)",
+    "los_i_ii_fark_p95_deg": "LOS (i)–(ii) açısı, p95 [°]",
+    "los_i_ii_fark_maks_deg": "LOS (i)–(ii) açısı, en çok [°]",
+    "tez_los_gonderilen": "Gönderilen TEZ_LOS (gönderim anı kayıt penceresinde)",
+    "tez_los_hedef_yok": "Bunlardan 'hedef yok' (NaN)",
+    "tez_los_gecersiz": "Geçersiz olduğu için gönderilmeyen TEZ_LOS",
+    "tez_los_hizi_hz": "TEZ_LOS hızı [mesaj/sim-s]",
+    "tez_los_px4_sayisi": "PX4'ün ULog'a yazdığı TEZ_LOS (debug_vect)",
+    "tez_los_px4_orani": "PX4'e ulaşan / gönderilen TEZ_LOS",
+    "uctan_uca_px4_ms_ort": "Uçtan uca gecikme, PX4'ün varış damgasıyla (yakalama → PX4), ortalama [sim ms]",
+    "uctan_uca_px4_ms_p95": "Uçtan uca gecikme, PX4'ün varış damgasıyla, p95 [sim ms]",
+    "uctan_uca_ms_ort": "Uçtan uca gecikme (yakalama → gönderim), ortalama [sim ms]",
+    "uctan_uca_ms_p50": "Uçtan uca gecikme, p50 [sim ms]",
+    "uctan_uca_ms_p95": "Uçtan uca gecikme, p95 [sim ms]",
+    "uctan_uca_ms_maks": "Uçtan uca gecikme, en çok [sim ms]",
 }
 
 

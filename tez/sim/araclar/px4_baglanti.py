@@ -1,18 +1,180 @@
-"""MAVLink connection to PX4 SITL for the simulation tools (acts as the ground station on UDP 14540)."""
+"""MAVLink connection to PX4 SITL for the simulation tools (acts as the ground station on UDP 14540).
+
+TEZ_LOS (spec 2026-11-10-m06-sim-ortami, "Varsayımlar" 1; not final until the shared ICD, m05): the line of sight to
+the target as DEBUG_VECT name "TEZ_LOS", x y z = unit vector in body FRD from the camera, time_usec = the frame's
+capture time; x = y = z = NaN means "no target". LosSender keeps the stream's rules (one message per frame, frames
+only forwards, at most one per camera frame interval) and Vehicle.send_los checks every vector before it goes out
+(two-sided validation: PX4 checks again). Every message of the connection goes through one lock (serialize_sends).
+"""
 
 import math
 import socket
 import struct
 import threading
 import time
-from collections.abc import Callable
+from collections import Counter
+from collections.abc import Callable, Iterable
 
+import numpy as np
 from pymavlink import mavutil
+from pymavlink.dialects.v20 import development as mavlink
 
 # Names PX4 gives its own modes in AVAILABLE_MODES (src/lib/modes/ui.hpp nav_state_names; what QGC shows).
 # Modes are always chosen by name: the numbers of external modes depend on the registration order.
 HOLD_MODE_NAME = "Hold"
 FOLLOW_TARGET_MODE_NAME = "Follow Target"
+# Every mode PX4 v1.17.0 offers a multicopter for selection, before any external mode registers: the internal nav
+# states of mode_util::getValidNavStates() without Termination (ModeManagement::getModeStatus: not settable), named
+# by nav_state_names. Used to refuse a wrong takip.mod_adi before the simulation starts; in the run the names PX4
+# reports (AVAILABLE_MODES) decide. PX4 is locked, the list cannot drift (test_mesajlar checks it against the source).
+STOCK_MODE_NAMES = (
+    "Manual",
+    "Altitude",
+    "Position",
+    "Mission",
+    HOLD_MODE_NAME,
+    "Return",
+    "Position Slow",
+    "Altitude Cruise",
+    "Acro",
+    "Offboard",
+    "Stabilized",
+    "Takeoff",
+    "Land",
+    FOLLOW_TARGET_MODE_NAME,
+    "Precision Landing",
+    "Orbit",
+    "VTOL Takeoff",
+)
+# AVAILABLE_MODES leaves mode_name empty for MAVLink standard modes (AVAILABLE_MODES.hpp send_single_mode); they get
+# PX4's own name of the nav state behind them on a multicopter (lib/modes/standard_modes.hpp)
+STANDARD_MODE_NAMES = {
+    mavlink.MAV_STANDARD_MODE_POSITION_HOLD: "Position",
+    mavlink.MAV_STANDARD_MODE_ORBIT: "Orbit",
+    mavlink.MAV_STANDARD_MODE_ALTITUDE_HOLD: "Altitude",
+    mavlink.MAV_STANDARD_MODE_SAFE_RECOVERY: "Return",
+    mavlink.MAV_STANDARD_MODE_MISSION: "Mission",
+    mavlink.MAV_STANDARD_MODE_LAND: "Land",
+    mavlink.MAV_STANDARD_MODE_TAKEOFF: "Takeoff",
+}
+
+TEZ_LOS_NAME = "TEZ_LOS"  # DEBUG_VECT.name; PX4 keeps 9 characters (debug_vect.name is char[10])
+LOS_NORM_TOLERANCE = 1e-3  # |norm - 1| below this: a unit vector (spec 5)
+# [s, sim] least spacing of the capture times of two TEZ_LOS messages: one per camera frame at most (spec 5: "en çok
+# 30 Hz"). The 30 Hz camera's frames come 32 or 36 ms apart in sim (4 ms physics step), so the limit sits below 32 ms
+# and still stops anything faster than one message per frame. Capture times, not send times: the wall-clock spacing
+# of two sends jitters with the threads and would drop good frames.
+LOS_MIN_SPACING_S = 0.030
+
+
+def check_los(vec: np.ndarray | None) -> str | None:
+    """Why a TEZ_LOS vector may not be sent, None if it may: finite, unit length; None (no target) always may."""
+    if vec is None:
+        return None
+    v = np.asarray(vec, dtype=float)
+    if v.shape != (3,):
+        return f"3 bileşen olmalı, gelen {v.shape}"
+    if not np.all(np.isfinite(v)):
+        return "sonlu olmayan bileşen"
+    norm = float(np.linalg.norm(v))
+    if abs(norm - 1.0) >= LOS_NORM_TOLERANCE:
+        return f"birim değil (norm {norm:.6f})"
+    return None
+
+
+def los_message(mav: object, time_usec: int, vec: np.ndarray | None) -> object:
+    """DEBUG_VECT "TEZ_LOS" of one frame (pymavlink message of `mav`); vec None = NaN = no target. ValueError if
+    the vector may not be sent (check_los)."""
+    reason = check_los(vec)
+    if reason is not None:
+        raise ValueError(f"{TEZ_LOS_NAME}: {reason}")
+    x, y, z = (math.nan,) * 3 if vec is None else (float(c) for c in vec)
+    return mav.debug_vect_encode(TEZ_LOS_NAME.encode(), int(time_usec), x, y, z)
+
+
+def serialize_sends(mav: object, lock: threading.Lock) -> None:
+    """Make every send of a pymavlink MAVLink object hold `lock`: its send() is not thread safe (sequence number,
+    buffer), and the heartbeat, command and TEZ_LOS threads share the connection."""
+    unlocked = mav.send
+
+    def send(mavmsg: object, force_mavlink1: bool = False) -> None:
+        with lock:
+            unlocked(mavmsg, force_mavlink1=force_mavlink1)
+
+    mav.send = send  # every *_send() of pymavlink calls self.send
+
+
+def mode_entry(msg: object) -> tuple[str, int] | None:
+    """(name, custom_mode) of a mode in an AVAILABLE_MODES message; None if it cannot be selected (an unregistered
+    external slot, Termination)."""
+    if msg.properties & mavlink.MAV_MODE_PROPERTY_NOT_USER_SELECTABLE:
+        return None
+    name = msg.mode_name.strip() or STANDARD_MODE_NAMES.get(msg.standard_mode, "")
+    return (name, msg.custom_mode) if name else None
+
+
+def check_mode_name(name: str, px4_start: Iterable[str] = ()) -> None:
+    """Refuse a mode name PX4 will not offer, before the simulation starts (ValueError listing the choices).
+
+    Without start commands only PX4's own modes exist. An external mode (m15) registers after PX4 starts
+    (takip.px4_baslat / --px4-baslat): its name is then looked up in the run, in what PX4 reports."""
+    if name in STOCK_MODE_NAMES or any(c.strip() for c in px4_start):
+        return
+    raise ValueError(
+        f"takip.mod_adi: '{name}' PX4'ün seçilebilir modları arasında yok (--mod-adi). PX4 v1.17.0'ın modları: "
+        f"{', '.join(sorted(STOCK_MODE_NAMES))}. Harici bir mod (ör. m15'in modu) PX4 açıldıktan sonra kaydolur: "
+        "modülü takip.px4_baslat / --px4-baslat ile başlatın; adı o zaman PX4'ün listesinde aranır"
+    )
+
+
+class LosSender:
+    """The TEZ_LOS stream: one message per frame, frames only forwards in time, at most one per LOS_MIN_SPACING_S of
+    capture time, none without a link and none that may not be sent (check_los). Every attempt is counted."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._link: object | None = None  # has send_los(time_usec, vec): Vehicle
+        self._last_t: float | None = None  # [s, sim] capture time of the last message sent
+        self.counts: Counter[str] = Counter()
+
+    def attach(self, link: object) -> None:
+        with self._lock:
+            self._link = link
+
+    def detach(self) -> None:
+        with self._lock:
+            self._link = None
+
+    def send(self, t: float, vec: np.ndarray | None) -> tuple[str, float]:
+        """TEZ_LOS of the frame captured at `t` [s, sim]; vec None = no target. -> (result, monotonic time of the
+        send or of the decision): gonderildi, gecersiz, baglanti_yok, ayni_kare, eski_kare, hiz_siniri, hata."""
+        with self._lock:
+            result, at = self._send(t, vec)
+            self.counts[result] += 1
+            return result, at
+
+    def _send(self, t: float, vec: np.ndarray | None) -> tuple[str, float]:
+        if check_los(vec) is not None:
+            return "gecersiz", self._clock()
+        if self._link is None:
+            return "baglanti_yok", self._clock()
+        if self._last_t is not None:
+            if t == self._last_t:
+                return "ayni_kare", self._clock()
+            if t < self._last_t:
+                return "eski_kare", self._clock()
+            if t - self._last_t < LOS_MIN_SPACING_S - 1e-9:
+                return "hiz_siniri", self._clock()
+        # the send time is read just before the write: after it, the thread waits for the GIL (and on a loaded CPU for
+        # the scheduler) and a later reading came out up to ~70 ms late against PX4's own arrival stamp (task group 5)
+        at = self._clock()
+        try:
+            self._link.send_los(round(t * 1e6), vec)
+        except OSError:  # the UDP socket went away (PX4 shutting down): counted, the stream goes on
+            return "hata", at
+        self._last_t = t
+        return "gonderildi", at
 
 
 def decode_param_value(value: float, param_type: int) -> int | float:
@@ -30,6 +192,8 @@ class Vehicle:
     def __init__(self, timeout: float = 60.0, verbose: bool = True) -> None:
         self.verbose = verbose
         self.m = mavutil.mavlink_connection("udpin:127.0.0.1:14540", dialect="development")
+        # one lock for every message of the connection: GCS heartbeat thread, commands, TEZ_LOS (tracking thread)
+        serialize_sends(self.m.mav, threading.Lock())
         # PX4 streams up to 4 MB/s on this link; while the tools are busy (camera frames) the default 208 KB socket
         # buffer overflowed and a COMMAND_ACK was lost (F1 run, 2026-10-11). Linux caps it at net.core.rmem_max.
         self.m.port.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
@@ -76,8 +240,12 @@ class Vehicle:
                 return msg
         return None
 
+    def send_los(self, time_usec: int, vec: np.ndarray | None) -> None:
+        """One TEZ_LOS (DEBUG_VECT) to PX4; vec None = no target. ValueError if the vector may not be sent."""
+        self.m.mav.send(los_message(self.m.mav, time_usec, vec))
+
     def modes(self, timeout: float = 15.0) -> dict[str, int]:
-        """{mode name: custom_mode} of every mode PX4 offers (AVAILABLE_MODES, what QGC shows)."""
+        """{mode name: custom_mode} of every mode PX4 offers for selection (AVAILABLE_MODES, what QGC shows)."""
         # Index 0 asks for all modes. PX4 sends them before the COMMAND_ACK, so do not wait for the ack
         # (command() would drop them).
         self.m.mav.command_long_send(
@@ -89,13 +257,15 @@ class Vehicle:
             *[0] * 6,
         )
         found: dict[str, int] = {}
-        indices: set[int] = set()  # names are not unique (unavailable modes all come as "(Mode not available)")
+        indices: set[int] = set()  # the unselectable ones are skipped, but every index counts for completeness
         total = None
         t_end = time.monotonic() + timeout
         while time.monotonic() < t_end and len(indices) != total:
             msg = self.m.recv_match(type="AVAILABLE_MODES", blocking=True, timeout=1)
             if msg is not None:
-                found[msg.mode_name] = msg.custom_mode
+                entry = mode_entry(msg)
+                if entry is not None:
+                    found[entry[0]] = entry[1]
                 indices.add(msg.mode_index)
                 total = msg.number_modes
         if len(indices) != total:

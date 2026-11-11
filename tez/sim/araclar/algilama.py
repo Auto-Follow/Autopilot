@@ -571,19 +571,22 @@ def time_key(t: float) -> int:
     return round(t * 1e6)
 
 
-def _cell(value: object) -> object:
+def csv_cell(value: object) -> object:
+    """A CSV cell: floats with 6 decimals, NaN and None empty."""
     if isinstance(value, float):
         return "" if math.isnan(value) else f"{value:.6f}"
-    return value
+    return "" if value is None else value
 
 
 class DetectionLog:
     """Writes every FrameResult to algilama.csv and kutular.csv as it comes, and keeps them for the run's numbers.
-    The files are created with the first result (a run whose model never saw a frame leaves none)."""
+    The files are created with the first result (a run whose model never saw a frame leaves none). extra_columns:
+    more algilama.csv columns after ROW_COLUMNS that add() gets from its caller (selection, LOS, TEZ_LOS: takip.py)."""
 
-    def __init__(self, out: Path, clock: goruntu.SimClock) -> None:
+    def __init__(self, out: Path, clock: goruntu.SimClock, extra_columns: tuple[str, ...] = ()) -> None:
         self._out = out
         self._clock = clock
+        self._columns = ROW_COLUMNS + tuple(extra_columns)
         self._files: list = []
         self._rows = self._boxes = None
         self._lock = threading.Lock()
@@ -594,10 +597,11 @@ class DetectionLog:
     def _open(self) -> None:
         self._files = [(self._out / n).open("w", newline="", encoding="utf-8") for n in ("algilama.csv", "kutular.csv")]
         self._rows, self._boxes = (csv.writer(f) for f in self._files)
-        self._rows.writerow(ROW_COLUMNS)
+        self._rows.writerow(self._columns)
         self._boxes.writerow(BOX_COLUMNS)
 
-    def add(self, r: FrameResult, alinma: float) -> None:
+    def add(self, r: FrameResult, alinma: float, extra: dict | None = None) -> None:
+        """One processed frame; `extra`: values of the extra columns (missing ones stay empty)."""
         to_sim = self._clock.to_sim
         varis_sim = to_sim(r.varis)
         row = {
@@ -620,17 +624,17 @@ class DetectionLog:
             "islem_ms": (r.bitis - r.basla) * 1000.0,
             "teslim_ms": (alinma - r.bitis) * 1000.0,
             "kutu_sayisi": len(r.kutular),
-        }
+        } | (extra or {})
         with self._lock:
             if not self._files:
                 self._open()
             self.rows.append(row)
             self.boxes[row["t_us"]] = r.kutular
             self.skipped.extend(r.atlanan)
-            self._rows.writerow([_cell(row[c]) for c in ROW_COLUMNS])
+            self._rows.writerow([csv_cell(row.get(c)) for c in self._columns])
             for i, b in enumerate(r.kutular):
                 values = asdict(b)
-                self._boxes.writerow([_cell(v) for v in (row["t_us"], r.t, r.sira, i, *values.values())])
+                self._boxes.writerow([csv_cell(v) for v in (row["t_us"], r.t, r.sira, i, *values.values())])
             for f in self._files:
                 f.flush()
 

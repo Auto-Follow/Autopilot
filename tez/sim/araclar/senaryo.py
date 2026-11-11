@@ -9,25 +9,31 @@
                             --mod-adi, --los, --px4-baslat), delay and video (--gecikme-ms, --qgc, --videosuz,
                             --kareleri-sakla); each replaces the scenario's value
 
-Steps: check the model file (sha256), start the model process and wait for the loaded model, write the scenario
-world (base world + target), start Gazebo + PX4 (calistir.sh) with the start parameters, read them back from PX4,
-take off, switch to the mode of the scenario's tracking source (takip.kaynak; "yok" = PX4 "Hold"), record ground
-truth while the target walks, stop the model process, land, shut down, collect the ULog, write the report to
-tez/sim/sonuclar/<date>_<scenario>/. ozet.json "ayarlar" holds every setting of the run (scenario + command line).
-A setting that a later task group of spec 2026-11-10-m06-sim-ortami wires in stops the run before anything starts.
+Steps: check the mode name and the model file (sha256), start the model process and wait for the loaded model, write
+the scenario world (base world + target), start Gazebo + PX4 (calistir.sh) with the start parameters, read them back
+from PX4, take off, switch by name to the mode of the scenario's tracking source (takip.kaynak; "yok" = PX4 "Hold",
+"tez_los" = takip.mod_adi / --mod-adi), record ground truth while the target walks, stop the model process and the
+TEZ_LOS stream, land, shut down, collect the ULog, write the report to tez/sim/sonuclar/<date>_<scenario>/.
+ozet.json "ayarlar" holds every setting of the run (scenario + command line). A setting that a later task group of
+spec 2026-11-10-m06-sim-ortami wires in, or a mode name PX4 does not offer, stops the run before anything starts.
 
 The model (algilama.py) runs in its own process on the newest camera frame only, from the moment Gazebo publishes
-until the recording ends; frames that arrive while it is busy are skipped and counted. algilama.csv has one row per
-processed frame (times, model_ms, boxes), kutular.csv every box; both join dogru_cevap.csv on round(t * 1e6).
+until the recording ends; frames that arrive while it is busy are skipped and counted. The tracking side (takip.py)
+selects the target's box in every processed frame and sends its line of sight to PX4 as DEBUG_VECT "TEZ_LOS" (one
+message per processed frame, NaN = no target), or the referee's (--los hakem, every camera frame) - in every tracking
+source, "yok" included. algilama.csv has one row per processed frame (times, model_ms, boxes, selection, LOS,
+TEZ_LOS), kutular.csv every box, tez_los.csv every TEZ_LOS attempt; all join dogru_cevap.csv on round(t * 1e6).
 --modelsiz (algilama.etkin: false) starts no model process at all.
 """
 
 import argparse
 import datetime as dt
 import importlib.util
+import math
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import algilama
@@ -36,14 +42,18 @@ import goruntu
 import hedef
 import parametreler
 import rapor
+import takip
 from kayit import Recorder
-from px4_baglanti import FOLLOW_TARGET_MODE_NAME, HOLD_MODE_NAME, Vehicle
+from px4_baglanti import FOLLOW_TARGET_MODE_NAME, HOLD_MODE_NAME, STOCK_MODE_NAMES, Vehicle, check_mode_name
 from simulasyon import BUILD, SIM_DIR, Simulation, running
 
 STALL_TIMEOUT = 15.0  # [s wall] sim time not advancing for this long = Gazebo is stuck
 RTF_WARNING = 0.9  # below this mean real time factor the report warns: the model may take the CPU from Gazebo
 RTF_SPAN = 5.0  # [s sim] pieces of the window for the lowest RTF
 PROGRESS_EVERY = 10.0  # [s sim] the model's numbers in the log while recording
+# PX4 must have logged the TEZ_LOS messages sent in the window (ULog debug_vect) within this share (tasks.md 5.7)
+TEZ_LOS_ULOG_TOLERANCE = 0.05
+LOCK_EVENTS_LISTED = 12  # lock events written into the report's events one by one
 # PX4 mode (AVAILABLE_MODES name) of each tracking source; chosen by name, never by number (tez_los: takip.mod_adi)
 TRACKING_MODES = {"yok": HOLD_MODE_NAME, "follow_me": FOLLOW_TARGET_MODE_NAME}
 
@@ -56,6 +66,11 @@ def mode_name(sc: hedef.Scenario) -> str:
     """AVAILABLE_MODES name of the mode the tracking source flies in."""
     t = sc.tracking
     return t.mode_name if t.source == "tez_los" else TRACKING_MODES[t.source]
+
+
+def check_mode(sc: hedef.Scenario) -> None:
+    """ValueError before anything starts if PX4 will not offer the mode of the tracking source (by name only)."""
+    check_mode_name(mode_name(sc), sc.tracking.px4_start)
 
 
 def settings(sc: hedef.Scenario, model: algilama.ModelFile | None = None) -> dict:
@@ -118,11 +133,16 @@ def fly(
     run_settings: dict,
     model: algilama.ModelProcess | None = None,
     detections: algilama.DetectionLog | None = None,
+    tracker: takip.Tracker | None = None,
 ) -> bool:
     v = Vehicle()
+    if tracker is not None:  # TEZ_LOS goes out from the moment the link to PX4 exists
+        tracker.attach(v)
     try:
-        return _fly(v, sc, rec, events, run_settings, model, detections)
+        return _fly(v, sc, rec, events, run_settings, model, detections, tracker)
     finally:
+        if tracker is not None:
+            tracker.detach()
         v.close()
 
 
@@ -139,18 +159,24 @@ def _model_ok(model: algilama.ModelProcess | None, events: list[str]) -> bool:
     return True
 
 
-def _progress(model: algilama.ModelProcess | None, detections: algilama.DetectionLog | None) -> None:
-    """One log line with what the model did over the last PROGRESS_EVERY sim seconds."""
+def _progress(
+    model: algilama.ModelProcess | None,
+    detections: algilama.DetectionLog | None,
+    tracker: takip.Tracker | None,
+    now: float,
+) -> None:
+    """Log lines with what the model and the TEZ_LOS stream did over the last PROGRESS_EVERY sim seconds."""
     last = model.last if model is not None else None
-    if last is None or detections is None:
-        return
-    recent = [r for r in detections.rows[-1000:] if r["t"] > last.t - PROGRESS_EVERY]
-    processed, skipped = len(recent), sum(r["onceki_atlanan"] for r in recent)
-    log(
-        f"  t = {last.t:.0f} s: model {model.results} kare işledi; son {PROGRESS_EVERY:.0f} s'de "
-        f"{processed / PROGRESS_EVERY:.1f} kare/s, %{100 * skipped / max(1, processed + skipped):.0f} kare atlandı; "
-        f"son kare {len(last.kutular)} kutu, model_ms {last.model_ms:.0f} ms"
-    )
+    if last is not None and detections is not None:
+        recent = [r for r in detections.rows[-1000:] if r["t"] > last.t - PROGRESS_EVERY]
+        processed, skipped = len(recent), sum(r["onceki_atlanan"] for r in recent)
+        log(
+            f"  t = {last.t:.0f} s: model {model.results} kare işledi; son {PROGRESS_EVERY:.0f} s'de "
+            f"{processed / PROGRESS_EVERY:.1f} kare/s, %{100 * skipped / max(1, processed + skipped):.0f} kare "
+            f"atlandı; son kare {len(last.kutular)} kutu, model_ms {last.model_ms:.0f} ms"
+        )
+    if tracker is not None:
+        log(f"  t = {now:.0f} s: son {PROGRESS_EVERY:.0f} s'de {tracker.recent(now - PROGRESS_EVERY)}")
 
 
 def _fly(
@@ -161,13 +187,21 @@ def _fly(
     run_settings: dict,
     model: algilama.ModelProcess | None,
     detections: algilama.DetectionLog | None,
+    tracker: takip.Tracker | None,
 ) -> bool:
     if not check_start_params(v, run_settings["px4_parametreleri"], events):
         return False
-    modes = v.modes()
+    modes = v.modes()  # name -> custom_mode of the modes PX4 offers now; the number is only ever taken from here
+    run_settings["takip"]["px4_modlari"] = sorted(modes)
+    missing = sorted(set(STOCK_MODE_NAMES) - set(modes))
+    if missing:  # the list checked before the start differs from PX4's: the run goes on, PX4's list decides
+        events.append(f"PX4'ün mod listesinde beklenen stok modlar yok: {', '.join(missing)}")
     name = run_settings["takip"]["mod"]
     if name not in modes:
-        events.append(f"'{name}' PX4'ün mod listesinde yok; mevcut modlar: {', '.join(sorted(modes))}")
+        events.append(
+            f"'{name}' PX4'ün mod listesinde yok (takip.mod_adi / --mod-adi); PX4'ün seçilebilir modları: "
+            f"{', '.join(sorted(modes))}"
+        )
         return False
     mode = modes[name]
     log(f"Kalkış: {sc.altitude:.0f} m")
@@ -201,7 +235,7 @@ def _fly(
             events.append(f"{rec.sim_time:.1f} s: model süreci durdu: " + ("; ".join(model.errors) or "?"))
             return False
         if rec.sim_time >= next_progress:
-            _progress(model, detections)
+            _progress(model, detections, tracker, rec.sim_time)
             next_progress += PROGRESS_EVERY
         if rec.sim_time != last_t:
             last_t, last_change = rec.sim_time, time.monotonic()
@@ -213,6 +247,10 @@ def _fly(
     if model is not None:  # the recording is over: the CPU goes back to Gazebo and PX4 for the landing
         model.stop()
         log(f"Model süreci kapandı: {model.results} kare işlendi")
+    if tracker is not None:  # like the Pi's model: the TEZ_LOS stream ends with the recording
+        tracker.close()
+        sent = tracker.sender.counts["gonderildi"]
+        log(f"TEZ_LOS akışı kapandı: {sent} mesaj gönderildi")
     log("Senaryo bitti, iniş")
     if not v.land():
         events.append("İniş/disarm tamamlanamadı")
@@ -220,24 +258,23 @@ def _fly(
 
 
 def start_model(
-    sc: hedef.Scenario, model_file: algilama.ModelFile, out: Path, clock: goruntu.SimClock, run_settings: dict
-) -> tuple[algilama.ModelProcess, algilama.DetectionLog]:
-    """Start the model process and wait until the model is loaded; its results go to algilama.csv / kutular.csv."""
-    detections = algilama.DetectionLog(out, clock)
-    model = algilama.ModelProcess(model_settings(sc, model_file), detections.add)
+    sc: hedef.Scenario,
+    model_file: algilama.ModelFile,
+    run_settings: dict,
+    on_result: Callable[[algilama.FrameResult, float], None],
+) -> algilama.ModelProcess:
+    """Start the model process and wait until the model is loaded; every result goes to on_result (the tracking
+    thread, which writes algilama.csv / kutular.csv)."""
+    model = algilama.ModelProcess(model_settings(sc, model_file), on_result)
     d = sc.detection
     log(f"Model süreci açılıyor: {model_file.path.name}, CPU, {d.cores} çekirdek (indirme ve analitik kapalı)...")
-    try:
-        info = model.start()
-    except algilama.ModelError:
-        detections.close()
-        raise
+    info = model.start()
     run_settings["algilama"]["model_bilgisi"] = info
     log(
         f"Model hazır: sınıf {info['sinif']} ({info['sinif_adi']}), imgsz {info['imgsz']} (adım {info['adim']}), "
         f"conf {info['conf']}, ilk çağrı {info['isinma_ms']:.0f} ms; kamera kusurları kapalı"
     )
-    return model, detections
+    return model
 
 
 def frame_books(model: algilama.ModelProcess, detections: algilama.DetectionLog, events: list[str]) -> dict:
@@ -271,22 +308,84 @@ def _detection_log_lines(m: dict) -> None:
     )
 
 
+def _tracking_log_lines(m: dict, summary: dict) -> None:
+    lock = summary["kilit"]
+    log(
+        f"TEZ_LOS ({summary['kaynak']}): kayıt penceresinde {m['tez_los_gonderilen']} gönderildi "
+        f"({m['tez_los_hedef_yok']} hedef yok, {m['tez_los_hizi_hz']:.1f} mesaj/sim-s), "
+        f"{m['tez_los_gecersiz']} geçersiz; "
+        f"uçtan uca ort. {m['uctan_uca_ms_ort']:.0f} ms (p50 {m['uctan_uca_ms_p50']:.0f}, p95 "
+        f"{m['uctan_uca_ms_p95']:.0f}, en çok {m['uctan_uca_ms_maks']:.0f}); bütün koşuda {summary['sonuclar']}"
+    )
+    if "tez_los_px4_sayisi" in m:
+        log(
+            f"PX4'ün ULog'unda kayıt penceresinde {m['tez_los_px4_sayisi']} TEZ_LOS (debug_vect); yönlü olanlardan "
+            f"{m['tez_los_px4_eslesen']} gönderilenle eşleşti, PX4'ün varış damgasıyla uçtan uca ort. "
+            f"{m['uctan_uca_px4_ms_ort']:.0f} ms (p95 {m['uctan_uca_px4_ms_p95']:.0f}); PX4 varışı - gönderim ort. "
+            f"{m['px4_varis_eksi_gonderim_ms_ort']:.1f} ms"
+        )
+    if not math.isnan(m["secili_kare_orani"]):  # the model's frames were selected (not without a model)
+        log(
+            f"Hedef seçimi: {lock['kilit_sayisi']} kilit, {lock['kilit_kaybi']} kilit kaybı, {lock['yeniden_kilit']} "
+            f"yeniden kilit (bütün koşu); kayıt penceresinde seçili kare %{100 * m['secili_kare_orani']:.0f}, hedef "
+            f"görünürken doğru kutu %{100 * m['secim_dogru_orani']:.0f}; LOS (i)-(ii) farkı ort. "
+            f"{m['los_i_ii_fark_ort_deg']:.2f}°, p95 {m['los_i_ii_fark_p95_deg']:.2f}°, en çok "
+            f"{m['los_i_ii_fark_maks_deg']:.2f}° ({m['los_i_ii_kare']} kare)"
+        )
+
+
+def tracking_results(
+    tracker: takip.Tracker,
+    sc: hedef.Scenario,
+    detections: algilama.DetectionLog | None,
+    rows: list[dict],
+    ulog: Path | None,
+    events: list[str],
+) -> tuple[dict, dict]:
+    """The TEZ_LOS stream's and the selection's numbers in the window (olcutler) and the whole run (ozet.json
+    "tez_los"); events for the lock changes and a ULog count off by more than TEZ_LOS_ULOG_TOLERANCE."""
+    m = tracker.metrics(sc.start_time, sc.end_time, detections.rows if detections is not None else [], rows)
+    sent = [a for a in tracker.attempts if a["sonuc"] == "gonderildi"]
+    m |= rapor.ulog_tez_los(ulog, sc.start_time, sc.end_time, sent)
+    if "tez_los_px4_sayisi" in m:
+        sent = m["tez_los_gonderilen"]
+        m["tez_los_px4_orani"] = m["tez_los_px4_sayisi"] / sent if sent else float("nan")
+        if not sent or abs(m["tez_los_px4_orani"] - 1.0) > TEZ_LOS_ULOG_TOLERANCE:
+            events.append(
+                f"TEZ_LOS: PX4'ün ULog'unda {m['tez_los_px4_sayisi']} kayıt, gönderilen {sent} (kayıt penceresi; "
+                f"izin verilen fark %{100 * TEZ_LOS_ULOG_TOLERANCE:.0f})"
+            )
+    summary = tracker.summary()
+    lock_events = summary["kilit"]["olaylar"]
+    names = {"ilk_kilit": "ilk kilit", "yeniden_kilit": "yeniden kilit", "kilit_kaybi": "kilit kaybı"}
+    for e in lock_events[:LOCK_EVENTS_LISTED]:
+        detail = f"IoU {e['kilit_iou']:.2f}" if "kilit_iou" in e else f"{e['ardisik_kacirma']} karede eşleşme yok"
+        events.append(f"{e['t']:.2f} s: {names[e['olay']]} (kilit {e['kilit_no']}, {detail})")
+    if len(lock_events) > LOCK_EVENTS_LISTED:
+        events.append(f"... {len(lock_events) - LOCK_EVENTS_LISTED} kilit olayı daha (ozet.json tez_los.kilit)")
+    events += [f"Takip: {e}" for e in summary["hatalar"]]
+    _tracking_log_lines(m, summary)
+    return m, summary
+
+
 def run(
     sc: hedef.Scenario, out: Path, headless: bool, verify: bool, model_file: algilama.ModelFile | None = None
 ) -> dict:
     """Fly the scenario once and write the report into `out`; returns the summary (ozet.json).
 
-    Before anything starts it raises ValueError if the scenario asks for a setting that is not wired yet,
-    FileNotFoundError / ModuleNotFoundError if the model file or the model packages are missing (check_model) and
-    algilama.ModelError if the model refuses a setting (imgsz, class) when it loads.
+    Before anything starts it raises ValueError if the scenario asks for a setting that is not wired yet or for a mode
+    PX4 does not offer, FileNotFoundError / ModuleNotFoundError if the model file or the model packages are missing
+    (check_model) and algilama.ModelError if the model refuses a setting (imgsz, class) when it loads.
     """
     hedef.check_wired(sc)
+    check_mode(sc)
     if model_file is None:
         model_file = check_model(sc)
     run_settings = settings(sc, model_file)
     log(f"Senaryo '{sc.name}': hedef yolu {sc.path_length():.1f} m, {sc.walk_end - sc.start_time:.1f} s; çıktı {out}")
     t = sc.tracking
-    log(f"Takip kaynağı {t.source} (PX4 modu '{run_settings['takip']['mod']}'), LOS {t.los or 'yok'}")
+    los_text = {"model": "model kutusu, LOS (i)", "hakem": "hakem, LOS (ii)", None: "yok, TEZ_LOS gönderilmez"}[t.los]
+    log(f"Takip kaynağı {t.source} (PX4 modu '{run_settings['takip']['mod']}'), TEZ_LOS kaynağı {los_text}")
     waiting = run_settings["henuz_bagli_degil"]
     if waiting:
         log("Henüz bağlanmamış varsayılanlar, bu koşuda etkin değil: " + ", ".join(waiting))
@@ -294,26 +393,39 @@ def run(
     events: list[str] = []
     clock = goruntu.SimClock()
     clock.subscribe(sc.world)
-    model = detections = None
-    if model_file is not None:  # loaded before anything is written or started: a refused setting stops here
-        known = f"modeller.yaml'da {model_file.known.name}" if model_file.known else "modeller.yaml'da kayıtlı değil"
-        log(f"Model dosyası {model_file.path} ({model_file.size} bayt), sha256 {model_file.sha256} ({known})")
-        if model_file.warning:
-            log(f"UYARI: {model_file.warning}")
-            events.append(f"Model dosyası uyarısı: {model_file.warning}")
-        model, detections = start_model(sc, model_file, out, clock, run_settings)
-    else:
-        log("Model yok (--modelsiz / algilama.etkin: false): model süreci açılmaz")
+    rec: Recorder | None = None
+    detections = algilama.DetectionLog(out, clock, takip.ROW_COLUMNS) if model_file is not None else None
+    tracker = None
+    if t.los is not None:  # the tracking threads: selection, LOS, delay line, TEZ_LOS
+        tracker = takip.Tracker(
+            t.los, clock, out, detections, lambda: rec.camera if rec is not None else None, sc.delay.extra_ms
+        )
+    model = None
     try:
+        if model_file is not None:  # loaded before anything is written or started: a refused setting stops here
+            known = (
+                f"modeller.yaml'da {model_file.known.name}" if model_file.known else "modeller.yaml'da kayıtlı değil"
+            )
+            log(f"Model dosyası {model_file.path} ({model_file.size} bayt), sha256 {model_file.sha256} ({known})")
+            if model_file.warning:
+                log(f"UYARI: {model_file.warning}")
+                events.append(f"Model dosyası uyarısı: {model_file.warning}")
+            model = start_model(sc, model_file, run_settings, tracker.on_model if tracker else detections.add)
+        else:
+            log("Model yok (--modelsiz / algilama.etkin: false): model süreci açılmaz")
         out.mkdir(parents=True, exist_ok=True)
         shutil.copy(sc.source, out / "senaryo.yaml")
         check_pos = dogrulama.camera_pose(sc) if verify else None
         world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "")
-        rec = Recorder(sc, sc.world)
+        rec = Recorder(sc, sc.world, tracker.on_referee if tracker is not None else None)
         check = dogrulama.OverheadCheck(sc, check_pos) if verify else None
     except BaseException:
         if model is not None:  # never leave the model process behind
             model.stop()
+        if tracker is not None:
+            tracker.close()
+        if detections is not None:
+            detections.close()
         raise
     # scenario's takip.px4_parametreleri, then --param: calistir.sh loads them after the .params files
     sim = Simulation(out, world_file, headless, params={p.name: p.value for p in t.px4_params})
@@ -324,7 +436,7 @@ def run(
                 events.append("Simülasyon açılmadı (sim.log'a bakın)")
             else:
                 log("PX4 ve Gazebo hazır")
-                completed = fly(sc, rec, events, run_settings, model, detections)
+                completed = fly(sc, rec, events, run_settings, model, detections, tracker)
             log("Simülasyon kapatılıyor")
     except KeyboardInterrupt:
         events.append("Kullanıcı durdurdu (Ctrl+C)")
@@ -333,6 +445,9 @@ def run(
     finally:
         if model is not None:
             model.stop()
+        if tracker is not None:  # after the model: its last results still go out or are refused, then rows
+            tracker.close()
+        if detections is not None:
             detections.close()
     events += sim.problems()
 
@@ -350,6 +465,14 @@ def run(
         )
     log(f"RTF (kayıt penceresi): ort. {more['rtf_ort']:.3f}, en düşük {more['rtf_min_5s']:.3f} ({RTF_SPAN:.0f} s'lik)")
     sections = {}
+    if tracker is not None:
+        tracking, sections["tez_los"] = tracking_results(
+            tracker, sc, detections, rows, (out / "ucus.ulg") if ulog else None, events
+        )
+        sections["tez_los"]["hakem_eksik_kare"] = rec.join_dropped
+        events += [f"Hakem akışı: {e}" for e in rec.errors]
+        completed &= not sections["tez_los"]["hatalar"] and not rec.errors  # a broken TEZ_LOS stream is no result
+        more |= tracking
     if model is not None:
         more |= detections.metrics(sc.start_time, sc.end_time, rows)
         sections["kare_defteri"] = frame_books(model, detections, events)
@@ -442,6 +565,7 @@ def main() -> int:
     try:
         sc = hedef.load(args.senaryo, command_line(args))
         hedef.check_wired(sc)
+        check_mode(sc)
         model_file = check_model(sc)
     except (ValueError, FileNotFoundError, ModuleNotFoundError) as e:
         print(f"Senaryo hatası: {e}", file=sys.stderr)

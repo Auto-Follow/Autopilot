@@ -5,12 +5,19 @@ position and body-centre pixel), where the target appears in that frame (the cam
 own camera_info, distortion included) and the true line of sight to it in the frames of the team's pixel -> LOS chain
 (optical, body FRD, NED; see kamera.py). Gazebo publishes poses at 50 Hz and frames at ~30 Hz on different sim
 times, so the drone pose is interpolated to each frame time. Sim time is also PX4's time in SITL.
+
+Live use (task group 5): Recorder(on_frame=...) hands every camera frame to the tracking side as soon as the referee
+knows it: while recording, once both the row and the segmentation frame of that time are there (FrameJoin); outside
+the recording (no referee), with no row at all. That is the referee's LOS (ii) and the operator's choice of the target
+(first lock) in the run; it comes as late as the referee really is.
 """
 
 import math
 import os
 import threading
+import time
 from collections import deque
+from collections.abc import Callable
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
 os.environ.setdefault("GZ_IP", "127.0.0.1")  # same as calistir.sh
@@ -33,6 +40,53 @@ POSE_HISTORY = 100  # poses kept for interpolation (2 s at 50 Hz)
 SEG_TOPIC = "/x500_tez/kamera_seg/labels_map"  # models/x500_tez: segmentation camera, half resolution
 SEG_SCALE = 2  # drone camera pixels per segmentation pixel
 VISIBLE_PX = 40  # [px of the drone camera] fewer visible pixels of the target = not visible (hidden or too small)
+JOIN_KEEP_S = 3.0  # [s sim] a half of a referee frame waits this long for the other half, then it is dropped
+
+
+def is_visible(parts: dict | None) -> bool:
+    """The target is visible in a segmentation frame (visible_parts): enough of it is not hidden."""
+    return bool(parts) and parts["hedef_piksel"] >= VISIBLE_PX
+
+
+class FrameJoin:
+    """Joins the two halves of the referee's view of one camera frame: the row (truth_row, made once a later drone
+    pose came) and the segmentation frame of the same time; they come in either order. Keys: round(t * 1e6)."""
+
+    def __init__(self, keep_s: float = JOIN_KEEP_S) -> None:
+        self._keep_us = round(keep_s * 1e6)
+        self._rows: dict[int, dict] = {}
+        self._segs: dict[int, dict] = {}
+        self._newest = 0
+        self.dropped = 0  # halves whose other half never came
+
+    @property
+    def pending(self) -> int:
+        return len(self._rows) + len(self._segs)
+
+    def add_row(self, key: int, row: dict) -> dict | None:
+        """The whole frame (row + its segmentation + gorunur) if its segmentation frame is already there."""
+        parts = self._segs.pop(key, None)
+        if parts is None:
+            self._rows[key] = row
+            self._prune(key)
+            return None
+        return row | parts | {"gorunur": is_visible(parts)}
+
+    def add_seg(self, key: int, parts: dict) -> dict | None:
+        row = self._rows.pop(key, None)
+        if row is None:
+            self._segs[key] = parts
+            self._prune(key)
+            return None
+        return row | parts | {"gorunur": is_visible(parts)}
+
+    def _prune(self, key: int) -> None:
+        self._newest = max(self._newest, key)
+        for waiting in (self._rows, self._segs):
+            old = [k for k in waiting if k < self._newest - self._keep_us]
+            for k in old:
+                del waiting[k]
+            self.dropped += len(old)
 
 
 def visible_parts(labels: np.ndarray, wanted: dict[int, str]) -> dict:
@@ -149,8 +203,19 @@ def truth_row(
 
 
 class Recorder:
-    def __init__(self, scenario: Scenario, world: str) -> None:
+    def __init__(
+        self,
+        scenario: Scenario,
+        world: str,
+        on_frame: Callable[[float, dict | None, float], None] | None = None,
+    ) -> None:
+        """on_frame(t, row, ready): every camera frame for the tracking side, `row` = the referee's row joined with
+        its segmentation frame (None outside the recording), `ready` = monotonic time it became known. Runs in a
+        gz-transport thread: it must return quickly."""
         self.sc = scenario
+        self._on_frame = on_frame
+        self._join = FrameJoin()
+        self.errors: list[str] = []  # on_frame failures (the transport thread must not die)
         self.rows: list[dict] = []
         self.sim_time = 0.0
         self.camera: Camera | None = None
@@ -166,6 +231,12 @@ class Recorder:
         self._node = Node()
         self._node.subscribe(Pose_V, f"/world/{world}/dynamic_pose/info", self._on_pose)
         self._node.subscribe(CameraInfo, f"{CAMERA_TOPIC}/camera_info", self._on_info)
+
+    @property
+    def join_dropped(self) -> int:
+        """Halves of referee frames whose other half never came (so on_frame never got that frame)."""
+        with self._lock:
+            return self._join.dropped
 
     def start(self) -> None:
         # segmentation frames only from now on: parsing them in Python all the time slowed the MAVLink tools
@@ -185,9 +256,21 @@ class Recorder:
         for r in rows:
             parts = seg.get(round(r["t"] * 1e6))
             r = r | (parts or empty)
-            r["gorunur"] = bool(parts) and parts["hedef_piksel"] >= VISIBLE_PX
+            r["gorunur"] = is_visible(parts)
             out.append(r)
         return out
+
+    def _emit(self, frames: list[tuple[float, dict | None]]) -> None:
+        """Hand frames to on_frame, outside the lock (the tracking side may take its own locks)."""
+        if self._on_frame is None or not frames:
+            return
+        ready = time.monotonic()
+        for t, row in frames:
+            try:
+                self._on_frame(t, row, ready)
+            except Exception as e:  # noqa: BLE001 - the transport thread keeps running; the run reports it
+                if len(self.errors) < 20:
+                    self.errors.append(f"{type(e).__name__}: {e}")
 
     def _on_seg(self, msg: Image) -> None:
         if not self._recording:
@@ -196,18 +279,25 @@ class Recorder:
         # instance segmentation: the label is in the third channel (the first two encode the instance)
         labels = np.frombuffer(msg.data, np.uint8).reshape(msg.height, msg.width, 3)[:, :, 2]
         parts = visible_parts(labels, self._labels)
+        key = round(t * 1e6)
         with self._lock:
-            self._seg[round(t * 1e6)] = parts
+            self._seg[key] = parts
+            done = self._join.add_seg(key, parts) if self._on_frame is not None else None
+        self._emit([(done["t"], done)] if done is not None else [])
 
     def _on_info(self, msg: CameraInfo) -> None:
         # camera_info is published with every image and carries the image's time stamp
         t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
+        done: list[tuple[float, dict | None]] = []
         with self._lock:
             if self.camera is None:
                 self.camera = Camera.from_camera_info(msg)
             if self._recording:
                 self._frames.append(t)
-                self._flush()
+                done = self._flush()
+            else:
+                done = [(t, None)]  # no referee outside the recording: the frame exists, nothing is known about it
+        self._emit(done)
 
     def _on_pose(self, msg: Pose_V) -> None:
         t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
@@ -217,6 +307,7 @@ class Recorder:
                 model = p
             elif p.name == CAMERA_LINK:
                 cam = p
+        done: list[tuple[float, dict | None]] = []
         with self._lock:
             self.sim_time = t
             if cam is not None and self._rel is None:
@@ -236,17 +327,26 @@ class Recorder:
                         np.array([o.w, o.x, o.y, o.z]),
                     )
                 )
-                self._flush()
+                done = self._flush()
+        self._emit(done)
 
-    def _flush(self) -> None:
-        """Turn every waiting frame time that now lies between two poses into a row (lock held)."""
+    def _flush(self) -> list[tuple[float, dict]]:
+        """Turn every waiting frame time that now lies between two poses into a row (lock held); returns the frames
+        whose segmentation frame is there too (for on_frame)."""
+        done: list[tuple[float, dict]] = []
         if self.camera is None or self._rel is None:
-            return
+            return done
         while self._frames and self._poses and self._frames[0] <= self._poses[-1][0]:
             t = self._frames.popleft()
             pose = self._pose_at(t)
             if pose is not None:
-                self.rows.append(truth_row(t, self.sc, self.camera, *pose, *self._rel))
+                row = truth_row(t, self.sc, self.camera, *pose, *self._rel)
+                self.rows.append(row)
+                if self._on_frame is not None:
+                    whole = self._join.add_row(round(t * 1e6), row)
+                    if whole is not None:
+                        done.append((t, whole))
+        return done
 
     def _pose_at(self, t: float) -> tuple[np.ndarray, np.ndarray] | None:
         poses = list(self._poses)

@@ -397,11 +397,9 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     good = write(tmp_path, GOOD)
     sc = hedef.load(good)
     hedef.check_wired(sc)  # defaults only: the run may start
-    assert hedef.settings(sc)["henuz_bagli_degil"] == {"takip.los": 5, "video.mp4": 8}
+    assert hedef.settings(sc)["henuz_bagli_degil"] == {"video.mp4": 8}  # TEZ_LOS (LOS model) is sent since group 5
     later = [
         (hedef.CommandLine(source="follow_me"), "takip.kaynak: follow_me (--takip): Görev grubu 6'da bağlanacak"),
-        (hedef.CommandLine(source="tez_los", mode_name="Hold"), "takip.kaynak: tez_los (--takip): Görev grubu 5'te"),
-        (hedef.CommandLine(los="hakem"), "takip.los: hakem (--los): Görev grubu 5'te"),
         (hedef.CommandLine(px4_start=("x start",)), "takip.px4_baslat / --px4-baslat: Görev grubu 10'da"),
         (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
         (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
@@ -410,8 +408,13 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     for cli, message in later:
         with pytest.raises(ValueError, match=re.escape(message)):
             hedef.check_wired(hedef.load(good, cli))
-    # wired already: start parameters, no model, no video (nothing makes one yet), the model's settings (group 4)
+    # wired already: start parameters, no model, no video (nothing makes one yet), the model's settings (group 4),
+    # TEZ_LOS with an external mode chosen by name and the referee's LOS (group 5)
     hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
+    hedef.check_wired(hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Hold", los="hakem")))
+    hedef.check_wired(
+        hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Yok", no_model=True, los="hakem"))
+    )
     model = hedef.CommandLine(model="~/m.pt", imgsz=960, conf=0.5, class_name="Person")
     hedef.check_wired(hedef.load(write(tmp_path, GOOD + "algilama: {cekirdek: 2}\n"), model))
 

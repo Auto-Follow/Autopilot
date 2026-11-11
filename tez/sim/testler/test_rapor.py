@@ -59,3 +59,27 @@ def test_overhead_check_verdict() -> None:
     hidden = {"fark": math.nan, "ortulu": True}
     assert dogrulama.passed([{"fark": 0.1}, hidden])
     assert not dogrulama.passed([{"fark": 0.1}, hidden, hidden])
+
+
+def test_tez_los_messages_that_reached_px4_are_counted_from_the_ulog_columns() -> None:
+    """debug_vect in the ULog (pyulog: one int8 column per character of the name); only TEZ_LOS counts, other
+    DEBUG_VECT senders share the topic (spec "Varsayımlar" 1)."""
+    names = ["TEZ_LOS", "TEZ_LOS", "BASKA", "TEZ_LOS", "TEZ_LOS"]
+    data = {"timestamp": np.array([59.99e6, 60.0e6, 60.01e6, 61.5e6, 62.01e6])}
+    for i in range(10):
+        data[f"name[{i}]"] = np.array([ord(n[i]) if i < len(n) else 0 for n in names], dtype=np.int8)
+    assert list(rapor.debug_names(data)) == names
+    for k, v in zip("xyz", ([0.6, 0.6, 0.0, math.nan, 0.8], [0.0] * 5, [0.8, 0.8, 1.0, math.nan, 0.6]), strict=True):
+        data[k] = np.array(v, dtype=np.float32)
+    m = rapor.tez_los_in_ulog(data, 60.0, 62.0)
+    assert (m["tez_los_px4_sayisi"], m["tez_los_px4_hizi_hz"]) == (2, pytest.approx(1.0))
+    # the logged ones are matched to the sent ones by their values (PX4 drops time_usec): PX4 arrival - capture
+    sent = [
+        {"t": 59.88, "x": 0.6, "y": 0.0, "z": 0.8, "gonderim_sim": 59.998},
+        {"t": 61.38, "x": math.nan, "y": math.nan, "z": math.nan, "gonderim_sim": 61.498},  # NaN: ambiguous, skipped
+        {"t": 61.89, "x": 0.8, "y": 0.0, "z": 0.6, "gonderim_sim": 62.007},
+    ]
+    m = rapor.tez_los_in_ulog(data, 60.0, 62.5, sent)
+    assert m["tez_los_px4_sayisi"] == 3 and m["tez_los_px4_eslesen"] == 2  # the NaN one at 61.5 s is not matched
+    assert m["uctan_uca_px4_ms_ort"] == pytest.approx(120.0, abs=0.01)
+    assert m["px4_varis_eksi_gonderim_ms_ort"] == pytest.approx(2.5, abs=0.01)  # arrived 2 and 3 ms after the send

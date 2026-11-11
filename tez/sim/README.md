@@ -3,11 +3,12 @@
 Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodlarını gerçek uçuştan önce Gazebo'da
 **ölçerek** denemesi için ortak ortam. Tasarım: "Auto-Follow Simülasyon ve Test Ortamı — Tasarım Önerisi" belgesi.
 
-> **Durum: F1 (hakem çekirdeği) + gerçekçi dünya, m06 Görev grupları 1–4.** Tez dronu + düz alan ve dokulu
+> **Durum: F1 (hakem çekirdeği) + gerçekçi dünya, m06 Görev grupları 1–5.** Tez dronu + düz alan ve dokulu
 > çayır (patika, ağaçlar) + stok PX4 (airframe 4001, gerçek dronun ayarlarıyla) + insan gibi yürüyen hedef ve başka
 > insanlar, YAML senaryo, kare kare doğru cevap (görünürlük ve kutu dahil), dron kamerasında koşan insan algılama
-> modeli (v0.2, CPU; `algilama.csv`), ULog ve otomatik HTML rapor.
-> m06'nın devamı (`TEZ_LOS`, Follow Me, MP4): `agent-os/specs/2026-11-10-m06-sim-ortami/`.
+> modeli (v0.2, CPU; `algilama.csv`), geçici hedef seçimi ve PX4'e `TEZ_LOS` (`DEBUG_VECT`) akışı, adıyla seçilen
+> takip modu (`yok` → Hold, `tez_los` → `--mod-adi`), ULog ve otomatik HTML rapor.
+> m06'nın devamı (Follow Me, MP4, harici modül): `agent-os/specs/2026-11-10-m06-sim-ortami/`.
 
 PX4 kaynağı, ROMFS ve submodule'ler **değişmez** (`tez/pin/verify_pin.sh --worktree` → "KILIT SAGLAM"); dron, dünya
 ve başlangıç parametreleri `tez/sim/` altında durur.
@@ -96,22 +97,28 @@ Bayraklar senaryodaki değeri ezer: `--model`, `--imgsz`, `--conf`, `--sinif`, `
 
 **Ara durum (m06 sürerken):** m06'nın sonraki görev gruplarında bağlanacak bir ayar varsayılan dışında verilirse
 koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (ör. `takip.kaynak: follow_me (--takip): Görev
-grubu 6'da bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok`, algılama
-(`algilama.*`, `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz`), `kusurlar` (Faz A: boş), `--videosuz`,
-`takip.px4_parametreleri` ve `--param`. Varsayılanı henüz etkin olmayan ayarlar (TEZ_LOS, MP4) `ozet.json` →
-`ayarlar.henuz_bagli_degil`'de listelenir.
+grubu 6'da bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok` ve `tez_los`
+(`--mod-adi`), `takip.los: model | hakem` (`--los`), algılama (`algilama.*`, `--model`, `--imgsz`, `--conf`,
+`--sinif`, `--modelsiz`), `kusurlar` (Faz A: boş), `--videosuz`, `takip.px4_parametreleri` ve `--param`.
+Varsayılanı henüz etkin olmayan ayarlar (MP4) `ozet.json` → `ayarlar.henuz_bagli_degil`'de listelenir.
 
-Senaryo yöneticisi model dosyasını (sha256) kontrol eder ve modeli kendi sürecinde yükler, dünyayı (temel dünya +
-hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve takip kaynağının moduna alır, hedef yürürken doğru cevabı
-kaydeder, kayıt bitince modeli kapatır, iner, kapatır ve raporu yazar. Çıktı `tez/sim/sonuclar/<tarih>_<ad>/`
-(git'e girmez):
+**Mod her zaman adıyla seçilir** (`yok` → "Hold", `tez_los` → `takip.mod_adi` / `--mod-adi`); numarası koda
+gömülmez, koşuda PX4'ün `AVAILABLE_MODES` listesinden okunur. PX4'ün sunmadığı bir ad simülasyon açılmadan, PX4
+v1.17.0'ın seçilebilir modlarını listeleyen bir hatayla reddedilir (harici bir modun adı ise PX4 açılıp modül
+başladıktan sonra aranır; 10. grup). Örnek duman testi: `--takip tez_los --mod-adi "Hold"`.
+
+Senaryo yöneticisi mod adını ve model dosyasını (sha256) kontrol eder, modeli kendi sürecinde yükler, dünyayı (temel
+dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve takip kaynağının moduna adıyla alır, hedef yürürken
+doğru cevabı kaydeder ve `TEZ_LOS` gönderir, kayıt bitince modeli ve `TEZ_LOS` akışını kapatır, iner, kapatır ve
+raporu yazar. Çıktı `tez/sim/sonuclar/<tarih>_<ad>/` (git'e girmez):
 
 | Dosya | İçerik |
 |---|---|
 | `rapor.html` | Sonuç (GEÇTİ / KALDI / TAMAMLANMADI), ölçütler, üstten harita, mesafe ve kamera görüntüsü grafikleri |
 | `dogru_cevap.csv` | **Dron kamerasının her karesi için bir satır** (~30 Hz, karenin sim zamanıyla): dron konumu ve duruşu (roll/pitch/yaw, PX4 yönleriyle), kamera konumu, hedef konumu/hızı, hedefin o karedeki pikseli (ayak, merkez, baş) ve kadrajda olup olmadığı, kameradan hedefe menzil ve **doğru görüş vektörü** (aşağıda) |
 | `ozet.json` | Ölçütler ve sonuç (makineyle okunur); `ayarlar`: koşunun geçerli ayarları (senaryo + komut satırı) ve her başlangıç parametresinin istenen değeri, kaynağı ve PX4'ten geri okunan değeri; kameranın kalibrasyonu ve gövdeye montajı (ofset, C_cb) |
-| `algilama.csv` | **Modelin işlediği her kare için bir satır**: `t_us` (= `round(t*1e6)`, `dogru_cevap.csv` ile birleştirme anahtarı), `t` (yakalama, sim s), `sira`, `onceki_atlanan`, duvar saatinde `varis`/`basla`/`bitis`/`alinma` ve sim saniyesinde `*_sim`, `ulasma_ms`, `bekleme_ms`, `cozme_ms`, `kusur_ms`, `model_ms`, `islem_ms`, `teslim_ms`, `kutu_sayisi`. LibreOffice Calc'ta açılır |
+| `algilama.csv` | **Modelin işlediği her kare için bir satır**: `t_us` (= `round(t*1e6)`, `dogru_cevap.csv` ile birleştirme anahtarı), `t` (yakalama, sim s), `sira`, `onceki_atlanan`, duvar saatinde `varis`/`basla`/`bitis`/`alinma` ve sim saniyesinde `*_sim`, `ulasma_ms`, `bekleme_ms`, `cozme_ms`, `kusur_ms`, `model_ms`, `islem_ms`, `teslim_ms`, `kutu_sayisi`; hedef seçimi (`secim`, `kilitsiz_neden`, `kilit_no`, `ardisik_kacirma`, `secilen_kutu`, `secilen_u0…v1`, `secilen_guven`, `kilit_iou`, kapı `kapi_u/v/px`, `merkez_mesafe_px`), `los_i_x/y/z` (seçilen kutunun LOS'u, gövde FRD), giden `tez_los_x/y/z` (boş = NaN = hedef yok), `tez_los_sonuc`, `hazir`/`serbest`/`gonderim` (+ `*_sim`), `takip_ms`, `ek_gecikme_ms`, `uctan_uca_ms` (yakalama → gönderim, sim ms) |
+| `tez_los.csv` | **Her `TEZ_LOS` denemesi bir satır** (kaynak `model` ya da `hakem`): `t_us`, `t`, `kaynak`, `hedef` (1 = yön, 0 = NaN), `x y z`, `time_usec`, `sonuc` (`gonderildi`, `gecersiz`, `baglanti_yok`, `ayni_kare`, `eski_kare`, `hiz_siniri`), zamanlar ve `uctan_uca_ms` |
 | `kutular.csv` | Modelin bulduğu bütün kutular (`t_us`, `t`, `sira`, sıra no, `u0 v0 u1 v1` piksel kenarı, `guven`, `sinif`) |
 | `ucus.ulg` | PX4 uçuş kaydı (PlotJuggler / pyulog) |
 | `dunya.sdf`, `senaryo.yaml`, `sim.log` | Koşunun girdileri ve logu |
@@ -124,6 +131,21 @@ sayıları (`uretilen`, `islenen`, `atlanan_kare_orani`, `islenen_kare_hizi_hz`,
 `bekleme_ms_ort`, `rtf_ort`, geçici IoU kontrolü `iou05_kare_sayisi`) yazılır. RTF 0.9'un altına düşerse olaylarda
 uyarı çıkar. `--modelsiz` ile model süreci hiç açılmaz (F1 böyle koşar).
 
+**Hedef seçimi ve `TEZ_LOS` (geçici; asıl çözüm m10/m11, biçim ortak ICD'ye kadar varsayım):** Her işlenen karede
+takip iş parçacığı (`araclar/takip.py`) hedefin kutusunu seçer. İlk kilit hakemden gelir (operatörün hedefi
+seçmesinin yerine): hakemin hedef kutusuyla IoU'su en yüksek kutu (en az 0.3). Sonra merkezi bir önceki seçime en
+yakın kutu izlenir; en çok önceki kutunun köşegeninin 1.5 katı uzaktaki bir kutu kabul edilir. 10 işlenen karede
+eşleşme olmazsa kilit düşer ve hakemle yeniden kilitlenilir (sayılır). Seçilen kutunun merkezi `kamera.py` zinciriyle
+(camera_info iç parametreleri, nominal 45° montaj) gövde FRD birim vektörüne (LOS i) çevrilir ve PX4'e
+`DEBUG_VECT` adı `TEZ_LOS` olarak gönderilir: işlenen kare başına bir mesaj, `time_usec` = karenin yakalama anı,
+kutu yoksa `x = y = z = NaN` (hedef yok; eski veri tekrarlanmaz). `--los hakem` ile model yerine hakemin `los_govde`'si
+(LOS ii) her kamera karesinde gider ("mükemmel algılayıcı"). Gönderim kuralları: aynı kare iki kez gitmez, kareler
+yalnız ileri gider, en çok bir mesaj / kamera karesi (≤ 30 Hz), sonlu olmayan ya da birim olmayan vektör gönderilmez
+ve sayılır. Akış `yok` dahil her takip kaynağında vardır (algılama kapalı ve `yok` iken LOS yoktur, F1 böyle koşar);
+PX4'le bağlantı kurulunca başlar, kayıt bitince kapanır. Kayıt penceresinin sayıları `ozet.json` → `olcutler`'de
+(`tez_los_*`, `uctan_uca_ms_*`, `yeniden_kilit_sayisi`, `secim_dogru_orani`, `los_i_ii_fark_*_deg`, ULog'dan
+`tez_los_px4_sayisi`), bütün koşununki `ozet.json` → `tez_los`'ta.
+
 Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu), `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
 kısa koşu, sert geri dönüş) — ikisi düz alanda — ve `kalabalik_park` (çayırda hedef + dört kişi: patikada yürüyen,
 çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır). `takip_yuruyen`:
@@ -135,8 +157,9 @@ görev grubunda bağlanır). Yeni senaryo yazmak için birini kopyalayın. Alanl
 - `takip` (varsayılan `{kaynak: yok}`; eski `drone.mod` alanı kaldırıldı):
   - `kaynak`: `yok` (dron PX4 "Hold"da bekler, açık döngü), `follow_me` (stok Follow Me, "Follow Target") veya
     `tez_los` (adı `mod_adi`'de verilen harici mod; orada `mod_adi` zorunlu). Mod her zaman adıyla seçilir.
-  - `los`: PX4'e `TEZ_LOS` olarak giden görüş vektörünün kaynağı: `model` (model kutusu, varsayılan) veya `hakem`
-    (doğru cevap). Algılama kapalıyken `model` olamaz; `follow_me`/`tez_los` o zaman `hakem` ister.
+  - `los`: PX4'e `TEZ_LOS` olarak giden görüş vektörünün kaynağı: `model` (model kutusu, LOS i, varsayılan) veya
+    `hakem` (doğru cevap `los_govde`, LOS ii, her kamera karesinde). Algılama kapalıyken `model` olamaz;
+    `follow_me`/`tez_los` o zaman `hakem` ister.
   - `px4_baslat`: PX4 açıldıktan sonra çalışacak komutlar (liste)
   - `px4_parametreleri`: `{AD: sayı}`; parametre dosyalarından sonra, `--param`'dan önce yüklenir, aynı ad ve sayı
     kuralı (`MIS_TAKEOFF_ALT` yazılmaz, onu `drone.yukseklik_m` verir). Koşuda her başlangıç parametresi PX4'ten geri
@@ -280,7 +303,7 @@ okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modü
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
 | `tez/sim/modeller.yaml` | Bilinen model dosyaları (ad, sha256, boyut, kaynak); dosyalar repo dışında, `~/auto-follow-modeller/` |
 | `tez/env/model-requirements.txt` | Model paketleri (ultralytics, CPU torch/torchvision) ve bağımlılıkları, sabit sürümle |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, takip iş parçacığı, `tez_los.csv`), `gecikme.py` (sıra koruyan gecikme hattı), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/video), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 

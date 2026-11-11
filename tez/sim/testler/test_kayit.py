@@ -85,3 +85,24 @@ def test_other_people_in_the_row() -> None:
     assert row["insan1_x"] == pytest.approx(9.1) and row["insan1_kadrajda"]
     assert row["insan1_u"] == pytest.approx(1152.0, abs=1.0)
     assert row["kadrajdaki_diger_insan"] == 1
+
+
+def test_referee_frame_is_complete_when_its_row_and_segmentation_frame_are_there() -> None:
+    """The live referee (LOS (ii), first lock) uses a camera frame only once both halves came: the row (needs a
+    later drone pose) and the segmentation frame (decoded in Python); either may come first."""
+    join = kayit.FrameJoin(keep_s=1.0)
+    seen = {"hedef_piksel": kayit.VISIBLE_PX, "hedef_kutu_u0": 10.0}
+    hidden = {"hedef_piksel": kayit.VISIBLE_PX - 4, "hedef_kutu_u0": 10.0}
+    assert join.add_row(60_000_000, {"t": 60.0}) is None
+    assert join.add_seg(60_000_000, seen) == {
+        "t": 60.0,
+        "hedef_piksel": kayit.VISIBLE_PX,
+        "hedef_kutu_u0": 10.0,
+        "gorunur": True,
+    }
+    assert join.add_seg(60_033_000, hidden) is None  # segmentation first this time
+    assert join.add_row(60_033_000, {"t": 60.033})["gorunur"] is False  # too few pixels: not visible
+    assert join.add_row(60_066_000, {"t": 60.066}) is None  # its segmentation frame never comes...
+    assert join.add_row(61_100_000, {"t": 61.1}) is None  # ...and it is dropped once 1 s older than the newest
+    assert join.pending == 1 and join.dropped == 1
+    assert kayit.is_visible(seen) and not kayit.is_visible(hidden) and not kayit.is_visible(None)

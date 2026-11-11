@@ -139,6 +139,10 @@
   - `atlanan_kare_orani = 1 − islenen/uretilen`.
   - `islenen_kare_hizi_hz`: sim saniyesi başına işlenen kare.
 - `araclar/gecikme.py`, yakalama → PX4 yoluna yapay bir gecikme hattı ekler: `ek_ms` + `titresim_ms` (düzgün dağılımlı, tohumlu). Sıra korunur; bir mesaj kendinden önceki mesajdan önce çıkmaz.
+  - Uygulamada (5. grup, 1. kısım): `gecikme.DelayLine`. Her `TEZ_LOS` hattan geçer; çıkış anı `serbest` damgasıdır.
+    Gecikme yokken ve hatta bekleyen yokken mesaj çağıranın iş parçacığında hemen çıkar (ölçülen yola fazladan bir
+    iş parçacığı geçişi eklenmez; ölçülen `ek_gecikme_ms` ort. ≈ 0.03 ms). Gecikme varken hattın kendi iş parçacığı
+    sırayı korur (testli). `ek_ms` ≠ 0, titreşim ve saat modeli 12. grupta bağlanır.
 - Saat modeli: gönderilen `time_usec = t_kare + saat_ofset_ms + saat_kayma_ppm × geçen süre`.
   - PX4 v1.17.0 bu alanı `DEBUG_VECT` ve `FOLLOW_TARGET` için kullanmaz; uORB damgası mesajın varış anıdır.
   - Bu yüzden saat kaymasının stok PX4 tüketicileri üzerinde etkisi yoktur. Ortak ICD zaman damgalı bir mesaj seçerse anlam kazanır (bkz. "Varsayımlar").
@@ -157,10 +161,26 @@
 
   Sonuç gövde FRD'de bir birim vektördür: kameradan hedefe, montaj açısı eklenmiş.
 - LOS kaynağı (ii), `hakem`: o karenin `los_govde` değeri (`kayit.py`). Yalnız hedef `gorunur` iken ve her kamera karesinde (30 Hz) kullanılır. Hakemin canlı satırı, segmentasyon karesi geldikten sonra kullanılır; bundan doğan ek gecikme de ölçülür.
+  - Uygulamada (5. grup): `kayit.Recorder(on_frame=...)` her kamera karesini, satırı (daha sonraki bir dron pozu
+    gelince oluşur) ve segmentasyon karesi ikisi de gelince (`kayit.FrameJoin`, hangisi önce gelirse) takip tarafına
+    verir; o an `kaynak_hazir` damgasıdır (`tez_los.csv` → `kaynak_ms`). Hakem yalnız kayıt sırasında çalışır
+    (segmentasyon çözümü ana süreci yorduğu için, 1. gruptan beri); kayıttan önce kare yine bildirilir ama satırsızdır:
+    `hakem` kaynağında `TEZ_LOS` NaN gider ("hedef yok"; operatör henüz hedef seçmemiş gibi).
 - Hedef seçimi geçicidir; m11'de asıl çözüm gelir.
   - İlk kilit: hedefin hakem kutusuyla IoU'su en yüksek kutu seçilir. Bu, operatörün hedefi seçmesinin yerini tutar.
   - Sonraki karelerde, merkezi önceki seçime en yakın kutu seçilir. Merkezler arası mesafe en fazla önceki kutunun köşegeninin 1.5 katı olabilir.
   - Kilit kaybı: 10 işlenen kare boyunca eşleşme olmazsa kilit düşer ve hakemle yeniden kilitlenilir. Bu sayılır (`yeniden_kilit_sayisi`).
+  - Uygulamada (5. grup, `araclar/takip.py` `Selection`):
+    - Kilit için hedef `gorunur` olmalı ve kutunun IoU'su en az **0.3** olmalı (`LOCK_MIN_IOU`; ölçütlerin bir
+      kutuyu bir insana ait saydığı eşik). Eşik olmasaydı IoU'su 0.01 olan uzak bir kutuya, operatörün tıklamayacağı
+      yere kilitlenilirdi. Kilit yoksa nedeni yazılır: `hakem_yok`, `hedef_gorunmuyor`, `kutu_eslesmedi`.
+    - Kilitliyken hakeme hiç bakılmaz (hile olurdu); kapı, son eşleşen kutunun merkezi ve köşegeniyle kurulur ve
+      kaçırılan karelerde büyümez.
+    - Kilit 10. kaçırmada düşer; yeniden kilit en erken **bir sonraki işlenen karede** denenir (operatörün tepki süresi
+      0, iyimser; bkz. "Açık Konular").
+    - Kutu merkezi `((u0 + u1) / 2, (v0 + v1) / 2)`: piksel kenarı kuralında sürekli koordinat; Gazebo'nun asal
+      noktası `cx = W/2 = 1152` iki orta pikselin sınırıdır, `Camera.project` ile aynı kural (testte gidiş-dönüş
+      < 0.01°, bozulmalı bir kamerayla da).
 - Mesaj `DEBUG_VECT` olarak gönderilir:
   - `name="TEZ_LOS"`.
   - `x, y, z`: birim LOS, gövde FRD.
@@ -170,6 +190,27 @@
 - "Hedef yok": hedef seçilemeyen işlenmiş karede aynı yoldan `x=y=z=NaN` gönderilir. Eski veri tekrarlanmaz (hata yönetimi standardı).
 - Göndermeden önce doğrulama yapılır: değerler sonlu olmalı ve `|norm − 1| < 1e-3` sağlanmalıdır. Bu sağlanmazsa mesaj gönderilmez ve sayılır (iki taraflı doğrulama).
 - `TEZ_LOS` her takip kaynağında gönderilir, `yok` dahil. Böylece veri akışı her zaman vardır ve ULog'a girer.
+- Uygulamada (5. grup):
+  - Akış: model sonucu (`ModelProcess`'in sonuç iş parçacığı = takip iş parçacığı) → seçim → LOS (i) → gecikme hattı
+    → `px4_baglanti.LosSender` → `Vehicle.send_los`; sonra `algilama.csv` satırı yazılır. `hakem` kaynağında hakemin
+    kareleri kendi iş parçacığında (`tez-hakem-los`) aynı hattan gider; model kareleri yine seçilir ve yazılır.
+  - `LosSender` kuralları, sırayla: geçersiz vektör (sonlu değil, 3 bileşen değil, `|norm − 1| ≥ 1e-3`) → `gecersiz`;
+    MAVLink bağlantısı yok → `baglanti_yok`; aynı kare → `ayni_kare`; daha eski kare → `eski_kare`; bir önceki
+    gönderilenin yakalama anından **30 ms**'den yakın → `hiz_siniri`. "En çok 30 Hz" yakalama zamanıyla uygulanır:
+    simde kamera kareleri 4 ms'lik fizik adımı yüzünden 32 / 36 ms arayla gelir, 33.3 ms'lik bir sınır geçerli
+    kareleri atardı; gönderim (duvar) zamanı ise iş parçacıklarıyla titrer. Her sonuç sayılır (`ozet.json` →
+    `tez_los.sonuclar`).
+  - Akış PX4 bağlantısı kurulunca başlar (önceki işlenmiş kareler `baglanti_yok`) ve kayıt bitince, model süreciyle
+    birlikte kapanır (gerçek araçta model ve gönderim birlikte durur; iniş zaten "Land" modundadır).
+  - Tek gönderim kilidi: `px4_baglanti.serialize_sends`, bağlantının `MAVLink.send`'ini bir kilitle sarar; GCS
+    heartbeat, komutlar ve `TEZ_LOS` aynı kilitten geçer (pymavlink'in `send`'i iş parçacığı güvenli değil: sıra
+    numarası, tampon).
+  - Gönderim anı (`gonderim`) soket yazımından **hemen önce** okunur. İlk denemede yazımdan sonra okunuyordu; PX4'ün
+    kendi varış damgasıyla karşılaştırınca karelerin %7'sinde 10 ms'den, en çok 71 ms geç çıktı (yazımdan sonra iş
+    parçacığı GIL'i ve yüklü işlemcide sırasını bekliyor).
+  - Çıktılar: `algilama.csv`'ye seçim, LOS (i), giden vektör ve zaman sütunları; her `TEZ_LOS` denemesi için yeni
+    `tez_los.csv` (her iki kaynak; `t_us` anahtarıyla birleşir); `ozet.json` → `tez_los` (bütün koşu: sonuçlar, kilit
+    olayları, hakemin eksik kareleri) ve `olcutler`'de kayıt penceresinin sayıları (aşağıda "Ölçüt Tanımları").
 
 **6. Takip kaynağı / kontrolcü seçimi (birinci sınıf gereksinim)**
 - Takip kaynağı senaryoda `takip.kaynak`, komut satırında `--takip` ile seçilir: `yok`, `follow_me` ya da `tez_los`. Dron `drone.yukseklik_m`'ye kalktıktan sonra mod adıyla seçilir:
@@ -181,6 +222,16 @@
   | `tez_los` | `takip.mod_adi` / `--mod-adi` |
 
   Mod adları PX4'ün `AVAILABLE_MODES` listesinden çözülür (`px4_baglanti.Vehicle.modes`). Ad listede yoksa koşu başlamadan, mevcut adları listeleyen bir hata verilir.
+  - Uygulamada (5. grup): PX4 `AVAILABLE_MODES`'ta MAVLink standart modlarına (Position, Altitude, Return, Mission,
+    Land, Takeoff, Orbit) ad yazmaz (`standard_mode` dolu, `mode_name` boş); bunlara PX4'ün kendi adı verilir
+    (`nav_state_names`). Seçilemeyenler (`MAV_MODE_PROPERTY_NOT_USER_SELECTABLE`: kayıtsız harici yuvalar
+    "(Mode not available)", Termination) listeye girmez. Koşuda okunan liste `ayarlar.takip.px4_modlari`'ye yazılır
+    (stok 4001'de 17 ad).
+  - "Koşu başlamadan": PX4'ün mod listesi ancak PX4 açılınca okunur. Bu yüzden ad, sim açılmadan PX4 v1.17.0'ın
+    seçilebilir stok modlarıyla (`px4_baglanti.STOCK_MODE_NAMES`, 17 ad; testte PX4 kaynağıyla, koşuda PX4'ün
+    listesiyle karşılaştırılır) denetlenir; yoksa hata bu adları ve harici modun nasıl ekleneceğini söyler
+    (0.7 s, çıkış kodu 2). `takip.px4_baslat` / `--px4-baslat` verilmişse (harici mod, 10. grup) ad PX4 açılıp
+    modül başladıktan sonra, kalkıştan önce PX4'ün listesinde aranır.
 - `follow_me` için `araclar/konumlama.py` kutunun alt ortasını (ayak noktası) düz zemine izdüşürür.
   - Kare anındaki EKF pozu kullanılır: `ATTITUDE_QUATERNION` + `LOCAL_POSITION_NED`, `time_boot_ms` ile interpolasyon. SITL'de bu zaman sim zamanıyla ±4 ms içinde aynıdır.
   - NED konumu `GPS_GLOBAL_ORIGIN`'e göre enlem/boylama çevrilir.
@@ -250,9 +301,10 @@
   - Ara durum (m06 sürerken, tasks.md 2.5): sonraki bir görev grubunda bağlanacak ayar varsayılan dışında verilirse
     `senaryo.py` simülasyonu açmadan "`<alan>`: Görev grubu N'de bağlanacak" hatasıyla durur (`hedef.check_wired`;
     `senaryo.run` de aynı kontrolü yapar). Varsayılanı henüz etkin olmayan ayarlar `ayarlar.henuz_bagli_degil`'de
-    grup numarasıyla listelenir (ör. `{"takip.los": 5, "video.mp4": 8}`; 4. grup `algilama.etkin` satırını ve
-    `algilama.*` / `kusurlar` ara hatalarını sildi). Her grup kendi satırlarını `hedef.unwired` /
-    `hedef.not_in_effect`'ten siler.
+    grup numarasıyla listelenir (5. gruptan sonra yalnız `{"video.mp4": 8}`; 4. grup `algilama.etkin` satırını ve
+    `algilama.*` / `kusurlar` ara hatalarını, 5. grup `takip.kaynak: tez_los`, `takip.los: hakem` ara hatalarını ve
+    `henuz_bagli_degil["takip.los"]`'u sildi). Her grup kendi satırlarını `hedef.unwired` / `hedef.not_in_effect`'ten
+    siler.
   - `ozet.json`'daki eski `takip_kaynagi` alanı `ayarlar.takip.kaynak`'a taşındı (`ayarlar.takip.mod`: seçilen PX4
     modunun adı).
 - `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` (`calistir.sh`) ve `--temiz` (`derle.sh`) aynen kalır. `calistir.sh` her açılışta parametreleri zaten sıfırlar.
@@ -263,8 +315,14 @@
     4. grupta yazılan sütunlar: `t_us` (= `round(t*1e6)`), `t`, `sira`, `onceki_atlanan`, duvar saatinde (`monotonic`)
     `varis`, `basla`, `bitis`, `alinma` (sonuç ana sürece ulaştı) ve sim saniyesinde `varis_sim`, `basla_sim`,
     `bitis_sim`; `ulasma_ms` (sim ms), `bekleme_ms`, `cozme_ms`, `kusur_ms`, `model_ms`, `islem_ms` (bitiş − başlama),
-    `teslim_ms` (FIFO'da geçen süre), `kutu_sayisi`. Seçim/LOS/konum sütunları 5–6. gruplarda eklenir. Model sürecinin
+    `teslim_ms` (FIFO'da geçen süre), `kutu_sayisi`. 5. grupta eklenenler: seçim (`secim`, `kilitsiz_neden`, `kilit_no`,
+    `ardisik_kacirma`, `secilen_kutu`, `secilen_u0…v1`, `secilen_guven`, `kilit_iou`, kapı `kapi_u/v/px`,
+    `merkez_mesafe_px`), `los_i_x/y/z`, giden `tez_los_x/y/z` + `tez_los_sonuc`, `hazir`/`serbest`/`gonderim` (+ `_sim`),
+    `takip_ms`, `ek_gecikme_ms`, `uctan_uca_ms`; satır `TEZ_LOS` gittikten sonra yazılır. Konum sütunları 6. grupta. Model sürecinin
     bütün ömrünü kapsar (kalkış dahil); ölçütler yalnız kayıt penceresinden hesaplanır. Dosyalar ilk sonuçla açılır.
+  - `tez_los.csv` (5. grupta eklendi): her `TEZ_LOS` denemesi (`t_us`, `t`, `kaynak`, `hedef`, `x y z`, `time_usec`,
+    `sonuc`, `kaynak_hazir`/`hazir`/`serbest`/`gonderim`, `gonderim_sim`, `kaynak_ms`, `hazir_ms`, `ek_gecikme_ms`,
+    `uctan_uca_ms`).
   - `kutular.csv`: modelin bulduğu bütün kutular (`t_us`, `t`, `sira`, `kutu` (0 = en güvenli), `u0 v0 u1 v1`,
     `guven`, `sinif`, `sinif_adi`).
   - `dogru_cevap.csv`: mevcut hakem dosyası.
@@ -505,7 +563,7 @@ flowchart LR
 | `tez/sim/modeller.yaml` | yeni | Bilinen model dosyaları: ad, sha256, boyut, kaynak |
 | `araclar/goruntu.py`, `kusurlar.py`, `algilama.py` | yeni | Kare okuyucu, kusur aşaması (Faz A kapalı), algılayıcı arayüzü + YOLO + model süreci |
 | `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
-| `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli |
+| `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv` |
 | `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme |
 | `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
@@ -551,9 +609,9 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 
 | Alan | Değerler, varsayılan | Not | Bağlandığı görev grubu |
 |---|---|---|---|
-| `takip.kaynak` | `yok` \| `follow_me` \| `tez_los`; `yok` | Mod: Hold / "Follow Target" / `mod_adi`; `--takip` | `yok`: 1 · `tez_los`: 5 · `follow_me`: 6 |
-| `takip.mod_adi` | metin | `tez_los`'ta zorunlu; AVAILABLE_MODES'taki ad; `--mod-adi` | 5 |
-| `takip.los` | `model` \| `hakem`; `model` (algılama kapalı + `yok`: LOS yok) | LOS kaynağı (i) / (ii); algılama kapalıyken `model` olamaz; `--los` | 5 |
+| `takip.kaynak` | `yok` \| `follow_me` \| `tez_los`; `yok` | Mod: Hold / "Follow Target" / `mod_adi`; `--takip` | `yok`: 1 · `tez_los`: 5 (bağlandı) · `follow_me`: 6 |
+| `takip.mod_adi` | metin | `tez_los`'ta zorunlu; AVAILABLE_MODES'taki ad, sim açılmadan stok adlarla denetlenir; `--mod-adi` | 5 (bağlandı) |
+| `takip.los` | `model` \| `hakem`; `model` (algılama kapalı + `yok`: LOS yok) | LOS kaynağı (i) / (ii); algılama kapalıyken `model` olamaz; `--los` | 5 (bağlandı) |
 | `takip.px4_baslat` | metin listesi; boş | PX4 açıldıktan sonraki komutlar; `--px4-baslat` sona eklenir | 10 |
 | `takip.px4_parametreleri` | {AD: sayı}; boş | Dosyalardan sonra, `--param`'dan önce yüklenir; koşuda PX4'ten geri okunur; `MIS_TAKEOFF_ALT` yazılmaz | 2 |
 | `algilama.etkin` | `true` | `false` / `--modelsiz`: model süreci yok | `false`: 2 (model zaten yok) · `true`: 4 |
@@ -780,6 +838,11 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
    - `x, y, z`: kameranın optik merkezinden hedefe birim yön vektörü, gövde FRD'de, montaj açısı eklenmiş. Hedef noktası kutu merkezidir (hakemde gövde merkezi).
    - İşlenen kare başına bir mesaj, en çok 30 Hz. SITL'de UDP 14540 (PX4 onboard 14580) üzerinden.
    - Alıcı `name` alanıyla süzmelidir: her bağlantıdan gelen `DEBUG_VECT` aynı uORB konusuna düşer.
+   - Uygulamada bulundu (5. grup): PX4'ün `DEBUG_VECT` alıcısı (`mavlink_receiver.cpp`
+     `handle_message_debug_vect`) yalnız `CONSTRAINED_FLASH` olmayan kartlarda derlenir. `px4_fmu-v6c` kart
+     dosyalarında bu ayar yok, yani Pixhawk 6C de bu mesajı almalıdır; donanımda henüz denenmedi. Alıcı `x, y, z`'yi
+     olduğu gibi (NaN dahil) yayınlar; `debug_vect.timestamp` varış anıdır. Bu yüzden ULog'daki bir kaydın hangi
+     kareye ait olduğu yalnız değerleriyle bulunabilir (`rapor.tez_los_in_ulog`; NaN kayıtları belirsizdir).
 2. **Zaman damgası anlamı**
    - Kare zamanı, Gazebo başlık damgasıdır (sim zamanı). SITL lockstep'te bu PX4 açılıştan beri geçen süreyle ±4 ms içinde aynıdır.
    - `DEBUG_VECT.time_usec` alanına yakalama anı yazılır. Ancak PX4 v1.17.0 bu alanı uORB'a taşımaz: `debug_vect.timestamp` mesajın varış anıdır.
@@ -819,13 +882,17 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 | | `iou_ort`, `iou_p50` | Bu karelerde en iyi eşleşen kutunun IoU'su |
 | | `secim_dogru_orani` | Hedef görünürken seçilen kutunun hedefle IoU ≥ 0.5 olduğu oran |
 | | `yanlis_kisi_orani`, `yanlis_kisi_ayni_kiyafet_orani` | Seçilen kutunun başka bir insanın hakem kutusuyla IoU'sunun ≥ 0.3 ve hedefinkinden büyük olduğu işlenmiş kare oranı; aynı kıyafetli kişiler ayrıca sayılır |
-| | `yanlis_pozitif_kare_basi`, `yeniden_kilit_sayisi` | Hiçbir insanın kutusuyla IoU ≥ 0.3 olmayan kutu sayısı / işlenen kare; hakemle yeniden kilit sayısı |
+| | `yanlis_pozitif_kare_basi`, `yeniden_kilit_sayisi` | Hiçbir insanın kutusuyla IoU ≥ 0.3 olmayan kutu sayısı / işlenen kare; hakemle yeniden kilit sayısı (uygulamada 5. grupta: kare zamanı pencerede olan yeniden kilitler; ayrıca `kilit_kaybi_sayisi`) |
+| | `secili_kare_orani` | Uygulamada eklendi (5. grup): bir kutunun hedef seçildiği işlenmiş kare oranı (`secim_dogru_orani` da 5. grupta geçici olarak hesaplanır) |
 | (b) LOS | `los_aci_hatasi_{ort,p50,p95,maks}_deg` | Gönderilen LOS ile aynı karenin `los_govde`'si arasındaki açı; yalnız seçilen kutu hedefken |
+| | `los_i_ii_fark_{ort,p50,p95,maks}_deg`, `los_i_ii_kare` | Uygulamada eklendi (5. grup, geçici; 7. grup `los_aci_hatasi`'na taşır): her kaynakta, LOS (i) ile aynı karenin LOS (ii)'si arasındaki açı; seçilen kutu hedefken (IoU ≥ 0.5) |
 | | `los_sapma_farki_{yatay,dikey}_ort_deg` | `kamera.deviation` bileşenlerindeki ortalama fark; sistematik kaymayı gösterir |
 | (c) Zaman | `model_ms_{ort,p95}`, `ulasma_ms_ort`, `bekleme_ms_ort` | 4. gereksinimdeki tanımlar |
-| | `uctan_uca_ms_{ort,p50,p95,maks}` | Gönderim − yakalama, sim ms |
+| | `uctan_uca_ms_{ort,p50,p95,maks}` | Gönderim − yakalama, sim ms. Uygulamada (5. grup): gönderim anı kayıt penceresinde olan gönderilmiş `TEZ_LOS`'lar (NaN dahil) |
+| | `uctan_uca_px4_ms_{ort,p95}`, `px4_varis_eksi_gonderim_ms_{ort,p95,min}`, `tez_los_px4_eslesen` | Uygulamada eklendi (5. grup): ULog'daki yönlü her `TEZ_LOS` kaydı, değerleri aynı ve zamanca en yakın (≤ 60 ms) gönderilenle eşlenir; PX4'ün varış damgası − yakalama. PX4'ün saati Gazebo saatinin birkaç ms gerisinde olabilir (lockstep) |
 | | `islenen_kare_hizi_hz`, `atlanan_kare_orani`, `rtf_ort` | Sim saniyesi başına işlenen kare; 1 − işlenen/üretilen; ortalama RTF |
-| | `tez_los_px4_sayisi`, `tez_los_px4_hizi_hz` | ULog'daki `debug_vect` (`TEZ_LOS`) kayıtları; gönderilen sayıyla karşılaştırılır |
+| | `tez_los_px4_sayisi`, `tez_los_px4_hizi_hz` | ULog'daki `debug_vect` (`TEZ_LOS`) kayıtları; gönderilen sayıyla karşılaştırılır. Uygulamada 5. grupta öne alındı (pencere: PX4'ün varış damgası), `tez_los_px4_orani` = ULog / gönderilen; fark %5'i aşarsa olaylara yazılır |
+| | `tez_los_gonderilen`, `tez_los_hedef_yok`, `tez_los_gecersiz`, `tez_los_reddedilen`, `tez_los_hizi_hz` | Uygulamada eklendi (5. grup): gönderim anı pencerede olanlar; geçersiz ve reddedilenler (aynı / eski kare, hız sınırı) karenin yakalama anına göre |
 | (d) Takip | `yatay_mesafe_{min,ort,max}_m`, `kadrajda_kalma`, `gorunur_kalma`, `en_uzun_kayip_s`, `dron_yukseklik_ort_m` | Mevcut F1 ölçütleri (`rapor.metrics`) |
 | | `mod_korunma_orani` | İstenen modda geçen süre / kayıt penceresi |
 | | `geolocation_hatasi_{ort,p95}_m` | `follow_me`: gönderilen hedef konumu ile kare anındaki gerçek konum arasındaki yatay fark |
@@ -842,8 +909,8 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 | `test_algilama.py` | Sahte algılayıcı; sınıf adı çözümü (`Person`/`person` → 0, numara, yoksa hata); taklit Ultralytics sonucundan `Kutu`'ya dönüşüm ve kırpma |
 | `test_takip.py` | İlk kilit, izleme, kapı, kilit kaybı (10 kare); LOS (i) gidiş-dönüş: bilinen poz ve hedef → `project` → piksel → LOS, `los_govde` ile açı farkı < 0.01° |
 | `test_konumlama.py` | Bilinen pozda zemin noktası → piksel → konum, hata < 1 cm; `u_D` eşiği, kenar reddi, poz aralığı reddi; NED ↔ enlem/boylam gidiş-dönüş |
-| `test_mesajlar.py` | `DEBUG_VECT` paketleme/çözme (ad, birim norm, NaN = hedef yok); `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities`); doğrulamanın geçersiz vektörü durdurması |
-| `test_gecikme.py` | Sıra korunması, ek gecikme, tohumlu titreşim, saat ofseti/kayması |
+| `test_mesajlar.py` | `DEBUG_VECT` paketleme/çözme (ad, birim norm, NaN = hedef yok); `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities`); doğrulamanın geçersiz vektörü durdurması. 5. grupta ayrıca: akış kuralları (aynı / eski kare, hız sınırı, bağlantı yok), tek gönderim kilidi, `AVAILABLE_MODES` adları ve stok mod listesinin PX4 kaynağıyla aynılığı |
+| `test_gecikme.py` | Sıra korunması, ek gecikme, tohumlu titreşim, saat ofseti/kayması (5. grupta: sıra korunması ve `serbest`; geri kalanı 12. grupta) |
 | `test_kusurlar.py` | Boş ayarda karenin bit bit aynı kalması; Faz B alanının ve bilinmeyen alanın reddi |
 | `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla) |
 | `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart` |
@@ -943,6 +1010,13 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - **Yusuf Kurt / Yusuf Algan'dan:** mod adı, modülün yeri (harici `tez/px4` mi, ağaç içi + kilit listesi mi), parametre öneki, `TEZ_LOS` biçiminin uygunluğu, `time_usec` ihtiyacı (PX4 bu alanı düşürüyor).
 - **Ortak spec'ler** (m03/m04/m05) yazılınca "Varsayımlar" ve ilgili kod güncellenir: `TEZ_LOS` biçimi, frame, zaman damgası, "hedef yok".
 - **Uygulamada sabitlenecek sürümler (TBD):** GStreamer, `python3-gi` ve `ffmpeg` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta sabitlendi.)
+- **Yeniden kilidin zamanı (5. grupta, karar m11 / kullanıcı ile):** kilit düşünce hakem bir sonraki işlenen karede
+  yeniden kilitler; operatörün tepki süresi 0'dır (iyimser). `kalabalik_park`'ın ilk denemelerinde kısmi örtülmede kilit
+  kaybından 70–200 ms sonra yeniden kilit görüldü. Gerçekte operatör ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi devreye girer.
+  Bir tepki süresi alanı (`takip.*`) gerekirse m11'le birlikte eklenir.
+- **Ana sürecin yükü (5. grupta ölçüldü):** hedef yürürken `senaryo.py` bir çekirdeğin ≈ %90'ını kullanıyor (hakemin
+  segmentasyon çözümü, MAVLink alımı, takip); model 4 çekirdek, Gazebo ≈ 1.8 çekirdek. Sonucun FIFO'dan ana sürece
+  geçişi (`teslim_ms`, en çok ≈ 75 ms) ve gönderim anının titremesi bundan; uçtan uca gecikmeye girer ve ölçülür.
 - **Model çekirdek sayısı ve RTF (4. grupta bulundu, karar kullanıcı/Hüseyin ile):** varsayılan 4 çekirdekte model
   Gazebo'yu yavaşlatıyor (RTF 0.84 < 0.9; modelsiz 1.00). 2 çekirdekte RTF 0.93 ama model 135 ms, kare hızı 7.8/s.
   RTF < 1 iken sim dünyası yavaş aktığı için model sim saatine göre olduğundan hızlı görünür (85 ms duvar ≈ 72 sim-ms).

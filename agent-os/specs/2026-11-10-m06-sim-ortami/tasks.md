@@ -224,17 +224,19 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 #### Görev Grubu 5: Hedef seçimi, LOS (i)/(ii), `TEZ_LOS` ve adla mod seçimi
 **Bağımlılık:** Görev Grubu 4 · **Emek:** ~0.75 gün · **Bekleyen:** Kurt'un mod adı (o arada stok "Hold" adıyla denenir)
 
-- [ ] 5.0 Seçilen hedefin yönünü `DEBUG_VECT` "TEZ_LOS" olarak PX4'e göndermek; `yok` ve `tez_los` kaynakları
-  - [ ] 5.1 Testleri yaz (6–8 test)
+- [x] 5.0 Seçilen hedefin yönünü `DEBUG_VECT` "TEZ_LOS" olarak PX4'e göndermek; `yok` ve `tez_los` kaynakları
+  - [x] 5.1 Testleri yaz (6–8 test)
     - `test_takip.py`: ilk kilit (hakem kutusuyla en yüksek IoU); en yakın kutu izleme; kapı (önceki köşegenin 1.5 katı); 10 işlenen karede kilit kaybı ve `yeniden_kilit_sayisi`; LOS (i) gidiş-dönüş (bilinen poz + hedef → `project` → piksel → LOS) ile `los_govde` arasındaki açı < 0.01°
     - `test_mesajlar.py`: `DEBUG_VECT` paketleme/çözme (ad `TEZ_LOS`, birim norm, NaN = hedef yok); sonlu olmayan ya da `|norm − 1| ≥ 1e-3` vektör gönderilmez ve sayılır
-  - [ ] 5.2 `araclar/takip.py`: geçici hedef seçimi; LOS (i) kutu merkezi → `Camera.pixel_to_los` (`camera_info` iç parametreleri, bozulma) → `camera_to_body(45°)`, nominal montaj; LOS (ii) hakemin `los_govde`'si (yalnız `gorunur` iken, segmentasyon karesi geldikten sonra; ek gecikme ölçülür). Dönüşüm kodu kopyalanmaz, `kamera.py` kullanılır.
-  - [ ] 5.3 `araclar/gecikme.py`, 1. kısım: sıra koruyan hat ve `serbest` damgası, ek gecikme 0 (yapay gecikme ve saat modeli 12. grupta)
-  - [ ] 5.4 `px4_baglanti.py`: tek gönderim kilidi (GCS heartbeat iş parçacığıyla çakışmaz), `send_los` (iki taraflı doğrulama); işlenen kare başına bir mesaj, en çok 30 Hz, aynı kare iki kez gitmez; hedef yoksa NaN
-  - [ ] 5.5 Takip iş parçacığı (`senaryo.py`): model sonucu → seçim → LOS → gecikme hattı → gönderim → `algilama.csv` satırı (seçilen kutu, LOS, durum, `ulasma_ms`, `bekleme_ms`, `uctan_uca_ms`). `TEZ_LOS` her kaynakta gider, `yok` dahil.
+    - (Uygulamada: 14 test fonksiyonu, 21 test durumu: `test_takip.py` 6 (LOS gidiş-dönüşü 8 poz/kamera durumu, takip iş parçacığının iki kaynağı), `test_mesajlar.py` 5 (akış kuralları, tek gönderim kilidi, `AVAILABLE_MODES` adları, stok mod listesinin PX4 kaynağıyla aynılığı), `test_gecikme.py` 1 (sıra), `test_kayit.py` +1 (hakemin satır + segmentasyon birleştirmesi), `test_rapor.py` +1 (ULog'daki `TEZ_LOS` sayımı ve eşleştirmesi); `test_hedef.py` ara durum testi güncellendi)
+  - [x] 5.2 `araclar/takip.py`: geçici hedef seçimi; LOS (i) kutu merkezi → `Camera.pixel_to_los` (`camera_info` iç parametreleri, bozulma) → `camera_to_body(45°)`, nominal montaj; LOS (ii) hakemin `los_govde`'si (yalnız `gorunur` iken, segmentasyon karesi geldikten sonra; ek gecikme ölçülür). Dönüşüm kodu kopyalanmaz, `kamera.py` kullanılır.
+  - [x] 5.3 `araclar/gecikme.py`, 1. kısım: sıra koruyan hat ve `serbest` damgası, ek gecikme 0 (yapay gecikme ve saat modeli 12. grupta)
+  - [x] 5.4 `px4_baglanti.py`: tek gönderim kilidi (GCS heartbeat iş parçacığıyla çakışmaz), `send_los` (iki taraflı doğrulama); işlenen kare başına bir mesaj, en çok 30 Hz, aynı kare iki kez gitmez; hedef yoksa NaN
+  - [x] 5.5 Takip iş parçacığı (`senaryo.py`): model sonucu → seçim → LOS → gecikme hattı → gönderim → `algilama.csv` satırı (seçilen kutu, LOS, durum, `ulasma_ms`, `bekleme_ms`, `uctan_uca_ms`). `TEZ_LOS` her kaynakta gider, `yok` dahil.
     (4. gruptan hazır: `algilama.ModelProcess` her `FrameResult`'ı sırayla bir iş parçacığında `on_result(sonuç, alinma)`'ya verir; `algilama.DetectionLog` satırı yazar ve sütunları `ROW_COLUMNS`'tadır; `goruntu.SimClock.to_sim` duvar saatini sim saatine çevirir. Ölçülen: sonucun FIFO'dan ana sürece geçişi (`teslim_ms`) ort. ≈ 9–10 ms, en çok ≈ 78–84 ms; ana süreçteki GIL çekişmesinden (hakemin segmentasyon çözümü), gönderim gecikmesine girer.)
-  - [ ] 5.6 Mod adla seçilir (`Vehicle.modes`, AVAILABLE_MODES): `yok` → "Hold", `tez_los` → `takip.mod_adi`; ad yoksa koşu başlamadan mevcut adları listeleyen hata. Mod numarası koda gömülmez. 2. gruptaki `tez_los` ve `--los hakem` ara hataları kaldırılır.
-  - [ ] 5.7 Doğrulama
+    (Uygulamada: takip iş parçacığı `ModelProcess`'in sonuç iş parçacığıdır (`takip.Tracker.on_model`); hakemin kareleri `kayit.Recorder(on_frame=...)` → `tez-hakem-los` iş parçacığı. Yeni `tez_los.csv`: her `TEZ_LOS` denemesi. Ayrıntı ve ölçümler: `implementation/gorev-grubu-05.md`.)
+  - [x] 5.6 Mod adla seçilir (`Vehicle.modes`, AVAILABLE_MODES): `yok` → "Hold", `tez_los` → `takip.mod_adi`; ad yoksa koşu başlamadan mevcut adları listeleyen hata. Mod numarası koda gömülmez. 2. gruptaki `tez_los` ve `--los hakem` ara hataları kaldırılır.
+  - [x] 5.7 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_takip.py tez/sim/testler/test_mesajlar.py -q
@@ -262,6 +264,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
     - `test_mesajlar.py`'ye: `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities=1`, `alt` = ev noktası AMSL)
   - [ ] 6.2 `araclar/konumlama.py`: kutunun alt ortası → `kamera.py` zinciri → zemin düzlemi (ev D + 0.227 m); kare anındaki EKF pozu (`ATTITUDE_QUATERNION` + `LOCAL_POSITION_NED`, `time_boot_ms` interpolasyonu); `GPS_GLOBAL_ORIGIN`'e göre enlem/boylam
   - [ ] 6.3 `px4_baglanti.py`: `message_hooks` ile poz geçmişi (ana `recv_match` döngüsü bozulmaz); `send_follow_target` (en çok 10 Hz)
+    (5. gruptan hazır: bağlantının bütün gönderimleri `serialize_sends` kilidinden geçer, `send_follow_target` de `self.m.mav` üstünden gönderince kilitlidir; `TEZ_LOS` akış kuralları `LosSender`'da, `FOLLOW_TARGET` için benzeri yazılabilir. Konum hesabı `takip.Tracker.on_model`'in seçtiği kutuyu (`Choice.box`) kullanır; `algilama.csv` sütunları `takip.ROW_COLUMNS`'a eklenir.)
   - [ ] 6.4 `follow_me` kaynağı: "Follow Target"e adla geçiş; `FLW_TGT_HT` senaryoda yoksa `drone.yukseklik_m` (parametre sırasına uygun); `--los hakem` iken `FOLLOW_TARGET` gerçek konumdan, yalnız hedef görünürken ("mükemmel algılayıcı"); `algilama.csv` konum sütunları. 2. gruptaki `follow_me` ara hatası kaldırılır.
   - [ ] 6.5 Doğrulama
 
@@ -293,6 +296,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
     - Gecikme istatistikleri (ort/p50/p95/maks); atlanan kare oranı
   - [ ] 7.2 `araclar/olcum.py`: spec "Ölçüt Tanımları"ndaki bütün anahtarlar; yalnız kayıt penceresinde; uygulanamayan ölçüt NaN (ör. `yok`'ta `geolocation_hatasi`)
   - [ ] 7.3 ULog özeti: `TEZ_LOS` (`debug_vect`) sayısı ve hızı, `follow_target` sayısı, `vehicle_status` mod zaman çizelgesi, `mod_korunma_orani`
+    (5. grupta öne alındı: `rapor.ulog_tez_los` → `tez_los_px4_sayisi`, `tez_los_px4_hizi_hz`, değerle eşleştirilen `uctan_uca_px4_ms_*`; `takip.Tracker.metrics` geçici olarak `uctan_uca_ms_*`, `tez_los_*`, `yeniden_kilit_sayisi`, `secim_dogru_orani`, `los_i_ii_fark_*` verir: `olcum.py`'ye taşınır.)
   - [ ] 7.4 `rapor.py`: `rapor.write` yeni bölümleri ekler (model, LOS, zaman, takip, `ayarlar`, model sha256, RTF uyarısı); `metrics`, `_visibility`, `plot_map` korunur. 4. gruptaki geçici IoU kontrolü buraya taşınır.
   - [ ] 7.5 Doğrulama
 
@@ -445,7 +449,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 
 - [ ] 12.0 Yakalama → PX4 yoluna ayarlanabilir gecikme eklemek ve koşuları yan yana koymak
   - [ ] 12.1 Testleri yaz (4–6 test): `test_gecikme.py` (sıra korunur; `ek_ms`; tohumlu titreşim aynı tohumla aynı; `saat_ofset_ms` ve `saat_kayma_ppm` ile `time_usec`); `karsilastir.py` iki `ozet.json`'dan tablo
-  - [ ] 12.2 `gecikme.py`, 2. kısım: `ek_ms` + `titresim_ms` (düzgün dağılım, tohumlu), saat modeli; `ek_gecikme_ms` loglanır. `gecikme` bloğu ve `--gecikme-ms` bağlanır; ara hata kaldırılır. Faz A varsayılanları 0'dır.
+  - [ ] 12.2 (5. gruptan hazır: `gecikme.DelayLine.put(item, hazir, extra_ms)` öğe başına gecikme alır ve sırayı korur; `Tracker` hattı `sc.delay.extra_ms` ile kurar; `time_usec` bugün yakalama anıdır, saat modeli `takip.Tracker._attempt`'teki `time_usec` alanına girer.) `gecikme.py`, 2. kısım: `ek_ms` + `titresim_ms` (düzgün dağılım, tohumlu), saat modeli; `ek_gecikme_ms` loglanır. `gecikme` bloğu ve `--gecikme-ms` bağlanır; ara hata kaldırılır. Faz A varsayılanları 0'dır.
   - [ ] 12.3 `araclar/karsilastir.py`: birden çok koşunun `ozet.json`'unu (ölçütler + `ayarlar`) tek tabloda yan yana koyar
   - [ ] 12.4 Doğrulama
 
