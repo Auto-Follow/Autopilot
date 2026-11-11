@@ -673,9 +673,10 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | U4.15 | Sözlükteki RC anahtarı cümlesi | — | "`COM_FLTMODEx` bizim mod numarasıyla" → "değer 100 = External Mode 1 = `nav_state` 23" (sözlük, spec Bölüm 9 alıntısı, §4.8) | SITL'de 23 değil 100 çalıştı (`ManualControl.cpp:595`); yazım düzeltmesi, karar değil | Kod içi |
 | U4.16 | Test göndericisi bağlantı adresi (U4.1'in onayı) | a) `udpin:0.0.0.0:14540` · b) `udpout:127.0.0.1:14580` | a | Bkz. U4.1. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
 | U4.17 | `AF_YAW_MIN_D` (hedef neredeyse altındayken yaw dondurma mesafesi) | 1 m kalsın · büyütülsün | 1 m kalır; S6–S7 kapalı çevrimde bakılır | S3'teki dönme açık çevrimden; normal takipte drone hedefe ~15,6 m uzakta. Gerekirse QGC'den değişir, kod gerekmez. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
-| U4.18 | Ayrı yaw hız sınırı | PX4'ün 200°/s'si (`MC_YAWRATE_MAX`) · ayrı parametre şimdi · S6–S7'ye göre karar | **Ayrı parametre şimdi eklenecek** (Grup 5); adı ve varsayılan değeri kullanıcıya soruldu | Öneri "S6–S7'ye bakalım" idi; kullanıcı: "sen şimdiden ekle, parametre dursun" (2026-11-11) | Kullanıcı |
-| U4.19 | Test akışı ve ölçüm script'leri | repoya al (`tez/sitl/`) · kullanıcının bilgisayarında kalıcı tut | **Kullanıcının bilgisayarında, repoda değil**; ileride repoya alınabilir. Yeri ve klasör adı kullanıcıya soruldu | Kullanıcı: "script geçici durmasın, benim bilgisayarımda dursun, ileride repoya almaya bakarız" (2026-11-11). Script'ler geçici klasörde bilgisayar yeniden açılınca silinmişti; ajan kayıtlarından geri çıkarıldı | Kullanıcı |
+| U4.18 | Ayrı yaw hız sınırı | PX4'ün 200°/s'si (`MC_YAWRATE_MAX`) · ayrı parametre şimdi · S6–S7'ye göre karar | **Ayrı parametre `AF_YAWRATE_MAX`, varsayılan 60°/s, aralık 5–200°/s** (Grup 5); yeni log alanı yok. Ad ve değer kullanıcının ("AF_YAWRATE_MAX 60") | Öneri "S6–S7'ye bakalım" idi; kullanıcı: "sen şimdiden ekle, parametre dursun" (2026-11-11) | Kullanıcı |
+| U4.19 | Test akışı ve ölçüm script'leri | repoya al (`tez/sitl/`) · kullanıcının bilgisayarında kalıcı tut | **Kullanıcının bilgisayarında, repoda değil: `~/m15-sitl-araclari/`** (yanında `BENIOKU.md`); ileride repoya alınabilir. Yer: a) repoların dışında (seçilen) · b) `Auto-Follow/` altında · c) Autopilot içinde yerel görmezden gelme | Kullanıcı: "script geçici durmasın, benim bilgisayarımda dursun, ileride repoya almaya bakarız" (2026-11-11). Script'ler geçici klasörde bilgisayar yeniden açılınca silinmişti; ajan kayıtlarından geri çıkarıldı | Kullanıcı |
 | U4.20 | Hedefsiz girişte Hold (Grup 5'ten sonra) | — | Masa testinde hedefsiz moda girilirse 1,5 s sonra Hold istenir | A3 ile tutarlı. Kullanıcı: "okey" (2026-11-11) | Öneri kabul |
+| U4.21 | Sıra no hep aynı gelirse (donmuş Pi) | a) önceki numara yalnızca tam sessizlikte (`AF_DATA_TOUT` boyunca hiç `AF_LOS` yok) unutulsun · b) böyle kalsın (5b-a) · c) a + moda her girişte unut | **a** (Grup 5) | Şu anki kuralla donmuş Pi'nin tekrarladığı mesaj her 0,5 s'de bir kabul ediliyor, drone Hold'a geçmiyor (S5 `sira`); yaş kontrolü yakalamıyor. (a) ile tekrarlar hep atılır → 1,5 s'de Hold; yeniden başlayan Pi saniyelerce sustuğu için yine kabul edilir. Kullanıcı: "1a" (2026-11-11) | Kullanıcı |
 
 ---
 
@@ -782,11 +783,11 @@ Grup 1'in 3 sorusu (QGC grup adı, lisans başlığı, `module.yaml` dili) ve Gr
 
 Uygulamadan açık kalan:
 - **Grup 4'ten 5 soru** (`implementation/grup-4-sitl-acik-cevrim.md` Bölüm 9). Kullanıcının cevapları (2026-11-11), ayrıntı §5.1 U4.16–U4.20:
-  1. **Sıra no sürekli aynı gelirse** (donmuş Pi): Karar 5b-a gereği her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor; spec S5'teki "uzun bozuk veri hedef kaybı yoluna girer" cümlesiyle çelişiyor. Kullanıcı daha ayrıntılı anlatım istedi; anlatıldı, **cevap bekleniyor**.
+  1. **Sıra no sürekli aynı gelirse** (donmuş Pi): Karar 5b-a gereği her 0,5 s'de bir mesaj kabul ediliyor, Hold'a gidilmiyor; spec S5'teki "uzun bozuk veri hedef kaybı yoluna girer" cümlesiyle çelişiyor. Ayrıntılı anlatıldı; **karar (a)**: önceki numara yalnızca tam sessizlikte unutulur (§5.1 U4.21), Grup 5'te.
   2. `AF_YAW_MIN_D` = 1 m kalır, S6–S7'de bakılır (**karar**).
-  3. **Ayrı yaw hız sınırı parametresi Grup 5'te eklenecek** (karar); **adı ve varsayılanı soruldu**.
+  3. **Ayrı yaw hız sınırı `AF_YAWRATE_MAX` = 60°/s Grup 5'te eklenecek** (karar).
   4. Bağlantı adresi `udpin:0.0.0.0:14540` onaylandı (**karar**).
-  5. Test akışı script'leri repoya girmez, kullanıcının bilgisayarında kalıcı durur (**karar**); **yeri ve klasör adı soruldu**.
+  5. Test akışı script'leri repoya girmez, `~/m15-sitl-araclari/`'da kalıcı durur (**karar**).
 - **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor).
 - **EKF yön (heading) sıfırlaması:** karar verildi (§5.1 D5, a): tutulan yaw `delta_heading` kadar kaydırılacak; **Grup 5'te uygulanacak**.
 
