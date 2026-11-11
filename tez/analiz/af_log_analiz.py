@@ -406,16 +406,30 @@ def hold_olculeri(
 ) -> list[Olcu]:
     """Çıkış Hold ise: son geçerli mesaj / ilk 'hedef yok' / giriş / istek → nav_state 4 süreleri."""
     af = log.konular["auto_follow_status"]
+    sl = slice(b.i0, b.i1 + 1)
+    # hold_request_count mod kapanınca son değerini korur; yalnızca bu bölümün HOLD_ISTENDI çevrimleri sayılır
+    istendi = af["state"][sl].astype(int) == STATE_HOLD_ISTENDI
     satirlar = [
         Olcu(
             "Hold",
-            "hold_request_count (en büyük)",
-            int(af["hold_request_count"][b.i0 : b.i1 + 1].max()),
+            "hold_request_count (bu bölümde)",
+            int(af["hold_request_count"][sl][istendi].max()) if istendi.any() else 0,
             "adet",
-            "1 = tek istek, PX4 kabul etti; 3 = üç istek de kabul edilmedi",
+            "0 = AUTO FOLLOW Hold istemedi; 1 = tek istek, PX4 kabul etti; 3 = üç istek de kabul edilmedi",
         )
     ]
     if cikis is None or cikis[1] != NAV_STATE_HOLD:
+        return satirlar
+    if not istendi.any():
+        satirlar.append(
+            Olcu(
+                "Hold",
+                "Hold'a geçişi kim yaptı",
+                "PX4 (AUTO FOLLOW istemedi)",
+                "",
+                "ör. PX4 failsafe'i ya da pilot; Hold süreleri hesaplanmaz",
+            )
+        )
         return satirlar
     t4 = cikis[0]
     data_tout = log.parametre("AF_DATA_TOUT", b.bas)

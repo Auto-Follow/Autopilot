@@ -530,3 +530,11 @@ Ayrıntı `implementation/grup-5-hold-gecisi.md` Bölüm 8, rapor §5.1 G5.3, G5
 - **2 — S6 duran hedef.** Seçenekler: (a) burnun 20 m önü · (b) 20 m önde 30° sağda · (c) 10 m önde. Kullanıcı: **"2-B olsun, ama sabit 20 de olmasın; 20 ± şeklinde test et, en ideali neresi bul"**. Claude'un notu: denge mesafesi her durumda `range_desired` ≈ 15,6 m (irtifa ve `AF_TRK_ANG`); başlangıç mesafesi yalnızca yaklaşma/uzaklaşma davranışını değiştirir; "ideal" oturma süresi, aşma, salınım ve kırpmaya göre ölçülür. Ek sorular: göndericiye yeni seçenekler (`--hedef-mesafe`, `--hedef-aci`) mi, sabit mi → **yeni seçenekler**; mesafeler → **10/15/20/25/30 m**.
 - **3 — S7 yürüyen hedef.** Yol seçenekleri: (a) uzaklaşan düz · (b) yana düz · (c) L şekli. Kullanıcı: **"3-c"**. Hız ve `AF_K_FF` soruldu → **1,4 m/s; `AF_K_FF` = 0 ve 1,0 ile iki koşu**.
 - **4 — Batarya failsafe'i (T1) ve GPS arızası (T2) SITL testleri.** Kullanıcı: **"olur"** → **Karar:** ikisi de Grup 6'da.
+
+### Görev grubu 6 sonrası sorular (2026-11-12, cevap bekliyor)
+
+Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10, rapor §5.1 G6.6, G6.11, G6.12, §11.
+- **1 — S7 yolunu komut satırından açan seçenek.** Şimdi dosyadaki `HEDEF_YOL` sabiti. Seçenekler: (a) böyle kalsın · (b) yeni seçenek, adı ve biçimi kullanıcının. Öneri (b).
+- **2 — `AF_K_FF` = 1,0'da hedef hızı kestiriminin titreşimi** (S7: geride kalma 2,8 → 0,06 m, ama hız ±0,4 m/s, hedef durunca ~0,4 m/s; eğim 4–7 kat fazla kıpırdıyor). Seçenekler: (a) böyle kalsın, `AF_K_FF` varsayılanı 0, m13'e not · (b) SITL'de `AF_BETA` taraması · (c) daha küçük `AF_K_FF` · (d) gecikme telafisi (m13/m16). Öneri (a). `AF_ALPHA`/`AF_BETA` değiştirilmedi.
+- **3 — Burnun 30°'lik dönüşte 5–7° aşması** (S6; yerleşme 2,5 s). Seçenekler: (a) böyle kalsın, m13'e not · (b) `yawspeed` ileri beslemesi (PX4 kodu) · (c) `AF_YAWRATE_MAX` küçült. Öneri (a).
+- **4 — T2 ek denemesi.** `failure gps off` Gazebo Harmonic'te desteklenmiyor; `EKF2_GPS_CTRL` = 0 ile yapılan ek deneme (4 s'de Descend) T2 yerine kabul mü? Seçenekler: (a) kabul · (b) başka simülatörde dene · (c) m16'ya bırak. Öneri (a).

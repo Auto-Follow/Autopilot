@@ -106,7 +106,7 @@ Tablonun sütunları: **Grup · Ölçü · Değer · Birim · Not.** "—" = bu 
 |---|---|---|
 | Başlangıç, Bitiş, Süre | Bölümün zamanı | Bölüm 4 |
 | `mode_nav_state` | PX4'ün AUTO FOLLOW'a verdiği mod numarası (23–30; SITL'de hep 23) | Logdan aynen. **19 değildir** (19 PX4'ün kendi Follow Me'si) |
-| Çıkış | Bölüm bitince PX4'ün geçtiği mod ve anı | `vehicle_status.nav_state` |
+| Çıkış | Bölüm bitince PX4'ün geçtiği mod ve anı | `vehicle_status.nav_state`. Örnekler: Position (pilot ya da test script'i değiştirdi), Hold (AUTO FOLLOW hedef kaybında istedi ya da PX4 failsafe'i), RTL / Land / Descend (PX4 failsafe'i: batarya, konum kaybı) |
 
 ### 5.2 Durum
 
@@ -120,7 +120,8 @@ Tablonun sütunları: **Grup · Ölçü · Değer · Birim · Not.** "—" = bu 
 
 | Ölçü | Ne demek | Nasıl hesaplanır | İyi / kötü örnek |
 |---|---|---|---|
-| `hold_request_count` (en büyük) | Bölümde PX4'e gönderilen Hold isteği sayısı | Alanın bölümdeki en büyük değeri | 0 = Hold istenmedi; **1 = istek gitti, PX4 kabul etti (iyi)**; 2–3 = PX4 reddetti ya da cevap vermedi; 3 ve çıkış Hold değilse Hold hiç kabul edilmemiştir (QGC'ye uyarı düşer) |
+| `hold_request_count` (bu bölümde) | Bölümde PX4'e gönderilen Hold isteği sayısı | Alanın, bölümün HOLD_ISTENDI çevrimlerindeki en büyük değeri (alan mod kapanınca son değerini koruduğu için önceki bölümün değeri sayılmaz) | 0 = AUTO FOLLOW Hold istemedi; **1 = istek gitti, PX4 kabul etti (iyi)**; 2–3 = PX4 reddetti ya da cevap vermedi; 3 ve çıkış Hold değilse Hold hiç kabul edilmemiştir (QGC'ye uyarı düşer) |
+| Hold'a geçişi kim yaptı | Çıkış Hold ama AUTO FOLLOW Hold istememişse | Bölümde HOLD_ISTENDI yoksa yazılır; o zaman aşağıdaki süreler hesaplanmaz | Örnek: batarya kritik seviyesinde PX4'ün kendi failsafe'i önce 5 s Hold yapar (Grup 6, T1): "PX4 (AUTO FOLLOW istemedi)" |
 | Son geçerli mesaj → `nav_state` = 4 | Veri kesildikten Hold'a kadar geçen süre (spec S4'ün ana ölçüsü) | Çıkış Hold ise: Hold anı − son kabul edilen mesajın Pixhawk'a varış anı | Beklenen `AF_DATA_TOUT` + `AF_LOST_T` = 1,5 s + ~0,03 s: **1,528 s iyi** (Grup 5). 2 s ya da Hold hiç yoksa sorun |
 | İlk "hedef yok" → `nav_state` = 4 | Pi "hedef yok" dedikten Hold'a kadar | Hold anı − son geçerli mesajdan sonraki ilk "hedef yok" mesajının varışı | Beklenen ≈ `AF_LOST_T` = 1,0 s: **1,036 s iyi** |
 | Giriş → `nav_state` = 4 | Hedefsiz moda girişte Hold'a kadar | Hold anı − bölümün başı (girişten 0,5 s öncesine kadar geçerli mesaj yoksa) | Beklenen ≈ 1,5 s: **1,524 s iyi** |

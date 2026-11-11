@@ -54,6 +54,15 @@ Bu liste uygulama sırasında güncellenir. Süre yetmeyen her iş buraya yazıl
 - Ayrıntılı failsafe ve mod çıkış akışının tamamı (`raw-idea.md:8`).
 - C seçeneği: Hold'dan sonra modülün takibe kendiliğinden dönmesi (reddedildi; istenirse m16'da yeniden konuşulur, KG Oturum 2).
 - İş sırasında (bkz. 9.4) yetişmeyen adımlar.
+- **Görev grubu 6'dan kalanlar (2026-11-12):**
+  - `AF_K_FF` > 0'da hedef hızı kestiriminin titreşimi (S7, ±0,4 m/s, ~3–6 Hz): `AF_ALPHA` / `AF_BETA` ayarı ve/veya **gecikme telafisi** (LOS'u görüntünün çekildiği andaki tutumla çevirmek, V3) → m13 / m16 (kullanıcıya soruldu, Grup 6 notu soru 2). Aynı kökten: drone hızlanırken duran hedefte 0,4–2,3 m/s sahte hız (S6).
+  - Burnun dönüşte 5–7° aşması: `trajectory_setpoint.yawspeed` ileri beslemesi ya da açı yumuşatma (PX4 kalıbı `FlightTaskAuto.cpp:306-316`) → m13 (soru 3).
+  - `latency` gerçek değeri Pi ile ölçülecek; SITL'de yaş sabit 50 ms olduğu için gecikme telafisi kararına veri değil → m13 / m16.
+  - Hold reddi yolu (3 istek + QGC uyarısı) SITL'de üretilemedi: GPS kaybında yerel ve küresel konum birlikte gidiyor, PX4 failsafe'i (Descend) önce devreye giriyor (Grup 6 T2b). Gerçek kartta ya da ayrı bir düzenekte → m16.
+  - GPS arıza enjeksiyonu (`failure gps off`) Gazebo Harmonic SITL'de desteklenmiyor; komutun kendisiyle test → m06 / m16 (soru 4).
+  - EKF yön sıfırlamasında yaw kaydırma ve filtre sıfırlaması SITL'de görülmedi (doğrulanacak) → m16 / gerçek uçuş.
+  - S7 yolunu komut satırından açan seçenek (ad kullanıcının; soru 1) ve test akışı script'lerinin (`~/m15-sitl-araclari/`) repoya alınması (U4.19) → kullanıcı karar verince.
+  - QGC ekranında bakılacaklar (mod listesi, ret metinleri, Hold görünüşü) → kullanıcı.
 
 ---
 
