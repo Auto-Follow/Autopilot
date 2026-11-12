@@ -174,6 +174,7 @@ private:
 	// Vehicle state
 	bool _mode_active{false};     // vehicle_status.nav_state == _mode_id
 	bool _landed{false};          // vehicle_land_detected.landed
+	bool _armed{false};           // vehicle_status.arming_state; disarmed: no Hold request (bench tests)
 	uint8_t _system_id{0};        // vehicle_status.system_id, target and source of the Hold request
 	uint8_t _component_id{0};     // vehicle_status.component_id (< COMPONENT_MODE_EXECUTOR_START: source "User")
 	vehicle_local_position_s _local_position{};

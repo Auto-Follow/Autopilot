@@ -212,10 +212,11 @@ struct StateMachine {
  * @param last_no_target arrival time of the last CHECK_NO_TARGET sample, 0 if none [us]
  * @param data_timeout AF_DATA_TOUT [s]
  * @param lost_timeout AF_LOST_T [s]
+ * @param hold_allowed false while disarmed: KAYIP_BEKLE does not move on to HOLD_ISTENDI (bench tests stay in the mode)
  * @return true in the cycle the mode became active
  */
 bool update_state(StateMachine &sm, bool mode_active, uint64_t now, uint64_t last_valid, uint64_t last_no_target,
-		  float data_timeout, float lost_timeout);
+		  float data_timeout, float lost_timeout, bool hold_allowed = true);
 
 /** Seconds since the last valid sample, counted from the entry time if that is later; NaN in PASIF without any valid sample. */
 float time_since_valid(const StateMachine &sm, uint64_t now, uint64_t last_valid);

@@ -72,7 +72,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 
 **7. Durum makinesi ve hedef kaybı: D (Karar; kullanıcı "önemli" dedi; süreler Karar 2026-11-09)**
 - Durumlar (adlar **Karar**, C3; ayrıntı `log-sozlugu.md`): **PASIF** (mod kapalı; setpoint yok, veri işlenebilir) · **TAKIP** (geçerli veri var, guidance çalışır) · **KAYIP_BEKLE** (hover: kayıp anındaki konum, hız 0, son yaw, giriş irtifası) · **HOLD_ISTENDI** (Hold istendi).
-- Geçişler: TAKIP → KAYIP_BEKLE: `AF_DATA_TOUT` (0.5 s) boyunca geçerli veri yok **ya da** Pi `hedef yok` dedi · KAYIP_BEKLE → TAKIP: `AF_LOST_T` dolmadan geçerli veri geldi (takip kendiliğinden sürer) · KAYIP_BEKLE → HOLD_ISTENDI: `AF_LOST_T` (1.0 s) doldu · HOLD_ISTENDI/TAKIP/KAYIP_BEKLE → PASIF: `nav_state` artık bizim mod değil.
+- Geçişler: TAKIP → KAYIP_BEKLE: `AF_DATA_TOUT` (0.5 s) boyunca geçerli veri yok **ya da** Pi `hedef yok` dedi · KAYIP_BEKLE → TAKIP: `AF_LOST_T` dolmadan geçerli veri geldi (takip kendiliğinden sürer) · KAYIP_BEKLE → HOLD_ISTENDI: `AF_LOST_T` (1.0 s) doldu **ve araç arm'lı** (Karar 2026-11-12, Grup 6 sonrası: **disarm iken** HOLD_ISTENDI'ye geçilmez, KAYIP_BEKLE'de beklenir, geçerli veri gelince TAKIP'e dönülür; masa testi için; arm'lıyken davranış aynı) · HOLD_ISTENDI/TAKIP/KAYIP_BEKLE → PASIF: `nav_state` artık bizim mod değil.
 - Zaman çizelgesi:
   - Veri kesilirse: `son geçerli mesaj ──0.5 s──▶ KAYIP_BEKLE ──1.0 s──▶ Hold` (toplam 1.5 s).
   - Pi "hedef yok" derse: `bayrak = 0 ──▶ KAYIP_BEKLE (hemen) ──1.0 s──▶ Hold`.
@@ -276,7 +276,8 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 | Görev grubu 5 sonu (Hold isteği, `AF_YAWRATE_MAX`, yön sıfırlaması, sıra no kuralı, 2026-11-11) | 1 937 252 B | %98,53 | 28 828 B | +992 B |
 | Grup 5 soru 3-b (yön sıfırlamasında filtre sıfırlama, 2026-11-11); Grup 6'da PX4 kodu değişmedi | 1 937 260 B | %98,53 | 28 820 B | +8 B |
 | `AF_BETA` varsayılanı 0.10 (Grup 6 soru 5-b, 2026-11-12) | 1 937 316 B | %98,54 | 28 764 B | +56 B |
-| **Son:** `AF_ENABLE` varsayılanı 1 (2026-11-12) | 1 937 348 B | %98,54 | 28 732 B | +32 B |
+| `AF_ENABLE` varsayılanı 1 (2026-11-12) | 1 937 348 B | %98,54 | 28 732 B | +32 B |
+| **Son:** disarm iken Hold istenmez (G6.20, 2026-11-12) | 1 937 412 B | %98,54 | 28 668 B | +64 B |
 
 ## Out of Scope
 

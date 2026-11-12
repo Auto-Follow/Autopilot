@@ -42,7 +42,7 @@ Tez araçları (izinli `tez/*`):
 
 ## Pixhawk 6C flash
 
-`make px4_fmu-v6c_default`: **1 937 348 B / 1 966 080 B (%98,54)**, boş 28 732 B. Modül yokken 1 926 408 B (%97,98) → **+10 940 B**. Taşma yok; başka modül kapatılmadı.
+`make px4_fmu-v6c_default`: **1 937 412 B / 1 966 080 B (%98,54)**, boş 28 668 B. Modül yokken 1 926 408 B (%97,98) → **+11 004 B**. Taşma yok; başka modül kapatılmadı.
 
 ## Test
 
@@ -68,7 +68,7 @@ Closes Auto-Follow/Auto-Follow#6
 
 ## Taslakla ilgili notlar (PR'a girmez)
 
-- Flash sayısı son ölçümdür (`AF_ENABLE` varsayılanı 1 sonrası, 2026-11-12; rapor §4.10). PR açılmadan önce CI'daki `derleme-fmu-v6c` çıktısıyla karşılaştırılır.
+- Flash sayısı son ölçümdür (disarm kuralı G6.20 sonrası, 2026-11-12; rapor §4.10). PR açılmadan önce CI'daki `derleme-fmu-v6c` çıktısıyla karşılaştırılır.
 - `Closes Auto-Follow/Auto-Follow#6` çatı reponun issue'sunu kapatır (issue çatı repoda).
 - PR açıklamasının sonundaki "Generated with Claude Code" satırı ajan talimatı gereği eklendi; kullanıcı istemezse silinir.
 - Commit listesi PR'da GitHub'ın kendi listesinden görünür; squash merge yapılacağı için (çatı kural 3) ayrıca yazılmadı.

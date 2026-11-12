@@ -200,7 +200,7 @@ HoldAction hold_action(uint8_t request_count, bool answered, bool accepted, bool
 }
 
 bool update_state(StateMachine &sm, bool mode_active, uint64_t now, uint64_t last_valid, uint64_t last_no_target,
-		  float data_timeout, float lost_timeout)
+		  float data_timeout, float lost_timeout, bool hold_allowed)
 {
 	if (!mode_active) {
 		sm.state = auto_follow_status_s::STATE_PASIF;
@@ -248,7 +248,7 @@ bool update_state(StateMachine &sm, bool mode_active, uint64_t now, uint64_t las
 		if (target_valid) {
 			sm.state = auto_follow_status_s::STATE_TAKIP;
 
-		} else if (now >= sm.lost_start + lost_timeout_us) {
+		} else if (hold_allowed && now >= sm.lost_start + lost_timeout_us) {
 			sm.state = auto_follow_status_s::STATE_HOLD_ISTENDI;
 		}
 

@@ -599,6 +599,7 @@ void AutoFollow::Run()
 
 	if (_vehicle_status_sub.update(&vehicle_status)) {
 		_mode_active = registered() && (vehicle_status.nav_state == static_cast<uint8_t>(_mode_id));
+		_armed = (vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED);
 		_system_id = vehicle_status.system_id;
 		_component_id = vehicle_status.component_id;
 	}
@@ -629,7 +630,7 @@ void AutoFollow::Run()
 
 	const uint8_t previous_state = _state_machine.state;
 	const bool entered = AutoFollowGuidance::update_state(_state_machine, _mode_active, now, _last_valid, _last_no_target,
-			     _param_af_data_tout.get(), _param_af_lost_t.get());
+			     _param_af_data_tout.get(), _param_af_lost_t.get(), _armed);
 
 	// No valid sample for AF_DATA_TOUT (same reference as the state machine): the estimate is stale and is not used again,
 	// the next accepted measurement initializes the filter (position = measurement, velocity 0)
@@ -698,7 +699,7 @@ int AutoFollow::print_status()
 		PX4_INFO("mode '%s': registered, nav_state %d, arming check id %d", MODE_NAME, _mode_id, _arming_check_id);
 	}
 
-	PX4_INFO("mode active: %s, landed: %s", _mode_active ? "yes" : "no", _landed ? "yes" : "no");
+	PX4_INFO("mode active: %s, landed: %s, armed: %s", _mode_active ? "yes" : "no", _landed ? "yes" : "no", _armed ? "yes" : "no");
 	PX4_INFO("state: %s, check_result: %s", STATE_NAMES[_state_machine.state], CHECK_NAMES[_status.check_result]);
 	PX4_INFO("accept_count: %" PRIu32 ", no_target_count: %" PRIu32 ", hold_request_count: %" PRIu8,
 		 _status.accept_count, _status.no_target_count, _status.hold_request_count);

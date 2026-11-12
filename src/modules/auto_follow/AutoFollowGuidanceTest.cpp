@@ -260,6 +260,26 @@ TEST(AutoFollowGuidanceTest, NoTargetImmediatelyLost)
 	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_HOLD_ISTENDI);
 }
 
+TEST(AutoFollowGuidanceTest, DisarmedStaysInLostWait)
+{
+	// GIVEN: the mode active while disarmed (bench test), tracking with the last valid sample at t0
+	StateMachine sm{};
+	const uint64_t t0 = 10 * S;
+	update_state(sm, true, t0, t0, 0, DATA_TIMEOUT, LOST_TIMEOUT, false);
+	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_TAKIP);
+
+	// WHEN: no data for much longer than AF_DATA_TOUT + AF_LOST_T, THEN: KAYIP_BEKLE, no HOLD_ISTENDI
+	update_state(sm, true, t0 + S / 2, t0, 0, DATA_TIMEOUT, LOST_TIMEOUT, false);
+	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_KAYIP_BEKLE);
+	update_state(sm, true, t0 + 10 * S, t0, 0, DATA_TIMEOUT, LOST_TIMEOUT, false);
+	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_KAYIP_BEKLE);
+
+	// WHEN: a valid sample arrives again, THEN: back to TAKIP
+	const uint64_t t1 = t0 + 10 * S + S / 10;
+	update_state(sm, true, t1, t1, 0, DATA_TIMEOUT, LOST_TIMEOUT, false);
+	EXPECT_EQ(sm.state, auto_follow_status_s::STATE_TAKIP);
+}
+
 TEST(AutoFollowGuidanceTest, RestartedSenderAcceptedAfterTimeout)
 {
 	// GIVEN: sequence 1000 arrived at t0 (last AF_LOS sample), then the companion computer restarts and counts from 1
