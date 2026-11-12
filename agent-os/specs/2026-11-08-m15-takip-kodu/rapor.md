@@ -1,6 +1,6 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 11 (Görev grubu 6), 2026-11-12
+> **Sürüm:** 12 (Görev grubu 6 ek iş: `AF_K_FF` / `AF_BETA` taraması), 2026-11-12
 >
 > **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
 >
@@ -539,6 +539,22 @@ Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.** Grup 5'ten sonra
 - **Kapalı çevrim kısa kontrolü** (`20_48_09.ulg`): 20 m öndeki hayali hedefe 4,5 s'de 15,5 m'ye geldi, aşım 0,04 m, son 10 s'de hata −0,006 ± 0,02 m. Ayrıntılı ölçüm S6'da.
 - **Açık çevrimin doğası:** LOS gövdeye sabit; drone eğildikçe aynı gövde yönü dünyada başka açıya denk gelir. Spec'in sayıları drone düzken (moda girişte) birebir görüldü; uçarken eğim yüzünden kaydı (S1b salınımı, S3 dönmesi, S5 `ufuk`/`uzak`). Kod hatası değil; gerçek uçuşta kamera bu eğimi görüntüde görür.
 
+**`AF_K_FF` / `AF_BETA` taraması (2026-11-12, Grup 6 ek iş; S7 ile, son kodla):** kullanıcı Grup 6 soru 2'ye "b-c denenip en optimum değer bulunsun" dedi. S7 (L yolu, 1,4 m/s) aynen; 3 oturum, 8 yeni bölüm; `AF_ALPHA` = 0,5 ve diğer `AF_*` varsayılan; **`module.yaml` varsayılanları değişmedi.** Ayrıntı, bütün ölçüler ve ölçü tanımları: `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 12.
+
+| `AF_K_FF` / `AF_BETA` | Geride kalma (1. bacak) | Hedef hızı kestirimi yürürken / hedef durunca | Pitch std 1. bacak / durunca | Açısal hız std 1. bacak | Köşe en küçük hata · oturma | ULog · bölüm |
+|---|---|---|---|---|---|---|
+| 0 / 0,17 (Grup 6) | 2,79 m | 1,39 ± 0,04 / 0,01 m/s | 0,09° / 0,11° | 0,24°/s | +0,70 m · — | `21_14_07` · 1 |
+| 0,25 / 0,17 | 2,09 m | 1,39 ± 0,04 / 0,01 | 0,11° / 0,11° | 0,42°/s | +0,42 m · — | `18_56_51` · 1 |
+| 0,5 / 0,17 | 1,36 m | 1,39 ± 0,10 / 0,01 | 0,09° / 0,09° | 1,66°/s | −0,04 m · — | `18_56_51` · 2 |
+| 0,75 / 0,17 | 0,71 m | 1,40 ± **0,32** / **0,24** | 0,36° / 0,29° | **5,49°/s** | −0,72 m · 2,8 s | `18_56_51` · 3 |
+| 1,0 / 0,17 | 0,06 m | 1,39 ± **0,27–0,38** / **0,23–0,37** | 0,36–0,45° / 0,34–0,72° | **5,4–5,7°/s** | −1,2…−1,3 m · 2,6 s | `18_56_51` · 4, `21_14_07` · 2 |
+| 1,0 / 0,13 | −0,01 m | 1,39 ± 0,06 / 0,07 | 0,15° / 0,12° | 1,88°/s | −1,22 m · 2,6 s | `19_06_16` · 1 |
+| **1,0 / 0,10** (iki koşu) | **0,00 m** | 1,39 ± **0,02–0,03** / **0,00** | 0,10–0,13° / 0,05–0,08° | 0,44–0,58°/s | −1,20 m · 2,5–2,6 s | `19_02_38` · 2, `19_06_16` · 2 |
+| **1,0 / 0,05** | **0,00 m** | 1,39 ± **0,02** / **0,01** | 0,06° / 0,10° | 0,62°/s | −1,31 m · 3,0 s | `19_02_38` · 1 |
+
+- **Sonuç (sade):** geride kalma yalnızca `AF_K_FF`'e bağlı ve teoriyle aynı ((1 − `AF_K_FF`) × 2,8 m). Titreşim `AF_BETA` = 0,17'de `AF_K_FF` 0,5–0,75 arasında, `AF_K_FF` = 1,0'da `AF_BETA` 0,10–0,13 arasında başlıyor. **`AF_K_FF` 1,0 + `AF_BETA` 0,10 (ya da 0,05) hem geride kalmıyor hem `AF_K_FF` = 0 kadar sakin**; 0,10 iki oturumda aynı sonucu verdi. Bedel: filtre gerçek hıza 0,56 s'de (0,05'te 0,82 s; 0,17'de 0,3–0,4 s) yetişiyor; köşede drone hedefe ~1,2 m yaklaşıp 2,5–3 s'de toparlıyor ve ~10° eğiliyor (`AF_K_FF` = 0'da 2,6°); yürüme başında 0,7–1,2 s kırpma.
+- **Ölçüt seçenekleri** (kullanıcı seçecek; grup notu Bölüm 12.5): Ö1 geride kalma ≤ 0,5 m iken en az kıpırdama → 1,0 / 0,10; Ö2 `AF_K_FF` = 0 kadar sakin olup en az geride kalma → 1,0 / 0,10 ya da 0,05; Ö3 `AF_BETA` değişmesin → `AF_K_FF` 0,5 (1,36 m geride); Ö4 en geniş güvenlik payı → 1,0 / 0,05; Ö5 ilk uçuşlarda en az risk → `AF_K_FF` 0. **Claude'un önerisi:** SITL optimumu 1,0 / 0,10; varsayılan olarak `AF_BETA` 0,10, `AF_K_FF` 0 kalsın ve gerçek uçuşta QGC'den açılsın (gerçek kamera gecikmesi sınırı aşağı çekebilir). Karar §11.
+
 - **Neden S1 ikiye ayrıldı?** Sürüm 1'de "hedef önünde → ileri gider" yazıyordu; bu yanlıştı. Drone hedefe, aşağı bakış açısı takip açısına (30°) eşit olacak mesafede durmak ister. Hedef 30°'den sığ görünüyorsa uzaktadır → ileri; dik görünüyorsa yakındır → geri.
 - **Neden S2'de burun dönmeye devam eder?** Script hep "hedef sağda" der. Drone döndükçe hedef yine sağda görünür. Bu kodun hatası değil, testin doğası. S2'de yalnızca dönüş yönü kontrol edilir; yaw'ın hedefte doğru durması S6'da ölçülür.
 - **Ön kontroller** (her test oturumunun başında): modül açılışta başladı mı, QGC'de `AUTO FOLLOW` görünüyor mu, disarm iken moda geçiliyor mu, bu modda arm reddediliyor mu, yerde arm'lıyken moda geçiş reddediliyor mu, QGC ve RC anahtarıyla giriş/çıkış, Hold'dan sonra anahtar aç-kapa ile yeniden giriş.
@@ -757,6 +773,11 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | G6.10 | T1'de bataryanın boşaltılması | — | `SIM_BAT_DRAIN` 60 s (varsayılan), taban `SIM_BAT_MIN_PCT` %50 → takipte %6 → %0; ek T1b (acil seviye RTL inişi sürerken) | Kritik ve acil seviyeyi ayrı ayrı görmek; T1'de acil seviye drone indikten sonra geldi | Kod içi |
 | G6.11 | T2 sonuçsuz kalınca | bırak · ek deneme | Ek deneme T2b: uçuşta `EKF2_GPS_CTRL` = 0 (parametre, kod yok) | `failure gps off` Gazebo Harmonic'te desteklenmiyor | Kod içi (kullanıcıya soruldu, §11) |
 | G6.12 | `AF_ALPHA` / `AF_BETA` | değiştir · değiştirme | Değiştirilmedi; S7'deki titreşim kullanıcıya soruldu | Talimat: önce kullanıcıya sorulur | Kod içi (soruldu, §11) |
+| G6.13 | Tarama düzeni (`AF_K_FF` / `AF_BETA`) | her kombinasyon ayrı oturum · bir oturumda birkaç bölüm | 3 oturum, 8 bölüm (62 s); her bölümden önce `param set AF_K_FF` ve `AF_BETA`, 1,5 s bekleme, `param show` ile doğrulama | G6.9 ile aynı düzen; modül parametreyi ≤ 1 s'de okur (`AutoFollow.hpp:143`); logdaki değişiklik kayıtlarından script her bölümü doğru parametreyle gösterdi | Kod içi |
+| G6.14 | Ek kombinasyonlar (talimat: en iyi `AF_K_FF` ile 1–2 `AF_BETA`) | `AF_K_FF` < 1 ile küçük β · `AF_K_FF` 1,0 ile ara β | `AF_K_FF` 1,0 ile **β 0,13** (titreşimin 0,10–0,17 arasında nerede başladığı) ve **β 0,10 tekrarı** (tekrarlanabilirlik) | 1,0 / 0,10 ve 1,0 / 0,05 hem geride kalmasız hem sakindi; `AF_K_FF` < 1 yalnızca geride kalma ekler | Kod içi |
+| G6.15 | 1,0 / 0,17 referansı | Grup 6 logu yeterli · aynı oturumda yeniden koş | Yeniden koşuldu (`18_56_51` bölüm 4) | Oturumlar arası farkı görmek için; titreşim aynı (std 0,27 / 0,38 m/s) | Kod içi |
+| G6.16 | Taramanın ek ölçüleri | — | Repo dışı `~/m15-sitl-araclari/grup6-tarama/tarama_analiz.py` (Grup 6'nın `analiz_s7_ek.py`'sinin genişletilmişi): bacak pencereleri, köşe en küçük/en büyük hata ve oturma (2. bacak son 5 s ortalamasının ±0,3 m'si), hedef hızı baskın frekansı, açısal hız std, köşede en büyük pitch, filtre yetişme süresi (%90; köşede 10°). `af_log_analiz.py` değişmedi | Talimattaki ölçüler `af_log_analiz.py`'de bacak bazında yok; script'i değiştirmek yeni ölçü adı demek (karar gerekir). `21_14_07`'de Grup 6 sayılarını aynen verdi | Kod içi |
+| G6.17 | Varsayılanlar | değiştir · değiştirme | `module.yaml` değişmedi (`AF_K_FF` 0, `AF_ALPHA` 0,5, `AF_BETA` 0,17); ölçüt seçenekleri ve öneri kullanıcıya soruldu | Talimat: "optimum"un tanımı ve varsayılan kullanıcının | Kod içi (soruldu, §11) |
 
 ---
 
@@ -868,6 +889,8 @@ Uygulamadan açık kalan:
 - **Gerçek uçuştan önce:** Pixhawk'ta `COM_LOW_BAT_ACT` = 3 (PX4 varsayılanı 0 = yalnızca uyarı); takım/Hüseyin ile (Grup 0 notu 0.5).
 - **Bilgi:** Hold reddi yolu (3 istek, QGC uyarısı) SITL'de üretilemedi, yalnızca birim testinde sınandı; EKF yön sıfırlaması SITL'de olmadı (ikisi de doğrulanacak).
 - **Grup 6'nın 4 sorusu (2026-11-12, cevap bekliyor;** ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10**):** (1) S7 yolunu komut satırından açan bir seçenek eklensin mi (ad sizin; öneri: evet); (2) `AF_K_FF` = 1,0'da hedef hızı kestirimindeki titreşim: böyle kalsın ve m13'e not (öneri) / `AF_BETA` taraması / `AF_K_FF` daha küçük / gecikme telafisi; (3) burnun 5–7° aşması: böyle kalsın (öneri) / `yawspeed` de verilsin / `AF_YAWRATE_MAX` küçültülsün; (4) GPS arızası için `EKF2_GPS_CTRL` = 0 ek denemesi T2 yerine kabul mü (öneri: evet).
+  - Cevaplananlar (2026-11-12, `planning/karar-gunlugu.md`): (2) "b-c denenip en optimum değer bulunsun" → `AF_K_FF` / `AF_BETA` taraması yapıldı (aşağıda); (3) "a (şimdilik)" → burun aşması böyle kalır. (1) ve (4) cevap bekliyor.
+- **`AF_K_FF` / `AF_BETA` varsayılan değer kararı bekleniyor** (Grup 6 soru 5; `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 12): S7 taramasında (8 bölüm) `AF_K_FF` 1,0 + `AF_BETA` 0,10 geride kalmadan `AF_K_FF` = 0 kadar sakin çıktı. Seçenekler: (a) ikisi de değişmesin · (b) `AF_BETA` 0,10, `AF_K_FF` 0 kalsın (Claude'un önerisi) · (c) `AF_BETA` 0,10, `AF_K_FF` 1,0 · (d) `AF_BETA` 0,05, `AF_K_FF` 1,0 ya da 0 · (e) `AF_BETA` 0,17, `AF_K_FF` 0,5 · (f) başka ölçüt / ek koşu (ör. seçilen değerlerle S6). `module.yaml` kullanıcı onayı olmadan değişmez.
 - **Bilgi (Grup 6):** S6'da drone hızlanırken duran hedefin kestirilen hızı birkaç saniye 0,4–2,3 m/s'ye çıkıyor (sahte hız; `AF_K_FF` = 0 iken etkisiz); batarya failsafe'inde PX4 RTL'den önce 5 s Hold'da bekliyor (`COM_FAIL_ACT_T`); GPS kaybında yerel ve küresel konum birlikte gidiyor, PX4 Descend yapıyor, Hold reddi yolu yine görülmedi.
 - **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor); Hold'a geçişin QGC'de nasıl göründüğü.
 
@@ -947,3 +970,4 @@ Bekleyen dış bağımlılıklar:
 | 9 | 2026-11-11 | Grup 5 soruları cevaplandı: QGC uyarı metni kalır (1-a), masada hedefsiz girişteki Hold böyle kalır (2-a), EKF yön sıfırlamasında filtre de sıfırlanır (3-b; kodda bir satır, iki derleme uyarısız, 6C flash 1 937 260 B %98,53, +8 B; birim testi 12/12); G5.3 (cevapsızlıkta tekrar) onayı bekleniyor |
 | 10 | 2026-11-11 | G5.3 onaylandı; 3 retten sonra RTL sorusu anlatıldı, davranış aynı kaldı (G5.14); `COM_LOW_BAT_ACT` varsayılanının yalnızca uyarı olduğu düzeltmesi; gerçek uçuştan önce `COM_LOW_BAT_ACT` = 3 (§11) |
 | 11 | 2026-11-12 | Görev grubu 6 (analiz script'i, kapalı çevrim): §4.8'e analiz script'i ve rehberi; §4.9'a S6 (beş başlangıç mesafesi, oturma 1,6–9,2 s, aşma ≤ 0,05 m, salınım yok; en sakin başlangıç istenen mesafeye en yakın olanı), S7 (`AF_K_FF` 0: 2,79 m geride, 1,0: geride kalma yok ama hız kestiriminde titreşim), T1/T1b (kritikte 5 s Hold + RTL, acilde Land, modül PASIF), T2 (`failure gps off` Gazebo Harmonic'te çalışmıyor) ve T2b (GPS kaybında 4 s'de Descend) sonuçları ULog adlarıyla; `latency`; §4.7 gerçekleşen hâli; son flash 1 937 260 B (%98,53, kod değişmedi); §5.1'e G6.1–G6.12; §11'e 4 yeni soru; §3.3 commit listesi; PR açıklaması taslağı |
+| 12 | 2026-11-12 | Grup 6 ek iş, `AF_K_FF` / `AF_BETA` taraması (kullanıcı: "b-c denenip en optimum değer bulunsun"): S7 ile 3 oturum, 8 bölüm (`AF_K_FF` 0,25/0,5/0,75/1,0 @ β 0,17; β 0,05/0,10/0,13 ve 0,10 tekrarı @ `AF_K_FF` 1,0); §4.9'a sonuç tablosu ve ölçüt seçenekleri (1,0 / 0,10 geride kalmadan `AF_K_FF` = 0 kadar sakin); §5.1'e G6.13–G6.17; §11'e varsayılan değer kararı (soru 5) ve Grup 6 soru 2–3'ün cevapları; `module.yaml` ve PX4 kodu değişmedi |

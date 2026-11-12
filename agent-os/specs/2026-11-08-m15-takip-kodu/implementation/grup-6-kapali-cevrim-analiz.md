@@ -1,7 +1,7 @@
 # Görev grubu 6: Analiz script'i, kapalı çevrim S6–S7, batarya ve GPS denemeleri, kapanış
 
 - **Tarih:** 2026-11-11/12 · **Dal:** `ozellik/m15-takip-kodu` · **Görev listesi:** `../tasks.md` Grup 6 (6.5, 6.8–6.18, 6.T1, 6.T2)
-- **Durum:** Bitti. Log analiz script'i `tez/analiz/af_log_analiz.py` ve rehberi `tez/analiz/BENIOKU.md` yazıldı; test göndericisine S6/S7 hedefi eklendi; S6 (5 başlangıç mesafesi), S7 (L yolu, `AF_K_FF` 0 ve 1,0), T1 (batarya failsafe'i) ve T2 (GPS arızası) Gazebo'da uçuldu ve script'le ölçüldü. **PX4 kodu bu grupta değişmedi.** Kullanıcıya 4 soru ve 3 bilgi notu var (Bölüm 10).
+- **Durum:** Bitti. Log analiz script'i `tez/analiz/af_log_analiz.py` ve rehberi `tez/analiz/BENIOKU.md` yazıldı; test göndericisine S6/S7 hedefi eklendi; S6 (5 başlangıç mesafesi), S7 (L yolu, `AF_K_FF` 0 ve 1,0), T1 (batarya failsafe'i) ve T2 (GPS arızası) Gazebo'da uçuldu ve script'le ölçüldü. **PX4 kodu bu grupta değişmedi.** Kullanıcıya 4 soru ve 3 bilgi notu var (Bölüm 10). **Ek iş (2026-11-12):** soru 2'nin cevabıyla (b+c) S7'de `AF_K_FF` / `AF_BETA` taraması yapıldı (8 bölüm, Bölüm 12); varsayılan değer kararı kullanıcının (soru 5).
 - Bu not kod okumadan anlaşılacak şekilde yazıldı. Adların anlamı `../log-sozlugu.md`'de, ölçülerin anlamı ve hesabı `tez/analiz/BENIOKU.md`'de. Bu grubun uygulama kararları ayrıca `../rapor.md` §5.1'de (G6.1–G6.12).
 
 ## 1. Ne yapıldı?
@@ -248,6 +248,7 @@ PX4 kodu bu grupta değişmediği için derlemeler, flash kaydı ve birim testi 
 - (c) `AF_K_FF`'in 1,0 yerine daha küçük bir değerle (ör. 0,5) denenmesi. Artı: döngü kazancı yarıya iner. Eksi: geride kalma 1,4 m kalır.
 - (d) Gecikme telafisi (LOS'u görüntünün çekildiği andaki tutumla çevirmek; tutum geçmişi tutmak gerekir). Artı: sahte hızın kaynağına iner. Eksi: kod ve flash (~%98,5 dolu); kapsam m13/m16.
 - **Öneri: (a)**, m13 için (b) ve (d) not olarak (`requirements.md` §1.3'e yazıldı). İsterseniz (b) bu dalda kısa bir SITL taraması olarak yapılabilir; **`AF_ALPHA`/`AF_BETA` sizin onayınız olmadan değiştirilmedi.**
+- **Cevap (2026-11-12):** "b-c denenip en optimum değer bulunsun" → tarama yapıldı, sonuç ve ölçüt seçenekleri **Bölüm 12**; varsayılan değer kararı bekleniyor (soru 5).
 
 **Soru 3 — Burun 30°'lik dönüşte 5–7° fazla dönüp geri geliyor (S6).** Yerleşme 2,5–2,6 s; son hata 0,0°. Kanıt: modül yalnızca açı (`yaw`) veriyor, dönüş hızı (`yawspeed`) NaN (`AutoFollow.cpp:414`); açı isteği 60°/s ile rampalanıp birden duruyor ve PX4'ün tutum kontrolcüsü bunu aşmayla izliyor. PX4'ün otomatik modları açıyı yumuşatıp dönüş hızını da veriyor (`FlightTaskAuto.cpp:306-316`, `_heading_smoothing`).
 - (a) Böyle kalsın (m13'e not). Artı: kod yok. Eksi: dönüşlerde ~1 s'lik 5–7° salınım (kamerada hedef biraz kayar).
@@ -278,3 +279,98 @@ PX4 kodu bu grupta değişmediği için derlemeler, flash kaydı ve birim testi 
 | `tez/pin/verify_pin.sh --worktree` | Beklenen kırmızı: yine **15 dosya, hepsi onay bekleyen 7 yolda**; yeni yol yok (`tez/analiz/`, `tez/sitl/` izinli `tez/*` içinde). `allowed-paths.txt`'e dokunulmadı |
 | Loglar | 6 oturumun ULog'u `~/Desktop/AUTO-FOLLOW LOG/`'da özgün adlarıyla: `21_08_57.ulg` (S6), `21_14_07.ulg` (S7), `21_18_29.ulg` (T1), `21_22_13.ulg` (T1b), `21_24_40.ulg` (T2), `21_26_42.ulg` (T2b). Repoya log, grafik, CSV girmedi |
 | Süreçler | Her oturumdan sonra ve en sonda px4/gz süreci yok (`pgrep -x px4`, `pgrep -f "[g]z sim"`), parametre dosyası silinmiş |
+
+## 12. `AF_K_FF` / `AF_BETA` taraması (S7, 2026-11-12, ek iş) — **varsayılan değer kararı kullanıcının**
+
+**Neden:** Soru 2'ye (Bölüm 10) kullanıcının cevabı: **"b-c denenip en optimum değer bulunsun"** (`../planning/karar-gunlugu.md`, "Görev grubu 6 sonrası sorular (2026-11-12)"). Yani (b) `AF_BETA` taraması ve (c) daha küçük `AF_K_FF` SITL'de denendi. **"Optimum"un ne olduğuna kullanıcı karar verecek;** aşağıda ölçüt seçenekleri ve her biri için öne çıkan kombinasyon var. **`module.yaml` varsayılanları değişmedi** (`AF_K_FF` = 0, `AF_ALPHA` = 0,5, `AF_BETA` = 0,17), **PX4 kodu değişmedi**, `AF_ALPHA`'ya dokunulmadı.
+
+### 12.1 Ne verildi?
+
+S7 Grup 6'dakiyle aynı: kapalı çevrim, hedef burnun 20 m önünde başlar, 10 s durur, **1,4 m/s** ile 20 s drone'dan uzaklaşır, **90° sağa** dönüp 20 s yürür ve durur (`~/m15-sitl-araclari/af_los_gonder_L.py` sarmalayıcısıyla). Her kombinasyon bir AUTO FOLLOW bölümü (62 s), aralarda Position. Her bölümden önce `param set AF_K_FF ...` ve `param set AF_BETA ...`, 1,5 s bekleme (modül parametreleri en geç 1 s'de bir okur), `param show` ile doğrulama; logdaki parametre değişikliği kayıtlarından script her bölümü doğru değerlerle gösterdi. Diğer `AF_*` varsayılan. İrtifa 9,91–9,94 m → istenen mesafe ~15,46 m. Oturum düzeni Grup 4–6'daki gibi (parametre dosyası her oturumdan önce ve sonra silindi, stdin `sleep infinity`, pilot kapanmadan `logger stop`, süreçler PID ile kapatıldı).
+
+| Oturum (ULog) | Bölüm | `AF_K_FF` | `AF_BETA` | Neden |
+|---|---|---|---|---|
+| `21_14_07.ulg` (Grup 6, referans) | 1 · 2 | 0 · 1,0 | 0,17 | Grup 6'daki iki koşu |
+| `18_56_51.ulg` | 1 · 2 · 3 · 4 | 0,25 · 0,5 · 0,75 · **1,0** | 0,17 | (c) `AF_K_FF` taraması; 1,0 aynı oturum koşullarında karşılaştırma için yeniden koşuldu |
+| `19_02_38.ulg` | 1 · 2 | 1,0 | 0,05 · 0,10 | (b) `AF_BETA` taraması |
+| `19_06_16.ulg` | 1 · 2 | 1,0 | 0,13 · 0,10 (tekrar) | Ek: titreşimin 0,10 ile 0,17 arasında nerede başladığı ve 0,10'un tekrarlanabilirliği |
+
+Toplam **8 yeni bölüm** (talimat: ≤ 10). (b) koşuları `AF_K_FF` = 1,0'ı hem geride kalmasız hem sakin yaptığı için ek oturumda "en iyi `AF_K_FF`" 1,0 alındı; `AF_K_FF` < 1 ile küçük `AF_BETA` denenmedi (`AF_K_FF` < 1 yalnızca geride kalma ekler; seçim §5.1 G6.14).
+
+### 12.2 Ölçüler nasıl hesaplandı?
+
+`tez/analiz/af_log_analiz.py` her logda çalıştırıldı (çıktılar `~/m15-sitl-araclari/grup6-tarama/analiz_<log>.md`, grafikler `grafik_<log>/`, CSV `<log>.csv`); kırpma süresi ve burun hatası onunla aynı çıktı. Bacak pencereleri, titreşim frekansı ve kıpırdama için Grup 6'daki ek hesabın (`grup6/analiz_s7_ek.py`) genişletilmiş hâli kullanıldı: `~/m15-sitl-araclari/grup6-tarama/tarama_analiz.py` (repo dışı). Bu script `21_14_07.ulg`'de Grup 6'nın sayılarını aynen verdi (2,79 ± 0,02 m; 1,39 ± 0,38 m/s; pitch std 0,36° / 0,72°).
+
+- **Yürüme başı (tw):** ölçülen hedef yerinin bölüm başındaki yerinden 0,5 m uzaklaştığı an − 0,36 s (Grup 6 ile aynı). Köşe tw + 20 s, duruş tw + 40 s.
+- **Geride kalma:** 1. bacağın son 10 s'inde (tw+10…tw+20) mesafe hatası ortalama ± std. Pozitif = hedefin istenenden uzağında (geride).
+- **Köşe:** tw+20…tw+30'da mesafe hatasının en küçüğü / en büyüğü; **köşe oturma** = köşeden sonra hatanın, 2. bacağın son 5 s ortalamasının ±0,3 m'sine girip bir daha çıkmadığı an. `AF_K_FF` ≤ 0,5'te 2. bacakta hata sürekli büyüdüğü için anlamsız (—).
+- **Hedef hızı kestirimi** (`target_vel_ned` büyüklüğü): 1. bacak son 10 s ortalama ± std (en küçük–en büyük) ve **baskın frekans** (ortalaması çıkarılmış dizinin en büyük frekans bileşeni; std ≤ 0,04 m/s iken belirgin tepe yok, "—"); **hedef durunca** tw+45…tw+50 (duruştan 5–10 s sonra).
+- **Kıpırdama:** drone'un **eğimi (pitch) std** (Grup 6'daki ölçü), 1. bacak son 10 s / hedef durunca; ek olarak **açısal hız std** (gövde x–y dönüş hızı, `vehicle_angular_velocity`) ve geçişte **en büyük eğim** (köşeden sonraki 5 s'te |pitch|).
+- **Filtre yetişme:** yürüme başında hız kestiriminin ilk kez 1,26 m/s'ye (%90) çıkması; köşede hız yönünün ilk kez yeni yöne 10°'den yakın olması (tw+20'den).
+- **Burun hatası:** gerçek yön − hedef yönü, yürüme boyunca (tw…tw+45) std / en büyük.
+- **Kırpma:** `vel_cmd_law` > 2 m/s süresi, bölüm boyunca (ilk 20 → 15,5 m yaklaşma dahil) / yalnız yürürken.
+- **Duruş sonrası:** bölümün son 5 s'inde mesafe hatası tepe-tepe; bölüm boyunca ±0,1 m işaret değişimi sayısı.
+
+### 12.3 Sonuç tablosu
+
+| `AF_K_FF` / `AF_BETA` | ULog · bölüm | Geride kalma 1. bacak [m] | 2. bacak hata [m] | Yürüme başı en büyük hata [m] | Köşe en küçük / en büyük hata [m] | Köşe oturma [s] | Hedef hızı yürürken [m/s] | Baskın frekans [Hz] | Hedef durunca kalan hız [m/s] | Pitch std 1. bacak / durunca [°] | Açısal hız std 1. bacak / durunca [°/s] | Köşede en büyük pitch [°] | Filtre yetişme baş / köşe [s] | Burun hatası std / en büyük [°] | Kırpma bölüm / yürürken [s] | Son 5 s tepe-tepe [m] / işaret değişimi |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **0 / 0,17** | `21_14_07` · 1 | **+2,79 ± 0,02** | +2,22 ± 0,22 | +2,80 | +0,70 / +2,71 | — | 1,39 ± **0,04** (1,13–1,47) | — | **0,01** ± 0,01 | **0,09 / 0,11** | **0,24 / 0,28** | 2,6 | 0,26 / 0,26 | 0,71 / 2,47 | 1,18 / 0 | 0,05 / 0 |
+| 0,25 / 0,17 | `18_56_51` · 1 | +2,09 ± 0,04 | +1,46 ± 0,17 | +2,10 | +0,42 / +2,02 | — | 1,39 ± 0,04 (1,22–1,46) | — | 0,01 ± 0,00 | 0,11 / 0,11 | 0,42 / 0,22 | 4,5 | 0,36 / 0,26 | 0,60 / 2,41 | 0,88 / 0 | 0,09 / 0 |
+| 0,5 / 0,17 | `18_56_51` · 2 | +1,36 ± 0,03 | +0,78 ± 0,09 | +1,55 | −0,04 / +1,29 | — | 1,39 ± 0,10 (1,10–1,54) | 5,0 (zayıf) | 0,01 ± 0,01 | 0,09 / 0,09 | 1,66 / 0,31 | 6,7 | 0,36 / 0,26 | 0,51 / 2,40 | 0,94 / 0 | 0,06 / 0 |
+| 0,75 / 0,17 | `18_56_51` · 3 | +0,71 ± 0,05 | +0,26 ± 0,05 | +1,38 | −0,72 / +0,56 | 2,82 | 1,40 ± **0,32** (0,68–2,09) | 3,3 | **0,24 ± 0,14** (6,6 Hz) | 0,36 / 0,29 | **5,49 / 5,28** | 8,8 | 0,36 / 0,36 | 0,43 / 2,30 | 1,28 / 0,34 | 0,17 / 6 |
+| 1,0 / 0,17 | `18_56_51` · 4 | +0,06 ± 0,06 | +0,01 ± 0,07 | +1,43 | −1,20 / +0,18 | 2,56 | 1,39 ± **0,27** (0,79–1,97) | 3,4 | **0,23 ± 0,14** (6,8 Hz) | 0,45 / 0,34 | **5,35 / 5,26** | 9,8 | 0,36 / 0,16 | 0,44 / 2,39 | 2,22 / 1,18 | 0,24 / 11 |
+| 1,0 / 0,17 | `21_14_07` · 2 (Grup 6) | +0,06 ± 0,06 | +0,01 ± 0,07 | +1,61 | −1,26 / +0,21 | 2,58 | 1,39 ± **0,38** (0,57–2,20) | 3,3 | **0,37 ± 0,21** (6,0 Hz) | 0,36 / 0,72 | **5,70 / 6,33** | 10,8 | 0,32 / 0,26 | 0,46 / 2,36 | 3,66 / 2,58 | 0,34 / 21 |
+| 1,0 / 0,13 | `19_06_16` · 1 | −0,01 ± 0,02 | +0,02 ± 0,03 | +1,35 | −1,22 / +0,12 | 2,58 | 1,39 ± 0,06 (1,14–1,49) | 5,0 (zayıf) | 0,07 ± 0,03 | 0,15 / 0,12 | 1,88 / 2,52 | 10,5 | 0,36 / 0,36 | 0,42 / 2,20 | 1,74 / 0,74 | 0,10 / 2 |
+| **1,0 / 0,10** | `19_02_38` · 2 | **−0,01 ± 0,02** | +0,01 ± 0,03 | +1,30 | −1,20 / +0,10 | 2,58 | 1,39 ± **0,02** (1,24–1,44) | — | **0,00** ± 0,00 | **0,10 / 0,08** | **0,44 / 0,22** | 10,2 | 0,56 / 0,46 | 0,43 / 2,33 | 1,72 / 0,74 | 0,04 / 1 |
+| **1,0 / 0,10** (tekrar) | `19_06_16` · 2 | **0,00 ± 0,03** | +0,01 ± 0,03 | +1,34 | −1,21 / +0,13 | 2,52 | 1,39 ± **0,03** (1,13–1,44) | — | **0,00** ± 0,00 | **0,13 / 0,05** | **0,58 / 0,17** | 10,2 | 0,56 / 0,46 | 0,42 / 2,31 | 1,78 / 0,80 | 0,06 / 2 |
+| **1,0 / 0,05** | `19_02_38` · 1 | **0,00 ± 0,03** | +0,01 ± 0,03 | +1,48 | −1,31 / +0,13 | 3,00 | 1,39 ± **0,02** (1,22–1,41) | — | **0,01** ± 0,00 | **0,06 / 0,10** | **0,62 / 0,28** | 9,2 | 0,82 / 0,72 | 0,44 / 2,45 | 1,92 / 0,94 | 0,05 / 2 |
+
+Bütün bölümlerde durum hep TAKIP, atılan mesaj yok, `hold_request_count` 0, çıkış Position; `latency` ortalama 60–66 ms. Karşılaştırma grafiği (mesafe hatası, hedef hızı kestirimi ve pitch, hepsi yürüme başına hizalı): `~/m15-sitl-araclari/grup6-tarama/grafik/tarama_karsilastirma.png`; sayılar `tarama.csv` ve `tarama_ozet.txt`.
+
+### 12.4 Ne görüldü? (sade)
+
+1. **Geride kalma teoriyle birebir:** `AF_K_FF` = c iken geride kalma ≈ (1 − c) × 1,4 / 0,5 = (1 − c) × 2,8 m. Ölçülen: 0 → 2,79 · 0,25 → 2,09 · 0,5 → 1,36 · 0,75 → 0,71 · 1,0 → 0,06 m. `AF_BETA` geride kalmayı değiştirmiyor (1,0'da beşinde de ~0).
+2. **`AF_BETA` = 0,17'de titreşim `AF_K_FF` 0,5 ile 0,75 arasında başlıyor:** 0,5'te hız kestirimi hâlâ sakin sayılır (std 0,10 m/s, hedef durunca 0,01 m/s; yalnızca açısal hız biraz artmış: 1,66°/s), 0,75'te Grup 6'daki 1,0 titreşiminin neredeyse aynısı (±0,3 m/s, ~3 Hz; hedef durunca ~0,24 m/s, ~6–7 Hz; açısal hız 5,5°/s).
+3. **`AF_K_FF` = 1,0'da titreşim `AF_BETA` 0,10 ile 0,13 arasında başlıyor:** 0,13'te hafif (std 0,06 m/s, durunca 0,07 m/s, açısal hız 1,9–2,5°/s), **0,10 ve 0,05'te tamamen yok:** hız kestirimi `AF_K_FF` = 0 kadar sakin (std 0,02–0,03 m/s, durunca 0,00–0,01 m/s), drone'un pitch std'si ve açısal hızı da `AF_K_FF` = 0 düzeyinde. **0,10 iki ayrı oturumda aynı sonucu verdi** (tekrarlanabilir).
+4. **Küçük `AF_BETA`'nın bedeli küçük:** filtrenin yürüme başında gerçek hıza yetişmesi 0,17'de 0,3–0,4 s, 0,10'da 0,56 s, 0,05'te 0,82 s; köşede yeni yönü bulması 0,2–0,4 / 0,46 / 0,72 s. Buna rağmen geçici hatalar neredeyse aynı: yürüme başında en büyük hata 1,30–1,34 m (0,10), 1,48 m (0,05), 1,43–1,61 m (0,17); köşede −1,20…−1,31 m, köşe oturma 2,5–2,6 s (0,10) / 3,0 s (0,05).
+5. **`AF_K_FF` = 1,0'ın her `AF_BETA`'da kalan iki etkisi:** (a) köşede drone hedefe ~1,2 m yaklaşıyor (hız kestirimi eski yönde; 2,5–3 s'de toparlıyor) ve köşede eğim ~10°'ye çıkıyor (`AF_K_FF` = 0'da 2,6°): drone hedefin 1,4 m/s'lik yön değişimini hemen izlediği için daha sert manevra yapıyor; (b) yürüme başladıktan ~0,7–1,9 s sonra toplam 0,7–1,2 s kırpma (0,17'de Grup 6 oturumunda 2,6 s): duran drone hem 1,4 m/s ileri besleme hem birikmiş mesafe hatası için hız istiyor, toplam 2 m/s'yi geçiyor (Grup 6'nın "yürürken kırpma yok" beklentisi `AF_K_FF` = 0 içindi).
+6. **Neden küçük `AF_BETA` titreşimi kesiyor? (açıklama, doğrulanmadı):** Grup 6 Bölüm 5'teki kapalı döngü: drone eğilirken ölçülen hedef yeri desimetre düzeyinde kayıyor → filtre bunu hız sanıyor → `AF_K_FF` ile bu sahte hız drone'un isteğine giriyor → drone yeniden eğiliyor. Her ölçümde hıza eklenen pay β / Δt (20 Hz'de 0,17 → artığın 3,4 katı, 0,10 → 2 katı, 0,05 → 1 katı); `AF_K_FF` bu sahte hızın ne kadarının isteğe girdiğini belirliyor. İkisini küçültmek döngüyü zayıflatıyor. Ölçülen sınırlar yalnızca çarpımla (`AF_K_FF` × β) açıklanmıyor: 0,75 × 0,17 ≈ 0,13 belirgin titreşti (std 0,32 m/s), 1,0 × 0,13 = 0,13 yalnızca hafif (0,06 m/s); yani **β'nın kendisi daha belirleyici** (β küçülünce filtre gürültüyü daha yavaş hıza çeviriyor). **Uyarı:** bu sınırlar SITL'deki gecikmeye (gönderici yaşı 50 ms + işlem) aittir; gerçek kamerada gecikme ve gürültü daha büyük olursa sınır muhtemelen daha küçük değerlere kayar (m13/m16'da gerçek gecikmeyle doğrulanmalı).
+
+### 12.5 "Optimum" için ölçüt seçenekleri (karar kullanıcının)
+
+| # | Ölçüt | Öne çıkan | Neden | Bedeli |
+|---|---|---|---|---|
+| Ö1 | **Geride kalma ≤ 0,5 m iken en az kıpırdama** (hız kestirimi std ≤ 0,05 m/s ve hedef durunca ≤ 0,05 m/s) | **`AF_K_FF` 1,0 / `AF_BETA` 0,10** (0,05 de sağlıyor) | Ölçütü yalnızca 1,0 / 0,10 ve 1,0 / 0,05 sağlıyor; kıpırdamaları eşit düzeyde (pitch std 0,06–0,13°, açısal hız 0,4–0,6°/s), ama 0,10'da filtre daha hızlı (0,56 s'ye karşı 0,82 s), yürüme başı ve köşe hatası daha küçük (1,30–1,34 / 1,48 m; köşe oturma 2,5 / 3,0 s) | Titreşim sınırına (0,10–0,13) yakın: güvenlik payı az; köşede ~10° eğim |
+| Ö2 | **`AF_K_FF` = 0 kadar sakin olup en az geride kalma** (hız kestirimi std ≤ 0,05 m/s, hedef durunca ≤ 0,05 m/s, pitch std ≤ 0,15°) | **`AF_K_FF` 1,0 / `AF_BETA` 0,10** ya da **0,05** (ikisi de 0 m geride) | Ö1 ile aynı sonuca varıyor: bu iki kombinasyon hız kestiriminde `AF_K_FF` = 0'dan bile sakin (std 0,02–0,03'e karşı 0,04), pitch std aynı düzeyde; açısal hız std ~2 katı (0,4–0,6°/s'ye karşı 0,24°/s) | Ö1 ile aynı |
+| Ö3 | **`AF_BETA` varsayılan (0,17) kalsın, yalnız `AF_K_FF` seçilsin;** belirgin titreşim olmadan en az geride kalma | **`AF_K_FF` 0,5** (daha sıkı istenirse 0,25) | 0,17'de titreşim 0,5 ile 0,75 arasında başlıyor; 0,5'te hız kestirimi std 0,10 m/s, hedef durunca 0,01 m/s, pitch std 0,09° (`AF_K_FF` = 0 ile aynı) | 1,36 m geride kalma sürer (2,8 m'nin yarısı); açısal hız std 1,66°/s (titreşimin eşiğinde); 0,25'te 2,09 m |
+| Ö4 | **Gerçek uçuş için en geniş güvenlik payı, geride kalma ≈ 0** (titreşim sınırından en uzak) | **`AF_K_FF` 1,0 / `AF_BETA` 0,05** | Sınırın (0,10–0,13) yarısında; gerçek kameranın gecikmesi sınırı aşağı çekse de titreşmeme olasılığı en yüksek; SITL'de pitch std en küçük (0,06°) | Filtre en yavaş (yetişme 0,8 s), köşe oturma 3,0 s, yürüme başı hatası 1,48 m; hedef ani dönüş yaparsa daha geç fark edilir |
+| Ö5 | **İlk uçuşlarda en az risk** (Bölüm 10 soru 2'deki eski öneri (a)) | **`AF_K_FF` 0** (varsayılan) | Hız kestirimi guidance'a hiç girmez; `AF_BETA` yalnızca kestirimi (log) ve ölçümler arası konum tahminini etkiler | Yürüyen hedefte 2,8 m geride kalma |
+
+**Claude'un önerisi:** Bu SITL sonuçlarına göre **Ö1 (`AF_K_FF` 1,0 / `AF_BETA` 0,10)** en dengeli kombinasyon: geride kalma yok, hız kestirimi ve drone `AF_K_FF` = 0 kadar sakin, iki ayrı oturumda aynı sonuç, filtre hızlı. Ama `module.yaml` varsayılanları için önerim iki adımlı:
+- **`AF_BETA` varsayılanı 0,10'a çekilebilir** (`AF_K_FF` = 0 iken etkisi çok küçük: hız guidance'a girmez; `AF_K_FF` açıldığında titreşim payı büyür; S6'da görülen drone hızlanırken "sahte hedef hızı" da (Bilgi 2) küçülür — doğrulanmadı).
+- **`AF_K_FF` varsayılanı 0 kalsın**, ilk yürüyen hedef uçuşlarında QGC'den 1,0'a açılsın (gerçek kamera gecikmesi ölçülmeden 1,0'ı varsayılan yapmak, SITL'deki sınırın gerçekte daha düşük olabileceği için riskli; titreşim görülürse `AF_BETA` 0,05'e indirilir, Ö4).
+- Hangi kombinasyon seçilirse seçilsin, duran hedefte uzak başlangıç (S6) aynı değerlerle bir kez koşulmalı: bu taramada yalnızca S7 koşuldu; `AF_K_FF` > 0 iken S6'daki "drone hızlanırken sahte hedef hızı" (Bilgi 2) ilk yaklaşmayı etkileyebilir (bu taramada ilk 20 → 15,5 m yaklaşmalar beş `AF_K_FF` değerinde de grafikte benzer görünüyor; ölçülmedi).
+
+### 12.6 Kullanıcıya soru
+
+**Soru 5 — `AF_K_FF` / `AF_BETA` varsayılanları ne olsun?** (Bölüm 12.5)
+- (a) İkisi de değişmesin (`AF_K_FF` 0, `AF_BETA` 0,17); tarama yalnız bilgi olarak kalsın.
+- (b) `AF_BETA` 0,10, `AF_K_FF` 0 kalsın (Claude'un önerisi); `AF_K_FF` uçuşta QGC'den açılır.
+- (c) `AF_BETA` 0,10, `AF_K_FF` 1,0 (Ö1/Ö2 varsayılan olur).
+- (d) `AF_BETA` 0,05, `AF_K_FF` 1,0 ya da 0 (Ö4).
+- (e) `AF_BETA` 0,17 kalsın, `AF_K_FF` 0,5 (Ö3).
+- (f) Başka bir ölçüt / ek koşu (ör. seçilen kombinasyonla S6, ya da 0,07 gibi ara değerler).
+
+Varsayılan değişirse: `module.yaml`, `log-sozlugu.md` parametre tablosu, spec Bölüm 10 ve rapor §4.6 aynı commit'te güncellenir; PX4 kodu değişmez ama parametre varsayılanı firmware'e girdiği için iki derleme yeniden yapılır (flash değişimi beklenmez). **Kullanıcı onayı olmadan hiçbiri yapılmadı.**
+
+### 12.7 Kontroller ve test yardımcıları
+
+| Kontrol | Sonuç |
+|---|---|
+| Loglar | `18_56_51.ulg`, `19_02_38.ulg`, `19_06_16.ulg` `~/Desktop/AUTO-FOLLOW LOG/`'da özgün adlarıyla (masaüstünde başka bir şeye dokunulmadı). Repoya log, grafik, CSV girmedi |
+| Süreçler | Her oturumdan sonra ve en sonda px4/gz/`sleep infinity` yok (`pgrep -x px4`, `pgrep -f "[g]z sim"`, `pgrep -f "[s]leep infinity"` boş); parametre dosyası (`rootfs/parameters*.bson`) silinmiş |
+| PX4 kodu, `module.yaml` | Değişmedi → derleme ve birim testi tekrarlanmadı |
+| `tez/pin/verify_pin.sh --worktree` | Beklenen kırmızı: yalnızca onay bekleyen 7 yoldaki dosyalar; bu işte yeni yol yok (yalnız spec klasöründe doküman değişti) |
+
+Test yardımcıları (repo dışı, `~/m15-sitl-araclari/`, BENIOKU tablosu güncellendi): `s7_tarama_ortak.py` (ortak oturum: kalkış, her (`AF_K_FF`, `AF_BETA`) için bir S7 bölümü), `S7tarama_kff.py`, `S7tarama_beta.py`, `S7tarama_ek.py` (`./run.sh <ad> 560`), `grup6-tarama/tarama_analiz.py` (bu bölümdeki ölçüler, karşılaştırma grafiği, CSV). SITL tuzakları sorun çıkarmadı.
