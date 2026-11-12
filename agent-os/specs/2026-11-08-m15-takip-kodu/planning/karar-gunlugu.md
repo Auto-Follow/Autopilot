@@ -538,3 +538,12 @@ Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10, rapor §5.
 - **2 — `AF_K_FF` = 1,0'da hedef hızı kestiriminin titreşimi** (S7: geride kalma 2,8 → 0,06 m, ama hız ±0,4 m/s, hedef durunca ~0,4 m/s; eğim 4–7 kat fazla kıpırdıyor). Seçenekler: (a) böyle kalsın, `AF_K_FF` varsayılanı 0, m13'e not · (b) SITL'de `AF_BETA` taraması · (c) daha küçük `AF_K_FF` · (d) gecikme telafisi (m13/m16). Öneri (a). `AF_ALPHA`/`AF_BETA` değiştirilmedi.
 - **3 — Burnun 30°'lik dönüşte 5–7° aşması** (S6; yerleşme 2,5 s). Seçenekler: (a) böyle kalsın, m13'e not · (b) `yawspeed` ileri beslemesi (PX4 kodu) · (c) `AF_YAWRATE_MAX` küçült. Öneri (a).
 - **4 — T2 ek denemesi.** `failure gps off` Gazebo Harmonic'te desteklenmiyor; `EKF2_GPS_CTRL` = 0 ile yapılan ek deneme (4 s'de Descend) T2 yerine kabul mü? Seçenekler: (a) kabul · (b) başka simülatörde dene · (c) m16'ya bırak. Öneri (a).
+
+### Görev grubu 6 sonrası sorular (2026-11-12)
+
+Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10.
+- **1 — S7'nin L yolu komut satırından açılsın mı?** (a) sabit kalsın · (b) yeni seçenek (öneri `--hedef-yol dur|L`). Kullanıcının sorusu: "kapalı çevrim için mi açık çevrim için mi?" → Cevap: yalnızca kapalı çevrim (açık çevrimde yön drone'a göre sabittir, hedefin konumu yoktur; yol anlamsız). **Cevap bekleniyor.**
+- **2 — `AF_K_FF` = 1,0'daki hız kestirimi titreşimi.** Seçenekler: (a) böyle kalsın, varsayılan 0 · (b) `AF_BETA` taraması · (c) daha küçük `AF_K_FF` · (d) gecikme telafisi. Öneri (a). Kullanıcı: **"b-c denenip en optimum değer bulunsun"** → **Karar:** SITL'de S7 (L yolu, 1,4 m/s) ile `AF_K_FF` ve `AF_BETA` taraması; sonuç tablosu ve öneri kullanıcıya sunulur, varsayılanlar kullanıcı onayı olmadan değişmez.
+- **3 — Burnun 5–7° aşması.** Kullanıcı: **"a (şimdilik)"** → **Karar:** böyle kalır; ileride yeniden bakılabilir.
+- **4 — T2 yerine `EKF2_GPS_CTRL` = 0 denemesi.** Kullanıcı: "bunu anlamadım" → sade anlatım verildi; **cevap bekleniyor**.
+- Kullanıcı son doğrulama adımına (implementation-verifier) **onay verdi** ("onay veriyorum son adımı yap"). Sıra: önce 2'deki tarama (sonucu dokümanları değiştirebilir), sonra son doğrulama.
