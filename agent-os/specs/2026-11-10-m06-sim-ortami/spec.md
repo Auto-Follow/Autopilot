@@ -632,6 +632,7 @@ flowchart LR
 | `senaryolar/*.yaml`, `senaryolar/takip_yuruyen.yaml` | değişir / yeni | `drone.mod` → `takip`; Follow Me 8/8 senaryosu |
 | `testler/test_*.py` | yeni | "Test Planı"ndaki birim testleri |
 | `tez/sim/ruff.toml` | değişir | `known-first-party`'ye yeni modüller |
+| `tez/sim/server.config`, `parametreler/sim.params`, `worlds/*.sdf`, `testler/test_manyetometre.py` | değişir / yeni (7. grup, iş A) | Gazebo manyetometre sistemi kapalı, PX4 `sensor_mag_sim` (`SENS_EN_MAGSIM 1`); dünyaların `<magnetic_field>`'ı PX4 WMM değeri; neden ve değerler testli |
 | `tez/sim/README.md` | değişir | (b) yolu, kurulum, kılavuz, AMD, QGC; `TEZ_` ön eki ve "kilit listesinde izinli iki dosya" ifadeleri düzeltilir |
 | `tez/env/model-requirements.txt` | yeni | `ultralytics` 8.4.174, `torch` 2.14.1+cpu, `torchvision` 0.29.2+cpu ve bütün bağımlılıklar sabit sürümle (3. grup) |
 | `tez/env/VERSIONS.md` | değişir | Model paketleri, video apt paketleri, `libfuse2t64`, AGPL notu, `DRI_PRIME` |
@@ -929,11 +930,19 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
    - Zemin düzlemi: D = ev noktasının D değeri + 0.227 m. Bu, base_link'in iniş takımına göre yüksekliğidir; gerçek araçta ölçülür.
    - Kare anındaki EKF pozu `time_boot_ms` ile interpole edilir.
    - Reddedilenler: `u_D < 0.25`, kenardan 8 px içindeki kutular.
-   - Bilinen sapma: simde EKF yaw değeri −4…−6° sabit kaymalı ölçüldü (Gazebo manyetik sapması −2.61°, PX4 WMM +3.41°). Bu 8 m'de ≈ 0.6–0.8 m yanal konum hatası demektir ve raporda görünür.
-     Uygulamada (6. grup, uçuşta, kayıt penceresi): EKF yaw − gerçek yaw ortalaması koşudan koşuya değişti: −2.35°,
-     +0.14°, +2.45°, +3.17°, +8.51° (anlık en çok 15.9°). Model kutusunun konum hatası gerçek pozla her koşuda
-     0.21–0.27 m, EKF pozuyla 0.25–1.13 m: farkın çoğu bu yaw kaymasıdır (`ekf_yaw_hatasi_*`,
-     `konum_hatasi_gercek_pozla_*`). Dünyanın manyetik alanını WMM'e eşitlemek karar bekliyor ("Açık Konular").
+   - Manyetik alan (7. grup, iş A, kullanıcı kararı 12.11 uygulandı): 6. grupta EKF yaw'ı koşudan koşuya −2.4°…+8.5°
+     kayıyordu ve konum hatasının çoğu bundandı. Sebep dünyanın `<magnetic_field>` değeri **değildi** (hiçbir sistem
+     onu kullanmıyor): gz-sim 8.15'in manyetometre sistemi alanı her adımda kendi 10°'lik tablolarından (+2.56° sapma)
+     hesaplayıp NED bileşenlerini ENU dünya çerçevesine yazıyor, PX4 v1.17.0'ın `gz_bridge`'i (x = −y, y = −x) bunu
+     doğu bileşeni aynalanmış olarak alıyordu: PX4'e gelen sapma **−2.57°**, EKF'nin WMM'den beklediği **+3.41°**
+     (fark 5.97°; yerde ve kalkışta sabit +6.0° yaw hatası). Düzeltme: `server.config` Gazebo manyetometre sistemini
+     yüklemez, `sim.params` `SENS_EN_MAGSIM 1` ile PX4'ün kendi `sensor_mag_sim`'ini açar (PX4'ün WMM alanı, gerçek konum
+     ve gerçek duruşla; beyaz gürültü 20/20/30 mG, PX4'te sabit). Dünyaların `<magnetic_field>`'ı PX4 WMM değerine
+     eşitlendi (belge amaçlı; testli). Ölçülen (`takip_yuruyen`, 3 + 3 koşu, kayıt penceresi): EKF yaw hatası ort.
+     −1.93 / +2.46 / +0.91° (en çok 11.3°) → −0.79 / −0.89 / +0.51° (en çok 2.7°); ölçülen sapma −2.6° → +3.2…+3.9°;
+     model kutusunun konum hatası 0.38 / 0.85 / 0.41 m → 0.37 / 0.40 / 0.24 m (kutunun kendi payı 0.23–0.26 m).
+     Manevralarda (takip başındaki yörünge dönüşü) iki durumda da ±4°'lik geçici bir EKF sapması kalıyor (bir koşuda
+     +7.3°); zaman kayması değil, EKF dinamiği (`implementation/gorev-grubu-07.md`, A).
 7. **Hedef seçimi:** ilk kilit ve kilit kaybından sonraki yeniden kilit hakemden yapılır (operatörün QGC'de hedefi seçmesinin yerine). Arada en yakın kutu izlenir. Asıl çözüm m11'dedir.
 8. **Kontrolcü arayüzü:** m15 modunun adı ("AUTO FOLLOW"?), modülün yeri ve parametre öneki belli değildir. Bu yüzden mod yalnız adıyla seçilir ve ad senaryodan verilir. Bunlar `tez_los` dışındaki bir girdiye geçerse (ör. `FOLLOW_TARGET` + harici mod) takip kaynağı listesi genişler.
 9. **Model:** v0.2'nin laptop CPU'sundaki davranışı, Hailo'daki davranışın ölçüsü değildir (m08).
@@ -1091,9 +1100,11 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
   6–10 m/s'lik bir hıza çevirip 3 s öngörür. `kalabalik_park`'ta (10 m / 10 m, model) 199 konumun 2'si yanlıştı, dron
   hedeften ≈ 35 m uzaklaştı ve bayat kestirimin gerisinde asılı kaldı. m06'ya geçici bir yer düzlemi sıçrama süzgeci
   (insan en çok 6 m/s) eklensin mi, yoksa stok davranış ölçülüp m11'e mi bırakılsın? Şimdilik eklenmedi.
-- **Simdeki manyetik alan (6. grupta ölçüldü, karar kullanıcı / Hüseyin):** dünyaların `<magnetic_field>` değeri
-  konumun WMM'iyle uyuşmuyor; EKF yaw'ı koşudan koşuya −2.4°…+8.5° kayıyor ve konum hatasının çoğu bundan. Alanı WMM
-  değerine eşitlemek bu sim yapıntısını kaldırır ama bütün koşuları (F0/F1 dahil) etkiler.
+- **Simdeki manyetik alan (6. grupta ölçüldü; karar 12.11 kullanıcı: gerçek konuma eşitlenecek; 7. grupta uygulandı):**
+  sebep `<magnetic_field>` değil, Gazebo Harmonic manyetometresinin PX4'e aynalanmış ulaşmasıydı ("Varsayımlar" 6).
+  Uygulanan yol (PX4'ün `sensor_mag_sim`'i, Gazebo manyetometre sistemi kapalı) kararın sözündeki "dünyanın alanını
+  eşitlemek"ten farklıdır; aynı amaca ulaşır, kullanıcının onayı bekleniyor. F0 ve F1 yeniden geçti. Kalan farklar:
+  gürültü gerçek bir pusuladan (≈ 3 mG) yüksek ve beyaz; motor/akım girişimi, kalibrasyon artığı ve yerel sapma yok.
 - **Model kaynağının koşudan koşuya değişmesi (6. grupta ölçüldü):** `takip_yuruyen`'in üç model koşusundan ikisinde dron
   kişiyi sonuna kadar izledi, birinde kişi köşede koşmaya başlayınca kaybetti (dron 14–19 m uzakta kaldı). Hedef
   dururken kestiricideki sahte hızlar yörünge açısını rastlantısal yapıyor. Ölçütler tek koşuyla değil, birkaç koşunun

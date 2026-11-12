@@ -291,6 +291,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 #### Görev Grubu 7: Ölçütler, ULog özeti ve rapor
 **Bağımlılık:** Görev Grubu 6 · **Emek:** ~0.5 gün
 
+- [x] 7.A Manyetik alan (kullanıcı kararı 12.11, 6. grubun açık konusu; ayrı commit): EKF yaw kaymasının sebebi doğrulandı (Gazebo Harmonic manyetometresi PX4'e doğu bileşeni aynalanmış ulaşıyordu: −2.57° yerine +3.41° beklenen sapma), Gazebo manyetometre sistemi kapatılıp PX4 `sensor_mag_sim` açıldı (`SENS_EN_MAGSIM 1`), dünyaların `<magnetic_field>`'ı PX4 WMM değerine eşitlendi; testler `test_manyetometre.py`; önce/sonra 3'er `takip_yuruyen` koşusu, F0 ve F1 yeniden geçti (`implementation/gorev-grubu-07.md`, A)
 - [ ] 7.0 Her koşunun aynı ölçütleri üretmesi
   - [ ] 7.1 Testleri yaz: `testler/test_olcum.py` (5–8 test, elle hazırlanmış tablolarla)
     - IoU; algılama/kaçırma oranı; seçim doğruluğu

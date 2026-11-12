@@ -10,7 +10,13 @@
       <real_time_update_rate>250</real_time_update_rate>
     </physics>
     <gravity>0 0 -9.8</gravity>
-    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <!-- Earth field at the <spherical_coordinates> below, from PX4's world magnetic model (src/lib/world_magnetic_model,
+         WMM-2020 tables dated 2024.41, what PX4's EKF expects there): declination +3.406 deg, inclination 63.157 deg,
+         48 239 nT; ENU [T] = H (sin D, cos D, -tan I), H = F cos I (testler/test_manyetometre.py recomputes it).
+         Nothing reads this value: server.config loads no Gazebo magnetometer system (gz-sim 8 would recompute the
+         field from its own tables every step anyway, with the east part mirrored for PX4's gz_bridge); the drone's
+         magnetometer is PX4's sensor_mag_sim, which uses the same WMM (sim.params SENS_EN_MAGSIM, m06 task group 7 A). -->
+    <magnetic_field>1.29398e-06 2.17433e-05 -4.30411e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
     <scene>
       <grid>false</grid>

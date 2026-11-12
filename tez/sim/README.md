@@ -30,6 +30,12 @@ ve başlangıç parametreleri `tez/sim/` altında durur.
 - Hangi 22.08 parametrelerinin neden alındığı: spec "Başlangıç parametreleri" ve
   `implementation/gorev-grubu-01.md`. Her açılışta `parameters*.bson` silinir; koşular birbirinin parametresini
   devralmaz.
+- **Manyetometre:** dronun pusulası PX4'ün kendi `sensor_mag_sim`'idir (`sim.params` `SENS_EN_MAGSIM 1`): PX4'ün dünya
+  manyetik modeli (WMM) alanını dronun gerçek konumu ve duruşuyla üretir; EKF'nin beklediği alanla aynıdır. Gazebo'nun
+  manyetometre sistemi `server.config`'te yüklenmez: Gazebo Harmonic'in alanı PX4'e doğu bileşeni aynalanmış ulaşıyor
+  (sapma −2.57°, beklenen +3.41°) ve EKF yaw'ını 6° kaydırıyordu (m06 Görev grubu 7, iş A;
+  `testler/test_manyetometre.py`). Açılışta birkaç saniye "Found 0 compass" uyarısı görülür (`sensor_mag_sim` ilk GPS
+  yer gerçeğini bekler); sonra kaybolur.
 
 ## Kurulum (bir kere)
 
@@ -326,7 +332,7 @@ okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modü
 | `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/worlds/cayir.sdf`, `cayir.yaml` | Dokulu çayır: zemin ve ağaçlar `cayir.yaml`'dan üretilir (`araclar/dunya.py`) |
-| `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız hali) |
+| `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız ve manyetometresiz hali) |
 | `tez/sim/kur.sh` | Git'e girmeyen dosyaları indirir (insan modeli, dokular, ağaçlar) ve dünyaları üretir |
 | `tez/sim/models/dokular/KAYNAK.md` | Zemin dokuları ve ağaçların kaynağı ve lisansı |
 | `tez/sim/models/insan/` | İnsan hedef (Gazebo Fuel Mingfei/actor, CC BY 4.0; kayma düzeltmeleri ve Gazebo hatası önlemi: `KAYNAK.md`) |

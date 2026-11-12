@@ -2,6 +2,13 @@
 
 SDLOG_PROFILE     163     # sim: SITL rcS default 131 + 32 (DEBUG_TOPICS) so that debug_vect (TEZ_LOS) is logged
 
+# Magnetometer: PX4's own simulated one (sensor_mag_sim) instead of Gazebo's, which server.config no longer loads.
+# Gazebo Harmonic's field reached PX4 with its east part mirrored (declination -2.57 deg measured, the EKF expects the
+# WMM's +3.41 deg): a 6 deg heading error on the ground and an EKF yaw wandering -4..+14 deg in flight, most of the
+# FOLLOW_TARGET position error of task group 6. sensor_mag_sim: PX4's WMM at the true position (gz_bridge ground
+# truth), rotated by the true attitude, white noise 20/20/30 mG (fixed in PX4). Spec "Varsayımlar" 6, task group 7 A.
+SENS_EN_MAGSIM    1       # sim: px4-rc.gzsim starts sensor_mag_sim; device id 197388 = rcS CAL_MAG0_ID (calibrated)
+
 # Return and geofence for the follow tests (chosen for the simulation, not copied from the real vehicle).
 # Tallest tree in tez/sim/worlds is ~11 m (pine, scale 2.4), follow heights go up to 15 m (camera report: 15/12).
 RTL_RETURN_ALT    30      # sim: clears trees up to ~20 m with a 10 m margin and every follow height (default 60)
