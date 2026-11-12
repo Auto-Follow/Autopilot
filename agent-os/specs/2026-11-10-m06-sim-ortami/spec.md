@@ -408,6 +408,10 @@
   - OpenCV `VideoWriter` kullanılmaz; pip'ten gelen OpenCV'de H.264 kodlayıcı yoktur.
   - `onizleme.py` de WebM yerine aynı kodlayıcıyla MP4 üretir.
 - ULog özeti genişler: PX4'e ulaşan `TEZ_LOS` (`debug_vect`) sayısı ve hızı, `follow_target` sayısı ve `vehicle_status` mod zaman çizelgesi.
+  Uygulamada (7. grup): `olcum.py` (iki ULog dosyası birlikte okunur); rapor ayrıca "Kontroller ve uyarılar", gruplu
+  ölçüm tabloları, "Takip zaman çizelgesi" (mesafe ve 3 m / kadraj sınırları, arkada kalma açısı hatası, hedef kadrajda)
+  ve `follow_me`'de "PX4 Follow Target" (PX4'ün varsaydığı rota ve yörünge açısı hedefi) grafiklerini, mod zaman
+  çizelgesini ve ayarları (model sha256, PX4 parametreleri) gösterir.
 
 **10. QGC'ye canlı video**
 - `araclar/goruntu_yayini.py` deney dalındaki dosyanın yeniden yazımıdır.
@@ -624,7 +628,8 @@ flowchart LR
 | `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv`. 6. grupta: `konumlama.py` (konum, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `takip.py`'ye konum + FOLLOW_TARGET, `follow_target.csv`; `px4_baglanti.py`'ye `FrameStream`, `FollowTargetSender`, `pose_hook`; `simulasyon.py`'ye `restart_logger` |
 | `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme |
-| `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma |
+| `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti) |
+| `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html` |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
 | `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler |
 | `araclar/senaryo.py`, `hedef.py`, `rapor.py`, `onizleme.py` | değişir | Yeni alanlar, bayraklar, süreçler, ölçütler, MP4. 3. grupta: `onizleme.capture()` / `people_of()` ayrıldı, `hedef.read_detection()` herkese açık oldu (`model_dene.py` kullanır) |
@@ -949,35 +954,96 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 
 ## Ölçüt Tanımları
 
-Ölçütler yalnız kayıt penceresinde hesaplanır (`zamanlama.baslama_s` → senaryo sonu). Hakem kutusu, segmentasyon kamerasında görünen piksellerin kutusudur: örtülü kısım dahil değildir ve 2 px'e yuvarlanmıştır. Eşleşme eşikleri ölçütün tanımının parçasıdır, başarı eşiği değildir.
+Ölçütler yalnız kayıt penceresinde hesaplanır (`zamanlama.baslama_s` → senaryo sonu); iki bilinçli istisna "takip başı"
+ölçütleridir (yörünge dönüşü ve PX4'ün rota varsayımı: mod seçiminden hedefin yürümeye başlamasına ve yürüyüşün ilk
+10 s'sine kadar). Hakem kutusu, segmentasyon kamerasında görünen piksellerin kutusudur: örtülü kısım dahil değildir ve
+2 px'e yuvarlanmıştır. Eşleşme eşikleri ölçütün tanımının parçasıdır, başarı eşiği değildir.
+
+Uygulamada (7. grup): bütün anahtarlar `araclar/olcum.py`'de (`olcum.KEYS`; `test_olcum.py` bu tabloyla karşılaştırır),
+F1 ölçütleri `rapor.metrics`'te hesaplanır; her koşunun `ozet.json` → `olcutler`'inde hepsi bulunur, uygulanmayan
+`null` (NaN) olur. 5. ve 6. gruptaki geçici hesaplar (`takip.Tracker.metrics`, `algilama.DetectionLog.metrics`,
+`senaryo.tracking_results`, `rapor.ulog_*`) `olcum.py`'ye taşındı; 4. gruptaki IoU kontrolü rapordaki "Kontroller"e
+(`rapor.checks`). Birden çok koşunun dağılımı (karar 4, 12.11): `araclar/toplu.py` (aşağıda "Çok koşu").
 
 | Grup | `ozet.json` anahtarı | Tanım |
 |---|---|---|
 | (a) Model | `algilama_orani`, `kacirma_orani` | Hedefin `gorunur` olduğu işlenmiş karelerde, hedefin hakem kutusuyla IoU ≥ 0.5 olan en az bir kutu bulunan kare oranı; kaçırma = 1 − bu |
-| | `iou_ort`, `iou_p50` | Bu karelerde en iyi eşleşen kutunun IoU'su |
+| | `iou_ort`, `iou_p50` | Hedefin bulunduğu (IoU ≥ 0.5) karelerde en iyi eşleşen kutunun IoU'su (uygulamada netleşti: bulunamayan kareler kaçırma oranına girer, buraya değil) |
 | | `secim_dogru_orani` | Hedef görünürken seçilen kutunun hedefle IoU ≥ 0.5 olduğu oran |
-| | `yanlis_kisi_orani`, `yanlis_kisi_ayni_kiyafet_orani` | Seçilen kutunun başka bir insanın hakem kutusuyla IoU'sunun ≥ 0.3 ve hedefinkinden büyük olduğu işlenmiş kare oranı; aynı kıyafetli kişiler ayrıca sayılır |
-| | `yanlis_pozitif_kare_basi`, `yeniden_kilit_sayisi` | Hiçbir insanın kutusuyla IoU ≥ 0.3 olmayan kutu sayısı / işlenen kare; hakemle yeniden kilit sayısı (uygulamada 5. grupta: kare zamanı pencerede olan yeniden kilitler; ayrıca `kilit_kaybi_sayisi`) |
-| | `secili_kare_orani` | Uygulamada eklendi (5. grup): bir kutunun hedef seçildiği işlenmiş kare oranı (`secim_dogru_orani` da 5. grupta geçici olarak hesaplanır) |
-| (b) LOS | `los_aci_hatasi_{ort,p50,p95,maks}_deg` | Gönderilen LOS ile aynı karenin `los_govde`'si arasındaki açı; yalnız seçilen kutu hedefken |
-| | `los_i_ii_fark_{ort,p50,p95,maks}_deg`, `los_i_ii_kare` | Uygulamada eklendi (5. grup, geçici; 7. grup `los_aci_hatasi`'na taşır): her kaynakta, LOS (i) ile aynı karenin LOS (ii)'si arasındaki açı; seçilen kutu hedefken (IoU ≥ 0.5) |
-| | `los_sapma_farki_{yatay,dikey}_ort_deg` | `kamera.deviation` bileşenlerindeki ortalama fark; sistematik kaymayı gösterir |
+| | `yanlis_kisi_orani`, `yanlis_kisi_ayni_kiyafet_orani` | Seçilen kutunun başka bir insanın hakem kutusuyla IoU'sunun ≥ 0.3 ve hedefinkinden büyük olduğu işlenmiş kare oranı; aynı kıyafetli kişiler (`kiyafet` hedefinkiyle aynı) ayrıca sayılır |
+| | `yanlis_pozitif_kare_basi` | Hiçbir insanın (hedef + diğerleri) hakem kutusuyla IoU ≥ 0.3 olmayan kutu sayısı / işlenen kare. Hakem kutusu yalnız görünen pikselleri kapsar: kısmen örtülü birinin kutusu da yanlış pozitif sayılabilir |
+| | `yeniden_kilit_sayisi`, `kilit_kaybi_sayisi` | Kare zamanı pencerede olan hakemle yeniden kilitler ve kilit kayıpları (10 işlenmiş karede eşleşme yok) |
+| | `secili_kare_orani` | Bir kutunun hedef seçildiği işlenmiş kare oranı |
+| (b) LOS | `los_aci_hatasi_{ort,p50,p95,maks}_deg`, `los_aci_kare` | Seçilen kutunun LOS (i)'si ile aynı karenin LOS (ii)'si (`los_govde`) arasındaki açı ve ölçülen kare sayısı; yalnız seçilen kutu hedefken (IoU ≥ 0.5) ve hedef görünürken. Her takip kaynağında ölçülür; `takip.los: model`'de bu gönderilen `TEZ_LOS`'tur (5. gruptaki geçici `los_i_ii_fark_*` buraya taşındı) |
+| | `los_sapma_farki_{yatay,dikey}_ort_deg` | `kamera.deviation` bileşenlerindeki ortalama fark (sağa ve aşağı +); sistematik kaymayı gösterir |
 | (c) Zaman | `model_ms_{ort,p95}`, `ulasma_ms_ort`, `bekleme_ms_ort` | 4. gereksinimdeki tanımlar |
-| | `uctan_uca_ms_{ort,p50,p95,maks}` | Gönderim − yakalama, sim ms. Uygulamada (5. grup): gönderim anı kayıt penceresinde olan gönderilmiş `TEZ_LOS`'lar (NaN dahil) |
-| | `uctan_uca_px4_ms_{ort,p95}`, `px4_varis_eksi_gonderim_ms_{ort,p95,min}`, `tez_los_px4_eslesen` | Uygulamada eklendi (5. grup): ULog'daki yönlü her `TEZ_LOS` kaydı, değerleri aynı ve zamanca en yakın (≤ 60 ms) gönderilenle eşlenir; PX4'ün varış damgası − yakalama. PX4'ün saati Gazebo saatinin birkaç ms gerisinde olabilir (lockstep) |
+| | `uctan_uca_ms_{ort,p50,p95,maks}` | Gönderim − yakalama, sim ms; gönderim anı kayıt penceresinde olan gönderilmiş `TEZ_LOS`'lar (NaN dahil) |
+| | `uctan_uca_px4_ms_{ort,p95}`, `px4_varis_eksi_gonderim_ms_{ort,p95,min}`, `tez_los_px4_eslesen` | ULog'daki yönlü her `TEZ_LOS` kaydı, değerleri aynı ve zamanca en yakın (≤ 60 ms) gönderilenle eşlenir; PX4'ün varış damgası − yakalama. PX4'ün saati Gazebo saatinin birkaç ms gerisinde olabilir (lockstep). ULog'da `debug_vect` hiç yoksa sayılar 0, süreler NaN |
 | | `islenen_kare_hizi_hz`, `atlanan_kare_orani`, `rtf_ort` | Sim saniyesi başına işlenen kare; 1 − işlenen/üretilen; ortalama RTF |
-| | `tez_los_px4_sayisi`, `tez_los_px4_hizi_hz` | ULog'daki `debug_vect` (`TEZ_LOS`) kayıtları; gönderilen sayıyla karşılaştırılır. Uygulamada 5. grupta öne alındı (pencere: PX4'ün varış damgası), `tez_los_px4_orani` = ULog / gönderilen; fark %5'i aşarsa olaylara yazılır |
-| | `tez_los_gonderilen`, `tez_los_hedef_yok`, `tez_los_gecersiz`, `tez_los_reddedilen`, `tez_los_hizi_hz` | Uygulamada eklendi (5. grup): gönderim anı pencerede olanlar; geçersiz ve reddedilenler (aynı / eski kare, hız sınırı) karenin yakalama anına göre |
-| (d) Takip | `yatay_mesafe_{min,ort,max}_m`, `kadrajda_kalma`, `gorunur_kalma`, `en_uzun_kayip_s`, `dron_yukseklik_ort_m` | Mevcut F1 ölçütleri (`rapor.metrics`) |
-| | `mod_korunma_orani` | İstenen modda geçen süre / kayıt penceresi |
+| | `tez_los_px4_sayisi`, `tez_los_px4_hizi_hz`, `tez_los_px4_orani` | ULog'daki `debug_vect` (`TEZ_LOS`) kayıtları (pencere: PX4'ün varış damgası); oran = ULog / gönderilen, fark %5'i aşarsa olaylara yazılır |
+| | `tez_los_gonderilen`, `tez_los_hedef_yok`, `tez_los_gecersiz`, `tez_los_reddedilen`, `tez_los_hizi_hz` | Gönderim anı pencerede olanlar; geçersiz ve reddedilenler (aynı / eski kare, hız sınırı) karenin yakalama anına göre |
+| (d) Takip | `yatay_mesafe_{min,ort,max}_m`, `kadrajda_kalma`, `gorunur_kalma`, `en_uzun_kayip_s`, `dron_yukseklik_ort_m` | Mevcut F1 ölçütleri (`rapor.metrics`). `kadrajda_kalma`: hedefin gövde merkezi (yerden 0.9 m) görüntünün içinde |
+| | `en_az_yatay_mesafe_m` | Dron–hedef yatay mesafenin en azı (`yatay_mesafe_min_m` ile aynı değer; anı `en_az_yatay_mesafe_t_s`) |
+| | `yakin_mesafe_3m_suresi_s`, `yakin_mesafe_3m_olay_sayisi` | Yatay mesafenin 3 m'nin altında kaldığı toplam süre ve kaç ayrı aralık olduğu. Karar 3 (12.11): her aralık olaylara ve rapora uyarı olarak yazılır (`ozet.json` → `yakin_mesafe.olaylar`: başlangıç, bitiş, en az ve anı). 3 m m01'e önerilecek bir ölçüm eşiğidir, başarı eşiği değildir |
+| | `kadraj_yakin_sinir_m`, `kadraj_yakin_sinir_alti_s` | Kameranın yerde gördüğü en yakın nokta (görüntünün alt kenarı, burun doğrultusunda): kamera yüksekliği / tan(45° + düşey FOV/2) + kameranın base_link'in 0.151 m önünde olması; düz uçuş, nominal montaj, `camera_info`'dan düşey FOV (simde ±20.07°). Her karenin kamera yüksekliğiyle hesaplanır; pencere ortalaması ve yatay mesafenin bu sınırın altında kaldığı süre (o sırada kişinin ayakları kadrajın altındadır). 8 m'de ≈ 3.87 m |
+| | `kadraj_uzak_sinir_m`, `kadraj_uzak_sinir_ustu_s` | Aynı, görüntünün üst kenarı: tan(45° − düşey FOV/2); 8 m'de ≈ 17.4 m; yatay mesafenin bunun üstünde kaldığı süre |
+| | `hedef_kadrajda_orani`, `ayak_kadrajda_orani` | Hakeme göre hedefin **tamamı** (ayak noktası ve başı, yerden 0 ve 1.75 m) görüntünün içinde olduğu kare oranı; yalnız ayakları (konum hesabının noktası). Örtülme sayılmaz (onu `gorunur_kalma` verir) |
+| | `arkada_kalma_hatasi_{ort,p95,maks}_deg`, `arkada_kalma_hatasi_90_ustu_s` | Hedef ≥ 0.5 m/s yürürken, hedeften drona yön ile hedefin hareket yönünün tersi ("arkası") arasındaki açının mutlak değeri (0° = tam arkasında, 90° = yanında, 180° = önünde); ortalama, p95, en çok; 90°'yi aştığı süre (dron hedefin önüne geçti, ör. köşede aşma). Takip kaynağı `yok` iken NaN (dron izlemez) |
+| | `baslangic_yorunge_donusu_deg`, `yuruyus_basi_yorunge_donusu_deg` | Dronun hedef etrafında döndüğü toplam açı (iki yöndeki dönüşler toplanır, 0.5 s'de bir örneklenir; hover titremesi birikmez): mod seçiminden hedefin yürümeye başlamasına kadar ve yürüyüşün ilk 10 s'si. İdeal bir takipçi duran kişinin etrafında dönmez. `yok` iken NaN |
+| | `mod_korunma_orani` | İstenen modda geçen süre / kayıt penceresi. Uygulamada: ULog'un (`ucus_once.ulg` + `ucus.ulg`) `vehicle_status.nav_state` zaman çizelgesinden, istenen nav_state = mod seçildiği an (heartbeat onayladığında) PX4'ün olduğu durum; ULog yoksa koşunun heartbeat kaydından (`ozet.json` → `mod`) |
 | | `geolocation_hatasi_{ort,p95}_m` | `follow_me`: gönderilen hedef konumu ile kare anındaki gerçek konum arasındaki yatay fark |
-| | `yatay_mesafe_hatasi_ort_m` | `follow_me`: \|yatay mesafe − `FLW_TGT_DST`\| |
-| | `geolocation_hatasi_{p50,maks}_m`, `geolocation_hatasi_gonderimde_{ort,p95}_m` | Uygulamada eklendi (6. grup, geçici; 7. grup `olcum.py`'ye taşır): gönderim anı pencerede olan FOLLOW_TARGET'lar; ikincisi gönderim anındaki gerçek konuma göre (hedef bu arada yürüdü) |
-| | `follow_target_gonderilen`, `follow_target_hizi_hz`, `follow_target_konumsuz_kare`, `follow_target_uctan_uca_ms_{ort,p95,maks}` | Uygulamada eklendi (6. grup): giden FOLLOW_TARGET sayısı ve hızı, konumu olmadığı için gitmeyen işlenmiş kare, yakalama → gönderim |
-| | `konum_hatasi_{ort,p50,p95,maks}_m`, `konum_kare`, `konum_hatasi_gercek_pozla_{ort,p95}_m`, `konum_durumlari` | Uygulamada eklendi (6. grup): her takip kaynağında seçilen kutunun düz zemin konumu − gerçek konum, kutu hedefken (IoU ≥ 0.5); aynı kutular dronun gerçek pozu ve Gazebo'nun montajıyla (kutunun payı); konum durumlarının sayısı |
-| | `ekf_yaw_hatasi_{ort,maks}_deg`, `ekf_yatay_konum_hatasi_{ort,maks}_m` | Uygulamada eklendi (6. grup): kare anındaki EKF pozu − Gazebo'nun gerçek pozu |
-| | `follow_target_px4_sayisi`, `px4_kestirim_hatasi_{ort,p50,p95,maks}_m`, `px4_kestirim_gecerli_orani`, `px4_kestirim_bayat_s` | Uygulamada eklendi (6. grup): ULog'daki `follow_target` (kaydedici 500 ms'de bir yazar) ve `follow_target_estimator`'ın kestirimi − aynı PX4 anındaki gerçek konum; bayat süre (3 s FOLLOW_TARGET yok) |
+| | `yatay_mesafe_hatasi_ort_m` | `follow_me`: \|yatay mesafe − `FLW_TGT_DST`\| (PX4'ten geri okunan değer) |
+| | `geolocation_hatasi_{p50,maks}_m`, `geolocation_hatasi_gonderimde_{ort,p95}_m` | Gönderim anı pencerede olan FOLLOW_TARGET'lar; ikincisi gönderim anındaki gerçek konuma göre (hedef bu arada yürüdü) |
+| | `follow_target_gonderilen`, `follow_target_hizi_hz`, `follow_target_konumsuz_kare`, `follow_target_uctan_uca_ms_{ort,p95,maks}` | Giden FOLLOW_TARGET sayısı ve hızı, konumu olmadığı için gitmeyen işlenmiş kare, yakalama → gönderim |
+| | `konum_hatasi_{ort,p50,p95,maks}_m`, `konum_kare`, `konum_hatasi_gercek_pozla_{ort,p95}_m`, `konum_durumlari` | Her takip kaynağında seçilen kutunun düz zemin konumu − gerçek konum, kutu hedefken (IoU ≥ 0.5); aynı kutular dronun gerçek pozu ve Gazebo'nun montajıyla (kutunun payı); konum durumlarının sayısı |
+| | `ekf_yaw_hatasi_{ort,maks}_deg`, `ekf_yatay_konum_hatasi_{ort,maks}_m` | Model karelerinin anındaki EKF pozu − Gazebo'nun gerçek pozu |
+| | `ekf_yaw_hatasi_ulog_{ort,maks}_deg`, `mag_sapma_olculen_deg` | 7. grupta eklendi (iş A): ULog'daki her `vehicle_attitude` örneği − `vehicle_attitude_groundtruth` (modelden bağımsız); manyetometrenin ölçtüğü alanın sapması (`sensor_mag`, gerçek duruşla NED'e çevrilip ortanca; PX4 WMM'i dünyanın kökünde +3.41°) |
+| | `follow_target_px4_sayisi`, `px4_kestirim_hatasi_{ort,p50,p95,maks}_m`, `px4_kestirim_gecerli_orani`, `px4_kestirim_bayat_s` | ULog'daki `follow_target` (kaydedici 500 ms'de bir yazar) ve `follow_target_estimator`'ın kestirimi − aynı PX4 anındaki gerçek konum; bayat süre (3 s FOLLOW_TARGET yok) |
+| | `px4_rota_kuzey_varsayimi_s`, `px4_rota_hatasi_{ort,p95}_deg` | ULog `follow_target_status` (400 ms): PX4'ün hedef rotasının ilk kaydından itibaren başlangıç değeri 0'da (kuzey) kaldığı süre; PX4'ün rotası − hedefin gerçek rotası, hedef ≥ 1 m/s iken (PX4 rotayı yalnız bu hızın üstünde günceller) |
+| | `px4_yorunge_donusu_baslangic_deg`, `px4_yorunge_donusu_yuruyus_basi_deg` | PX4'ün yörünge açısı hedefinin (`orbit_angle_setpoint`) toplam dönüşü: ilk kaydından hedefin yürümeye başlamasına kadar ve yürüyüşün ilk 10 s'si (dronun gerçek dönüşüyle karşılaştırmak için) |
 | (e) Video | `kosu.mp4` | 9. gereksinim; her koşuda aynı düzen |
+
+**Çok koşu (karar 4, 12.11; 7. grupta eklendi):** `araclar/toplu.py --senaryo <ad> --tekrar N [-- senaryo.py
+bayrakları]` aynı senaryoyu N kez, her birini ayrı bir `senaryo.py` sürecinde (`--ekransiz`) sırayla koşar ve
+`sonuclar/<tarih>_<ad>_x<N>/` altına koşu klasörlerini (`kosu_<i>/`), `toplu.json` (her ölçüt için her koşunun değeri,
+`ort`, `en_az`, `en_cok`, `n` = değeri olan koşu), `toplu.csv` ve `toplu.html`'i (ana ölçüt tablosu ve her koşunun
+noktası) yazar. Başlayamayan bir koşu (ozet yok ya da dron hazır olmadan TAMAMLANMADI: ör. PX4'ten heartbeat gelmedi)
+sonuç değil altyapı hatasıdır: koşu başına en çok `--yeniden-dene` (2) kez yeniden denenir, her deneme listelenir.
+Uçup sonra kalan bir koşu (KALDI ya da kalkıştan sonra TAMAMLANMADI) sonuçtur, sayılır. `--ozet <klasör>...` yalnız var
+olan koşuları özetler. 7. ve 9. gruplarda her senaryo 3 kez koşulur.
+
+### PX4 stok Follow Target davranışı (7. grupta kaynaktan doğrulandı ve ölçüldü)
+
+Bu bölüm simin değil, **PX4 v1.17.0'ın stok Follow Me modunun** özelliklerini anlatır: gerçek dronda da aynısı olur.
+Takımın asıl takip algoritması Yusuf Kurt'un m15'idir; sim bunu (ve stok modu) aynı ölçütlerle ölçmek için kuruldu.
+Kaynak: `src/modules/flight_mode_manager/tasks/AutoFollowTarget/` (yalnız okundu).
+
+1. **Başlangıçta kuzey varsayımı:** `FlightTaskAutoFollowTarget.hpp:284` `_target_course_rad{0.0f}` ve `:286`
+   `_orbit_angle_setpoint_rad{0.0f}`; görev her mod seçiminde yeniden kurulur ve `activate()` yörünge yörüngesini 0'a
+   sıfırlar (`.cpp:87`). Yörünge açısı hedeften drona yöndür (NED, 0 = kuzey); istenen konum hedef + `FLW_TGT_DST`
+   · (cos, sin) yörünge açısı (`.cpp:240`). Yani mod açılınca PX4 hedefin **kuzeye** gittiğini varsayar, ilk hedef
+   nokta hedefin **kuzeyidir** ve dron oradan "arkaya" = rota + `FLW_TGT_FA` (180°) = hedefin **güneyine** döner.
+2. **Rota yalnız hızlıyken güncellenir:** `.cpp:191–192` + `TARGET_SPEED_DEADZONE_FOR_ORIENTATION_TRACKING = 1.0`
+   (`.hpp:94`): süzülmüş ve süzülmemiş hedef hızı ≥ 1 m/s değilse rota eski değerinde kalır. Kişi dururken rota 0'da
+   (kuzey) kalır; kişi doğuya yürüyünce rota doğu olur ve dron bu kez batıya (yeni "arka") döner. Takip başındaki
+   **iki gereksiz yörünge dönüşü** (kuzey → güney, sonra güney → batı) buradan gelir. Konum titreşimi kestiricide ≈ 1
+   m/s'lik sahte hızlar üretirse rota duran kişide de rastlantısal oynar (6. grup).
+3. **Dönüş hızı sınırlı:** `ORBIT_TRAJECTORY_MAX_ACCELERATION 2` m/s², `ORBIT_TRAJECTORY_MAX_JERK 4` m/s³
+   (`.hpp:99–102`), en çok `FLW_TGT_MAX_VEL` (5 m/s) teğetsel hız; 8 m'de 0.25 rad/s², 0.625 rad/s: 180°'lik bir dönüş
+   ≈ 7 s sürer.
+4. **Kestirici ve süzgeç gecikmesi:** `TargetEstimator` konumu en sık 500 ms'de bir kaynaştırır
+   (`TargetEstimator.hpp:60`, `FLW_TGT_RS` 0.1), görev bunun üstüne doğal frekansı 1 rad/s olan ikinci dereceden bir
+   süzgeç koyar (`.hpp:82`). Köşelerde PX4 düz gidiş öngörür, dron hedefi **aşar**, kişi kadrajdan çıkabilir ve kilit
+   düşebilir (`arkada_kalma_hatasi_90_ustu_s`).
+5. **Yakın geçiş ve kadraj:** 45° kamera 8 m'de yeri ≈ 3.87 m'den itibaren görür (`kadraj_yakin_sinir_m`); dron
+   kişiye bundan çok yaklaşırsa ayakları kadrajın altından çıkar (konum hesabının noktası), 3 m'nin altı ayrıca uyarıdır.
+
+Ölçülen hâli (`takip_yuruyen`, 3'er koşu; `implementation/gorev-grubu-07.md`, B): "mükemmel algılayıcı"yla
+(`--los hakem`, konum gürültüsüz) PX4 rotayı kişi yürüyene kadar 37 s kuzey varsaydı, dron duran kişinin etrafında
+194–195°, yürümeye başlayınca 97° döndü, arkada kalma açısı hatası ort. 47–48° (p95 100–104°), en az mesafe 3.06–3.19 m.
+Model kutusuyla rota 2 s sonra gürültüyle oynamaya başladı, dron 629–699° ileri geri salındı, arkada kalma hatası ort.
+55–69° (p95 119–157°), üç koşunun ikisinde 3 m'nin altı (en az 1.66 m), birinde kişi kaybedildi. Stok parametrelerin
+(`FLW_TGT_RS`, `FLW_TGT_MAX_VEL`, `FLW_TGT_FA`) bu davranışa etkisi 9. grupta karşılaştırılır (`tasks.md` 9.8).
 
 ## Test Planı
 
@@ -992,7 +1058,8 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 | `test_mesajlar.py` | `DEBUG_VECT` paketleme/çözme (ad, birim norm, NaN = hedef yok); `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities`); doğrulamanın geçersiz vektörü durdurması. 5. grupta ayrıca: akış kuralları (aynı / eski kare, hız sınırı, bağlantı yok), tek gönderim kilidi, `AVAILABLE_MODES` adları ve stok mod listesinin PX4 kaynağıyla aynılığı |
 | `test_gecikme.py` | Sıra korunması, ek gecikme, tohumlu titreşim, saat ofseti/kayması (5. grupta: sıra korunması ve `serbest`; geri kalanı 12. grupta) |
 | `test_kusurlar.py` | Boş ayarda karenin bit bit aynı kalması; Faz B alanının ve bilinmeyen alanın reddi |
-| `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla) |
+| `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw |
+| `test_toplu.py` (7. grup) | Çok koşunun dağılımı (ort / en az / en çok, NaN'lı koşu), yalnız başlayamayan koşunun yeniden denenmesi, `senaryo.py` komutu, özet dosyaları |
 | `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart` |
 | `test_hedef.py` (eklenir) | Yeni senaryo alanları; hatanın alan adıyla verilmesi; `tez_los`'ta `mod_adi` zorunluluğu |
 
@@ -1091,15 +1158,17 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - **Yusuf Ortatepe'den:** "Model dosyası" bölümündeki üst verinin teyidi; önerdiği `conf`/`iou`; eğitimde kullandığı `ultralytics`/`torch` sürümleri; veri setinde eğik açıdan (dron) görüntü olup olmadığı; v0.2'nin doğru seçim olup olmadığı. Soru listesi repo dışında (`~/Desktop/Follow/Yusuf_Ortatepe_model_sorulari.txt`).
 - **Yusuf Kurt / Yusuf Algan'dan:** mod adı, modülün yeri (harici `tez/px4` mi, ağaç içi + kilit listesi mi), parametre öneki, `TEZ_LOS` biçiminin uygunluğu, `time_usec` ihtiyacı (PX4 bu alanı düşürüyor).
 - **Ortak spec'ler** (m03/m04/m05) yazılınca "Varsayımlar" ve ilgili kod güncellenir: `TEZ_LOS` biçimi, frame, zaman damgası, "hedef yok".
-- **Gerçek araçta `follow_target*` konularının kaydı (6. grupta bulundu, karar Hüseyin / Kurt ile, m17/m22/m25):**
+- **Gerçek araçta `follow_target*` konularının kaydı (6. grupta bulundu, karar Hüseyin / Kurt ile, m17/m22/m25; 12.11
+  kullanıcı: şimdi çözülmez, açık konu olarak kalır):**
   PX4 v1.17.0 bu konuları stok ayarla kaydetmez (6. madde "Kaydedici bulgusu"). Seçenekler: SD karta tam bir
   `etc/logging/logger_topics.txt` (profili tümüyle değiştirir), uçuşta kaydediciyi yeniden başlatmak (simdeki çözüm)
   ya da kayıtsız uçmak.
-- **Yanlış kişiye atlama ve konum sıçraması (6. grupta ölçüldü, karar kullanıcı / Ortatepe m11, Kurt m15):** geçici
+- **Yanlış kişiye atlama ve konum sıçraması (6. grupta ölçüldü; karar 12.11 kullanıcı: m06'ya süzgeç eklenmez, asıl iş
+  Ortatepe'nin m11'i; sim atlamaları ölçüp raporlar: `yanlis_kisi_orani`, `kilit_kaybi_sayisi`, `px4_kestirim_*`):** geçici
   seçim tek bir karede başka bir kişiye atlayınca o konum da `FOLLOW_TARGET` olarak gider; PX4'ün kestiricisi bunu
   6–10 m/s'lik bir hıza çevirip 3 s öngörür. `kalabalik_park`'ta (10 m / 10 m, model) 199 konumun 2'si yanlıştı, dron
   hedeften ≈ 35 m uzaklaştı ve bayat kestirimin gerisinde asılı kaldı. m06'ya geçici bir yer düzlemi sıçrama süzgeci
-  (insan en çok 6 m/s) eklensin mi, yoksa stok davranış ölçülüp m11'e mi bırakılsın? Şimdilik eklenmedi.
+  (insan en çok 6 m/s) eklensin mi, yoksa stok davranış ölçülüp m11'e mi bırakılsın? Karar: eklenmedi.
 - **Simdeki manyetik alan (6. grupta ölçüldü; karar 12.11 kullanıcı: gerçek konuma eşitlenecek; 7. grupta uygulandı):**
   sebep `<magnetic_field>` değil, Gazebo Harmonic manyetometresinin PX4'e aynalanmış ulaşmasıydı ("Varsayımlar" 6).
   Uygulanan yol (PX4'ün `sensor_mag_sim`'i, Gazebo manyetometre sistemi kapalı) kararın sözündeki "dünyanın alanını
@@ -1108,9 +1177,18 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - **Model kaynağının koşudan koşuya değişmesi (6. grupta ölçüldü):** `takip_yuruyen`'in üç model koşusundan ikisinde dron
   kişiyi sonuna kadar izledi, birinde kişi köşede koşmaya başlayınca kaybetti (dron 14–19 m uzakta kaldı). Hedef
   dururken kestiricideki sahte hızlar yörünge açısını rastlantısal yapıyor. Ölçütler tek koşuyla değil, birkaç koşunun
-  dağılımıyla verilmeli (7./9. grup, m01).
+  dağılımıyla verilmeli (7./9. grup, m01). **Karar (12.11, kullanıcı):** 7. ve 9. gruplarda her senaryo 3 kez koşulur,
+  sonuç dağılımıyla verilir; araç `toplu.py` ("Ölçüt Tanımları", "Çok koşu").
 - **En az yatay mesafe (6. grupta ölçüldü, m01):** model kaynağıyla hedef geri dönerken dron kişinin 0.76 m yakınına
   (8 m yükseklikte, tepesine) geldi; hakem kaynağıyla en az 2.94 m. Başarı ölçütlerinde bir eşik gerekebilir.
+  **Karar (12.11, kullanıcı):** raporda "dron–hedef yatay mesafe 3 m altına indi" uyarısı ve olayı (7. grupta
+  uygulandı: `yakin_mesafe_3m_*`, `rapor.checks`); başarı eşiği değil, ölçüm. Kesin eşik m01'e (Hüseyin'e) önerilecek.
+- **PX4 stok Follow Target'ın takip başı ve köşe davranışı (7. grupta kaynaktan doğrulandı ve ölçüldü):** "Ölçüt
+  Tanımları" altındaki "PX4 stok Follow Target davranışı". Stok parametrelerle iyileşip iyileşmediği 9. grupta ölçülür
+  (`tasks.md` 9.8); asıl takip algoritması m15'tir (Kurt).
+- **Seyrek açılış hatası (7. grupta görüldü):** bir koşuda PX4 açıldığı hâlde bağlantımıza 60 s heartbeat gelmedi (PX4
+  tarafında "partner IP" yok); nedeni bulunamadı. `toplu.py` böyle bir koşuyu altyapı hatası sayıp yeniden dener ve
+  listeler. Ayrıca bu durumda rapor yazılmadan çıkan bir hata vardı (ULog'da `debug_vect` yokken); düzeltildi, testli.
 - **Model bu açıdan kişiyi sık kaçırıyor (6. grupta ölçüldü, m08 / Ortatepe):** `takip_yuruyen`'de (8 m / 45°) hedef
   açıkça görünürken işlenen karelerin %26–34'ünde hiç kutu yok (dört koşu).
 - **Uygulamada sabitlenecek sürümler (TBD):** GStreamer, `python3-gi` ve `ffmpeg` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta sabitlendi.)

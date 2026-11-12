@@ -131,7 +131,7 @@ def test_los_of_a_box_round_the_true_centre_matches_the_referee(
     los = takip.los_of_box(camera, box(u - 31, v - 97, u + 31, v + 97))
     truth = np.array([row["los_govde_x"], row["los_govde_y"], row["los_govde_z"]])
     assert np.linalg.norm(los) == pytest.approx(1.0, abs=1e-12)
-    assert takip.angle_deg(los, truth) < 0.01
+    assert kamera.angle_deg(los, truth) < 0.01
 
 
 class FakeLink:

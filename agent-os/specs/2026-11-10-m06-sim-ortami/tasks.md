@@ -292,17 +292,21 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 **Bağımlılık:** Görev Grubu 6 · **Emek:** ~0.5 gün
 
 - [x] 7.A Manyetik alan (kullanıcı kararı 12.11, 6. grubun açık konusu; ayrı commit): EKF yaw kaymasının sebebi doğrulandı (Gazebo Harmonic manyetometresi PX4'e doğu bileşeni aynalanmış ulaşıyordu: −2.57° yerine +3.41° beklenen sapma), Gazebo manyetometre sistemi kapatılıp PX4 `sensor_mag_sim` açıldı (`SENS_EN_MAGSIM 1`), dünyaların `<magnetic_field>`'ı PX4 WMM değerine eşitlendi; testler `test_manyetometre.py`; önce/sonra 3'er `takip_yuruyen` koşusu, F0 ve F1 yeniden geçti (`implementation/gorev-grubu-07.md`, A)
-- [ ] 7.0 Her koşunun aynı ölçütleri üretmesi
-  - [ ] 7.1 Testleri yaz: `testler/test_olcum.py` (5–8 test, elle hazırlanmış tablolarla)
+- [x] 7.0 Her koşunun aynı ölçütleri üretmesi
+  - [x] 7.1 Testleri yaz: `testler/test_olcum.py` (5–8 test, elle hazırlanmış tablolarla)
     - IoU; algılama/kaçırma oranı; seçim doğruluğu
     - Yanlış kişi (aynı kıyafetli kişi ayrıca); yanlış pozitif kare başı
     - LOS açı hatası ve yatay/dikey sapma farkı
     - Gecikme istatistikleri (ort/p50/p95/maks); atlanan kare oranı
-  - [ ] 7.2 `araclar/olcum.py`: spec "Ölçüt Tanımları"ndaki bütün anahtarlar; yalnız kayıt penceresinde; uygulanamayan ölçüt NaN (ör. `yok`'ta `geolocation_hatasi`)
-  - [ ] 7.3 ULog özeti: `TEZ_LOS` (`debug_vect`) sayısı ve hızı, `follow_target` sayısı, `vehicle_status` mod zaman çizelgesi, `mod_korunma_orani`
+    - (Uygulamada: `test_olcum.py` 16 test (`senaryo.py`'nin her takip kaynağındaki özet satırları (B koşularında bulunan hata), spec tablosuyla anahtar karşılaştırması, PX4 nav_state adları, model, LOS, akış, kareler, mesafe/kadraj/arkada kalma/yörünge, hover titremesi, `follow_target_status`, mod zaman çizelgesi, ULog'da `debug_vect` yokken bütün anahtarlar (6. gruptan kalan hata), ULog sayımları, EKF yaw ve ölçülen sapma, `measure`'ın bütün anahtarları yazması); `test_rapor.py` +2 (kontroller ve 3 m uyarısı; ozet.json'da bütün anahtarlar, yeni HTML bölümleri), 2 ULog testi `test_olcum.py`'ye taşındı; `test_toplu.py` 4 (çok koşu); `test_algilama.py` ölçüt kısmı `test_olcum.py`'ye taşındı)
+  - [x] 7.2 `araclar/olcum.py`: spec "Ölçüt Tanımları"ndaki bütün anahtarlar; yalnız kayıt penceresinde; uygulanamayan ölçüt NaN (ör. `yok`'ta `geolocation_hatasi`)
+    (Uygulamada: `olcum.measure(RunData)`; 5./6. gruptaki geçici ölçütler (`takip.Tracker.metrics`, `algilama.DetectionLog.metrics`, `senaryo.tracking_results`, `rapor.ulog_*`) buraya taşındı. Kullanıcının 12.11 isteğiyle eklenenler: en az yatay mesafe, 3 m altı süre ve olayları (karar 3), kameranın yakın/uzak görüş sınırı ve dışında kalınan süre, hedefin tamamı/ayakları kadrajda, arkada kalma açısı hatası, takip başı ve yürüyüş başı yörünge dönüşü, PX4'ün `follow_target_status` özeti (rota kuzey varsayımı, rota hatası, yörünge hedefinin dönüşü), ULog'dan EKF yaw hatası ve ölçülen manyetik sapma.)
+  - [x] 7.3 ULog özeti: `TEZ_LOS` (`debug_vect`) sayısı ve hızı, `follow_target` sayısı, `vehicle_status` mod zaman çizelgesi, `mod_korunma_orani`
     (5. grupta öne alındı: `rapor.ulog_tez_los` → `tez_los_px4_sayisi`, `tez_los_px4_hizi_hz`, değerle eşleştirilen `uctan_uca_px4_ms_*`; `takip.Tracker.metrics` geçici olarak `uctan_uca_ms_*`, `tez_los_*`, `yeniden_kilit_sayisi`, `secim_dogru_orani`, `los_i_ii_fark_*` verir: `olcum.py`'ye taşınır.)
-  - [ ] 7.4 `rapor.py`: `rapor.write` yeni bölümleri ekler (model, LOS, zaman, takip, `ayarlar`, model sha256, RTF uyarısı); `metrics`, `_visibility`, `plot_map` korunur. 4. gruptaki geçici IoU kontrolü buraya taşınır.
-  - [ ] 7.5 Doğrulama
+    (Uygulamada: `olcum.Topics` iki ULog dosyasını (`ucus_once.ulg` + `ucus.ulg`) birleştirir; `vehicle_status.nav_state` zaman çizelgesi `ozet.json` → `mod.ulog`; `mod_korunma_orani` istenen nav_state'e göre (mod seçildiği an PX4'ün durumu), ULog yoksa koşunun heartbeat kaydından.)
+  - [x] 7.4 `rapor.py`: `rapor.write` yeni bölümleri ekler (model, LOS, zaman, takip, `ayarlar`, model sha256, RTF uyarısı); `metrics`, `_visibility`, `plot_map` korunur. 4. gruptaki geçici IoU kontrolü buraya taşınır.
+    (Uygulamada: "Kontroller ve uyarılar" (`rapor.checks`: model görüntüde çalışıyor (IoU), 3 m uyarısı, kameranın yakın sınırı, mod, RTF; `ozet.json` → `kontroller`), gruplu ölçüm tabloları, "Takip zaman çizelgesi" ve "PX4 Follow Target" grafikleri, mod zaman çizelgesi, "Ayarlar" (takip, model dosyası ve sha256, PX4 başlangıç parametreleri: istenen / PX4'ten okunan / kaynak).)
+  - [x] 7.5 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_olcum.py tez/sim/testler/test_rapor.py -q
@@ -313,6 +317,9 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
     ```
 
     `ozet.json`'da "Ölçüt Tanımları"ndaki bütün anahtarlar vardır (değer NaN olabilir); `rapor.html` tarayıcıda açılır ve yeni bölümleri gösterir.
+
+    Uygulamada (karar 4): `$P $S/toplu.py --senaryo takip_yuruyen --tekrar 3` ve `$P $S/toplu.py --senaryo kalabalik_park --tekrar 3`; ardından `$S/f1_kabul.sh`. Sonuçlar `implementation/gorev-grubu-07.md` (B) ve `kabul-kosulari.md`.
+  - [x] 7.6 Çok koşu (karar 4, 12.11): `araclar/toplu.py --senaryo <ad> --tekrar N [-- senaryo.py bayrakları]`: her koşu ayrı süreçte, koşu bazında ve toplu (ort / en az / en çok) `toplu.json`, `toplu.csv`, `toplu.html`; başlayamayan koşu yeniden denenir ve listelenir; `--ozet` var olan koşuları özetler
 
 **Kabul Ölçütleri:**
 - 7.1'deki testler geçer; ölçütler elle hesaplanan değerlerle aynıdır
@@ -360,6 +367,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
   - [ ] 9.1 Test yazılmaz (yeni kod yok). Bu grupta bulunan her hata için önce o hatayı yakalayan bir birim testi eklenir (test standardı).
   - [ ] 9.2 Koşu 1: `takip_yuruyen`, v0.2 (CPU), stok Follow Me, kapalı döngü
   - [ ] 9.3 Koşu 2: `kalabalik_park`, `yok`, model ölçütleri (karıştırma, örtülme)
+  - [ ] 9.2/9.3 için (karar 4, 12.11): her senaryo **3 kez** koşulur (`toplu.py --tekrar 3`); sonuçlar koşu bazında ve dağılımıyla (ort / en az / en çok) verilir, tek koşuyla sonuç söylenmez
   - [ ] 9.4 İki koşu da `rapor.html`, `ozet.json`, `kosu.mp4` üretir; `TEZ_LOS` ULog'da görünür (`tez_los_px4_sayisi`)
   - [ ] 9.5 Görsel kontrol (Ahmet, VLC): spec "Görsel kontrol" listesinin tamamı; kalabalıkta yanlış kişiye geçişler videoda ve `yanlis_kisi_orani`'nda aynı anda görülür. Gösterilen sorunlar aynı sahnede yeniden koşularak doğrulanır.
   - [ ] 9.6 Belgeler: `implementation/kabul-kosulari.md`'ye iki koşunun özet sayıları (model, LOS, zaman, takip ölçütleri; RTF; model sha256) ve commit; karşılaşılan sorunlar `implementation/gorev-grubu-09.md`'ye. Spec'teki "Yaklaşma mesafesi", "Kamera parametreleri", "İnsan hedefi" ve "Varsayımlar" bölümlerinin güncel olduğu kontrol edilir (issue #7 "bitti" listesi).
@@ -377,6 +385,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
     ```
 
     PR (taslak ya da hazır) yalnız kullanıcı isteyince açılır. Zorunlu CI: `verify-pin`, `derleme-sitl`, `derleme-fmu-v6c`.
+  - [ ] 9.8 Stok Follow Me parametre karşılaştırması (kullanıcı isteği 12.11; 7. grupta ölçülen stok davranış: takip başında gereksiz yörünge dönüşleri, köşede aşma, yakın geçiş; spec "PX4 stok Follow Target davranışı"): `takip_yuruyen`'de her ayar 3 koşu (`toplu.py --tekrar 3 -- --param ...`), aynı ölçütlerle (`arkada_kalma_hatasi_*`, `baslangic_yorunge_donusu_deg`, `yuruyus_basi_yorunge_donusu_deg`, `px4_rota_*`, `en_az_yatay_mesafe_m`, `yakin_mesafe_3m_suresi_s`, `kadraj_yakin_sinir_alti_s`, `hedef_kadrajda_orani`, `kilit_kaybi_sayisi`, `px4_kestirim_hatasi_*`). Adaylar: `FLW_TGT_RS` (0.1 varsayılan; 0.05, 0.3, 0.5), `FLW_TGT_MAX_VEL` (5; 3, 8), `FLW_TGT_FA` (180, değişmez; yalnız bilgi). Model kaynağı ve "mükemmel algılayıcı" (`--los hakem`) ayrı ayrı. Amaç: stok modun ayarla ne kadar düzeldiğini ölçmek ve m15'e (Kurt) karşılaştırma tabanı vermek; m06'da varsayılan parametreler değişmez
 
 **Kabul Ölçütleri:**
 - "En az demo (15.11)" listesindeki her madde sağlanır ve sayılarıyla `implementation/`'a yazılır

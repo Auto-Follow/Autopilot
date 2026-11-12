@@ -62,6 +62,12 @@ def camera_to_body(pitch_down: float) -> np.ndarray:
     return rot_y(-pitch_down) @ OPTICAL_TO_BODY_P
 
 
+def angle_deg(a: np.ndarray, b: np.ndarray) -> float:
+    """Angle between two directions [deg]; atan2 keeps it exact for the small angles that matter here."""
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    return math.degrees(math.atan2(float(np.linalg.norm(np.cross(a, b))), float(np.dot(a, b))))
+
+
 def deviation(los: np.ndarray, frame: str) -> tuple[float, float, float]:
     """(horizontal, vertical, total) angle [deg] of a unit LOS from the boresight: right, down positive.
 

@@ -23,7 +23,6 @@ import os
 import queue
 import shutil
 import signal
-import statistics
 import sys
 import tempfile
 import threading
@@ -579,7 +578,8 @@ def csv_cell(value: object) -> object:
 
 
 class DetectionLog:
-    """Writes every FrameResult to algilama.csv and kutular.csv as it comes, and keeps them for the run's numbers.
+    """Writes every FrameResult to algilama.csv and kutular.csv as it comes, and keeps them (rows, boxes, skipped) for
+    the run's numbers (olcum.frame_metrics, olcum.model_metrics).
     The files are created with the first result (a run whose model never saw a frame leaves none). extra_columns:
     more algilama.csv columns after ROW_COLUMNS that add() gets from its caller (selection, LOS, TEZ_LOS: takip.py)."""
 
@@ -642,52 +642,3 @@ class DetectionLog:
         with self._lock:
             for f in self._files:
                 f.close()
-
-    def metrics(self, start: float, end: float, referee: list[dict]) -> dict:
-        """The run's frame and time numbers in the sim window start..end [s] (temporary; olcum.py in task group 7).
-
-        uretilen: frames that reached the reader in the window (processed + replaced); kamera_karesi: camera frames
-        of the referee (camera_info) in the window, okuyucuya_ulasmayan: those the reader never got. The IoU check
-        (task group 4): processed frames with a box of IoU >= 0.5 to the target's referee box."""
-
-        def inside(t: float) -> bool:
-            return start <= t <= end
-
-        with self._lock:
-            rows = [r for r in self.rows if inside(r["t"])]
-            skipped = [s for s in self.skipped if inside(s.t)]  # NaN (header not read) is never inside
-            unknown = sum(math.isnan(s.t) for s in self.skipped)
-            boxes = dict(self.boxes)
-        received = {r["t_us"] for r in rows} | {time_key(s.t) for s in skipped}
-        frames = {time_key(x["t"]): x for x in referee if inside(x["t"])}
-        produced = len(rows) + len(skipped)
-        m = {
-            "uretilen": produced,
-            "islenen": len(rows),
-            "atlanan": len(skipped),
-            "atlanan_kare_orani": 1.0 - len(rows) / produced if produced else math.nan,
-            "islenen_kare_hizi_hz": len(rows) / (end - start) if end > start else math.nan,
-            "kamera_karesi": len(frames),
-            "okuyucuya_ulasmayan": len(set(frames) - received),
-            "zamani_okunamayan_atlanan": unknown,
-        }
-        for name in ("model_ms", "cozme_ms", "kusur_ms", "ulasma_ms", "bekleme_ms", "islem_ms", "teslim_ms"):
-            values = [r[name] for r in rows if not math.isnan(r[name])]
-            m[f"{name}_ort"] = statistics.fmean(values) if values else math.nan
-            if name in ("model_ms", "ulasma_ms", "islem_ms"):
-                m[f"{name}_p95"] = float(np.percentile(values, 95)) if values else math.nan
-            if name in ("model_ms", "teslim_ms"):
-                m[f"{name}_max"] = max(values) if values else math.nan
-        visible = matched = 0
-        best = math.nan
-        for r in rows:
-            ref = frames.get(r["t_us"])
-            if ref is None:
-                continue
-            target = tuple(float(ref.get(f"hedef_kutu_{k}", math.nan)) for k in ("u0", "v0", "u1", "v1"))
-            visible += bool(ref.get("gorunur"))
-            score = max((iou(b, target) for b in boxes.get(r["t_us"], ())), default=0.0)
-            best = score if math.isnan(best) else max(best, score)
-            matched += score >= IOU_MATCH
-        m |= {"hedef_gorunur_islenen": visible, "iou05_kare_sayisi": matched, "iou_max": best}
-        return m

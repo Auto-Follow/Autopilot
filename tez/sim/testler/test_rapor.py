@@ -1,6 +1,8 @@
 """Report metrics and success thresholds on a synthetic recording."""
 
+import json
 import math
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,7 +10,8 @@ import pytest
 
 import dogrulama
 import hedef
-import konumlama
+import kamera
+import olcum
 import rapor
 import yuruyus
 
@@ -62,49 +65,69 @@ def test_overhead_check_verdict() -> None:
     assert not dogrulama.passed([{"fark": 0.1}, hidden, hidden])
 
 
-def test_tez_los_messages_that_reached_px4_are_counted_from_the_ulog_columns() -> None:
-    """debug_vect in the ULog (pyulog: one int8 column per character of the name); only TEZ_LOS counts, other
-    DEBUG_VECT senders share the topic (spec "Varsayımlar" 1)."""
-    names = ["TEZ_LOS", "TEZ_LOS", "BASKA", "TEZ_LOS", "TEZ_LOS"]
-    data = {"timestamp": np.array([59.99e6, 60.0e6, 60.01e6, 61.5e6, 62.01e6])}
-    for i in range(10):
-        data[f"name[{i}]"] = np.array([ord(n[i]) if i < len(n) else 0 for n in names], dtype=np.int8)
-    assert list(rapor.debug_names(data)) == names
-    for k, v in zip("xyz", ([0.6, 0.6, 0.0, math.nan, 0.8], [0.0] * 5, [0.8, 0.8, 1.0, math.nan, 0.6]), strict=True):
-        data[k] = np.array(v, dtype=np.float32)
-    m = rapor.tez_los_in_ulog(data, 60.0, 62.0)
-    assert (m["tez_los_px4_sayisi"], m["tez_los_px4_hizi_hz"]) == (2, pytest.approx(1.0))
-    # the logged ones are matched to the sent ones by their values (PX4 drops time_usec): PX4 arrival - capture
-    sent = [
-        {"t": 59.88, "x": 0.6, "y": 0.0, "z": 0.8, "gonderim_sim": 59.998},
-        {"t": 61.38, "x": math.nan, "y": math.nan, "z": math.nan, "gonderim_sim": 61.498},  # NaN: ambiguous, skipped
-        {"t": 61.89, "x": 0.8, "y": 0.0, "z": 0.6, "gonderim_sim": 62.007},
+def test_checks_warn_below_3_m_and_say_whether_the_model_ran() -> None:
+    """Decision 3 (12.11): every time the drone came closer than 3 m to the target is a warning and an event (a
+    measurement for m01, not a success threshold); the IoU check of task group 4 says the model ran on the image."""
+    near = [
+        {"baslangic_s": 70.0, "bitis_s": 71.0, "en_az_m": 2.0, "en_az_t_s": 70.4},
+        {"baslangic_s": 80.0, "bitis_s": 80.5, "en_az_m": 0.86, "en_az_t_s": 80.2},
     ]
-    m = rapor.tez_los_in_ulog(data, 60.0, 62.5, sent)
-    assert m["tez_los_px4_sayisi"] == 3 and m["tez_los_px4_eslesen"] == 2  # the NaN one at 61.5 s is not matched
-    assert m["uctan_uca_px4_ms_ort"] == pytest.approx(120.0, abs=0.01)
-    assert m["px4_varis_eksi_gonderim_ms_ort"] == pytest.approx(2.5, abs=0.01)  # arrived 2 and 3 ms after the send
+    m = {"iou05_kare_sayisi": 237, "hedef_gorunur_islenen": 325, "iou_max": 0.94, "yakin_mesafe_3m_suresi_s": 1.5}
+    m |= {"kadraj_yakin_sinir_alti_s": 2.3, "kadraj_yakin_sinir_m": 3.87, "mod_korunma_orani": 1.0, "rtf_ort": 0.85}
+    checks = {c["ad"]: c for c in rapor.checks(m, {"yakin_mesafe": {"olaylar": near}}, model_ran=True)}
+    assert checks["model"]["durum"] == "tamam" and "325 işlenmiş karenin 237" in checks["model"]["metin"]
+    warn = checks["yakin_mesafe"]
+    assert warn["durum"] == "uyari" and warn["olay"] and "2 kez" in warn["metin"] and "0.86 m (80.2 s)" in warn["metin"]
+    assert "başarı eşiği değildir" in warn["metin"]
+    assert checks["kadraj_yakin_siniri"]["durum"] == "uyari" and checks["rtf"]["durum"] == "uyari"
+    assert "mod" not in checks  # kept the whole window
+    none = rapor.checks({"iou05_kare_sayisi": 0, "en_az_yatay_mesafe_m": 7.2}, {}, model_ran=True)
+    assert [(c["ad"], c["durum"], c["olay"]) for c in none] == [
+        ("model", "hata", True),
+        ("yakin_mesafe", "tamam", False),
+    ]
+    assert rapor.checks({}, {}, model_ran=False) == []
 
 
-def test_follow_target_in_the_ulog_and_where_px4_thought_the_target_was() -> None:
-    """follow_target (the logger keeps one sample per 500 ms) and follow_target_estimator (every 200 ms): its estimate
-    against where the target really was at the same PX4 time (= sim time in SITL), and how long it was stale (no
-    FOLLOW_TARGET for 3 s: PX4 keeps the last position and stops moving it)."""
-    world = konumlama.WorldGeo(47.397971057728974, 8.546163739800146, 0.0)
-    target = {"timestamp": np.array([59.5e6, 60.0e6, 60.5e6, 61.0e6, 62.9e6])}
-    t = np.round(np.arange(60.0, 63.001, 0.2), 6)
-    geo = [world.to_geodetic(10.0 + (s - 60.0) - 0.3, 2.0) for s in t]  # 0.3 m behind a target walking east at 1 m/s
-    estimator = {
-        "timestamp": t * 1e6,
-        "valid": np.array([0] + [1] * (len(t) - 1), dtype=np.uint8),  # the first one before any fusion
-        "stale": (t >= 62.0).astype(np.uint8),
-        "lat_est": np.array([math.nan] + [g[0] for g in geo[1:]]),
-        "lon_est": np.array([math.nan] + [g[1] for g in geo[1:]]),
-    }
-    m = rapor.follow_target_in_ulog(target, estimator, 60.0, 63.0, world, lambda s: (10.0 + (s - 60.0), 2.0))
-    assert (m["follow_target_px4_sayisi"], m["follow_target_px4_hizi_hz"]) == (4, pytest.approx(4 / 3))
-    assert m["px4_kestirim_hatasi_ort_m"] == pytest.approx(0.3, abs=1e-6)
-    assert m["px4_kestirim_hatasi_maks_m"] == pytest.approx(0.3, abs=1e-6)
-    assert m["px4_kestirim_gecerli_orani"] == pytest.approx(15 / 16)
-    assert m["px4_kestirim_bayat_s"] == pytest.approx(1.0)  # 62.0 -> 63.0 s
-    assert rapor.follow_target_in_ulog(None, None, 60.0, 63.0, world, None)["follow_target_px4_sayisi"] == 0
+def test_report_has_every_key_the_new_sections_and_the_warning_event(tmp_path: Path) -> None:
+    """ozet.json gets every key of olcum.KEYS (null where it does not apply), the checks and the 3 m event; rapor.html
+    shows the checks, the grouped metrics, the settings and the tracking plot."""
+    sc = scenario({})
+    rows = [
+        r
+        | {"kamera_z": 8.0, "hedef_x": 10.0, "hedef_y": 0.0, "hedef_yaw": 0.0, "hedef_hiz": 0.0, "ayak_gorunur": True}
+        | {"bas_gorunur": True, "gorunur": True, "hedef_piksel": 900.0, "merkez_u": 1152.0, "merkez_v": 648.0}
+        for r in recording().to_dict("records")
+    ]
+    cam = kamera.Camera(2304, 1296, 1773.9, 1773.9, 1152.0, 648.0)
+    near = [{"baslangic_s": 64.0, "bitis_s": 65.0, "en_az_m": 2.5, "en_az_t_s": 64.5}]
+    settings = {"takip": {"kaynak": "yok", "mod": "Hold", "los": None}, "algilama": {"etkin": False}, "gecikme": {}}
+    settings["px4_parametreleri"] = {"FLW_TGT_DST": {"deger": 8, "kaynak": "gercek_dron.params:24", "px4": 8.0}}
+    summary = rapor.write(
+        tmp_path,
+        sc,
+        rows,
+        ["Dron 25.0 s'de hazır (Hold, 10 m)"],
+        True,
+        [],
+        cam.as_dict(),
+        None,
+        None,
+        settings,
+        {"en_az_yatay_mesafe_m": 2.5, "yakin_mesafe_3m_suresi_s": 1.0},
+        {"yakin_mesafe": {"esik_m": 3.0, "olaylar": near}},
+    )
+    saved = json.loads((tmp_path / "ozet.json").read_text(encoding="utf-8"))
+    assert set(olcum.KEYS) <= set(saved["olcutler"]) and saved["olcutler"]["algilama_orani"] is None
+    assert saved["kontroller"][0]["ad"] == "yakin_mesafe" and any("3 m altına indi" in e for e in saved["olaylar"])
+    assert summary["sonuc"] == "GEÇTİ"  # a warning is no threshold
+    page = (tmp_path / "rapor.html").read_text(encoding="utf-8")
+    for part in (
+        "Kontroller ve uyarılar",
+        "Takip: mesafe ve kadraj",
+        "(a) Model",
+        "Ayarlar",
+        "FLW_TGT_DST",
+        "Takip zaman çizelgesi",
+    ):
+        assert part in page, part

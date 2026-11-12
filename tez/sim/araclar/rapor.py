@@ -1,6 +1,11 @@
-"""Scenario report: metrics, pass/fail against the scenario's success thresholds, plots, one self-contained HTML.
+"""Scenario report: metrics, checks and warnings, pass/fail against the scenario's success thresholds, plots, one
+self-contained HTML.
 
 Outputs in the scenario folder: rapor.html, ozet.json (metrics, machine readable), dogru_cevap.csv (ground truth).
+The metrics come from olcum.py (spec "Ölçüt Tanımları": every key, NaN where it does not apply) and from metrics()
+below (the F1 numbers of the referee rows). checks() turns some of them into the report's checks and warnings: the
+model really ran on the image (IoU, task group 4), the 3 m distance warning (decision 3, 12.11), the camera's near
+limit, the mode, the RTF; none of them is a success threshold (m01 sets those).
 """
 
 import base64
@@ -10,7 +15,7 @@ import io
 import json
 import math
 import subprocess
-from collections.abc import Callable
+from collections.abc import Mapping
 from pathlib import Path
 
 import matplotlib
@@ -22,7 +27,8 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import dogrulama  # noqa: E402
-import konumlama  # noqa: E402
+import kamera  # noqa: E402
+import olcum  # noqa: E402
 from hedef import SIM_DIR, SUCCESS_KEYS, Scenario  # noqa: E402
 
 # Reference palette (dataviz skill): categorical slots 1-2, light surface, text and grid tokens
@@ -35,6 +41,9 @@ GRID = "#e4e3df"
 OUT_OF_VIEW = "#ecebe7"
 OTHERS_COLOR = "#8b8a86"  # other people: neutral, they are context, not a series to compare
 TREE_COLOR = "#5f8f4e"
+WARNING_COLOR = "#c62828"
+PX4_COLOR = "#7b3fa0"  # what PX4's Follow Target task assumes (course, orbit angle setpoint)
+RTF_WARNING = 0.9  # below this mean real time factor the model may take the CPU from Gazebo (senaryo.py)
 # Success key -> (metric, the metric must be at least (True) or at most (False) the threshold)
 SUCCESS_RULES = {
     "kadrajda_kalma_min": ("kadrajda_kalma", True),
@@ -132,137 +141,6 @@ def ulog_summary(path: Path | None) -> dict:
         return {"ulog_hatasi": f"{type(e).__name__}: {e}"}
 
 
-TEZ_LOS_NAME = "TEZ_LOS"  # px4_baglanti.TEZ_LOS_NAME (not imported: the report does not need pymavlink)
-DEBUG_NAME_CHARS = 10  # debug_vect.name is char[10]
-
-
-def debug_names(data: dict) -> np.ndarray:
-    """The name of every debug_vect sample from pyulog's columns (one int8 column per character, name[0] ...)."""
-    chars = np.stack([np.asarray(data[f"name[{i}]"]) for i in range(DEBUG_NAME_CHARS)], axis=1).astype(np.uint8)
-    return np.array([bytes(row).split(b"\0", 1)[0].decode("ascii", "replace") for row in chars])
-
-
-PX4_MATCH_S = 0.06  # [s] a logged TEZ_LOS belongs to a sent one with the same values at most this far in time
-PX4_MATCH_VALUE = 2e-6  # tez_los.csv keeps 6 decimals, PX4 float32
-
-
-def tez_los_in_ulog(data: dict, start: float, end: float, sent: list[dict] | None = None) -> dict:
-    """TEZ_LOS samples PX4 logged (debug_vect, SDLOG_PROFILE 163) in the window start..end [s]: PX4's time stamp
-    is the message's arrival (mavlink_receiver), PX4's clock is the sim clock in SITL. Other DEBUG_VECT senders share
-    the topic, so only the name TEZ_LOS counts.
-
-    With `sent` (tez_los.csv rows that went out: t, x, y, z, gonderim_sim) every logged message with a direction is
-    matched to the sent one with the same values nearest in time: PX4 arrival - capture is the end-to-end delay as the
-    autopilot sees it (PX4 drops time_usec, so the values are the only link; a NaN message is ambiguous)."""
-    t = np.asarray(data["timestamp"], dtype=float) / 1e6
-    inside = (t >= start) & (t <= end) & (debug_names(data) == TEZ_LOS_NAME)
-    count = int(inside.sum())
-    m = {"tez_los_px4_sayisi": count, "tez_los_px4_hizi_hz": count / (end - start) if end > start else math.nan}
-    if sent is None:
-        return m
-    with_dir = [a for a in sent if not math.isnan(a["x"])]
-    vals = np.array([[a["x"], a["y"], a["z"]] for a in with_dir]).reshape(-1, 3)
-    sent_t = np.array([a["gonderim_sim"] for a in with_dir])
-    captured = np.array([a["t"] for a in with_dir])
-    logged = np.stack([np.asarray(data[k], dtype=float) for k in "xyz"], axis=1)
-    delays, gaps = [], []
-    for i in np.flatnonzero(inside & np.isfinite(logged[:, 0])):
-        same = np.all(np.abs(vals - logged[i]) < PX4_MATCH_VALUE, axis=1) & (np.abs(sent_t - t[i]) < PX4_MATCH_S)
-        found = np.flatnonzero(same)
-        if found.size:
-            j = found[np.argmin(np.abs(sent_t[found] - t[i]))]
-            delays.append((t[i] - captured[j]) * 1000.0)
-            gaps.append((t[i] - sent_t[j]) * 1000.0)
-    m["tez_los_px4_eslesen"] = len(delays)
-    for name, values in (("uctan_uca_px4_ms", delays), ("px4_varis_eksi_gonderim_ms", gaps)):
-        m[f"{name}_ort"] = float(np.mean(values)) if values else math.nan
-        m[f"{name}_p95"] = float(np.percentile(values, 95)) if values else math.nan
-    m["px4_varis_eksi_gonderim_ms_min"] = float(np.min(gaps)) if gaps else math.nan
-    return m
-
-
-def ulog_tez_los(path: Path | None, start: float, end: float, sent: list[dict] | None = None) -> dict:
-    """tez_los_in_ulog of a ULog file; a log without debug_vect has 0 messages."""
-    if path is None or not path.is_file():
-        return {}
-    try:
-        from pyulog import ULog
-
-        ulog = ULog(str(path), ["debug_vect"])
-        if not ulog.data_list:
-            return {"tez_los_px4_sayisi": 0, "tez_los_px4_hizi_hz": 0.0}
-        return tez_los_in_ulog(ulog.get_dataset("debug_vect").data, start, end, sent)
-    except Exception as e:  # noqa: BLE001 - the report must still be written
-        return {"ulog_tez_los_hatasi": f"{type(e).__name__}: {e}"}
-
-
-def follow_target_in_ulog(
-    target: dict | None,
-    estimator: dict | None,
-    start: float,
-    end: float,
-    world: konumlama.WorldGeo | None,
-    truth: Callable[[float], tuple[float, float]] | None,
-) -> dict:
-    """What PX4 made of FOLLOW_TARGET in the window start..end [s] (PX4 time = sim time in SITL), from the ULog's
-    pyulog columns: follow_target (what arrived; the logger keeps one sample per 500 ms, so this is not the number of
-    messages) and follow_target_estimator (every 200 ms): how far its estimate (lat_est / lon_est, the position the
-    Follow Me task flies after) was from where the person really was at that time, how often it was valid, and for
-    how long it was stale (no FOLLOW_TARGET for 3 s: PX4 keeps the last position and stops moving it)."""
-    span = end - start
-    m: dict = {"follow_target_px4_sayisi": 0, "follow_target_px4_hizi_hz": 0.0}
-    if target is not None:
-        t = np.asarray(target["timestamp"], dtype=float) / 1e6
-        count = int(((t >= start) & (t <= end)).sum())
-        m = {"follow_target_px4_sayisi": count, "follow_target_px4_hizi_hz": count / span if span > 0 else math.nan}
-    if estimator is None:
-        return m
-    t = np.asarray(estimator["timestamp"], dtype=float) / 1e6
-    inside = (t >= start) & (t <= end)
-    valid = np.asarray(estimator["valid"]).astype(bool) & inside
-    stale = np.asarray(estimator["stale"]).astype(bool)
-    steps = np.diff(t, append=t[-1] if t.size else 0.0)
-    m["px4_kestirim_gecerli_orani"] = float(valid.sum() / inside.sum()) if inside.any() else math.nan
-    m["px4_kestirim_bayat_s"] = float(steps[inside & stale].sum())
-    errors = []
-    if world is not None and truth is not None:
-        lat, lon = np.asarray(estimator["lat_est"], dtype=float), np.asarray(estimator["lon_est"], dtype=float)
-        for i in np.flatnonzero(valid & np.isfinite(lat) & np.isfinite(lon)):
-            x, y, _ = world.to_local(lat[i], lon[i])
-            tx, ty = truth(t[i])
-            errors.append(math.hypot(x - tx, y - ty))
-    for kind, value in (
-        ("ort", np.mean),
-        ("p50", lambda v: np.percentile(v, 50)),
-        ("p95", lambda v: np.percentile(v, 95)),
-        ("maks", np.max),
-    ):
-        m[f"px4_kestirim_hatasi_{kind}_m"] = float(value(errors)) if errors else math.nan
-    return m
-
-
-def ulog_follow_target(
-    path: Path | None,
-    start: float,
-    end: float,
-    world: konumlama.WorldGeo | None,
-    truth: Callable[[float], tuple[float, float]] | None,
-) -> dict:
-    """follow_target_in_ulog of a ULog file (topics that were never published count as none)."""
-    if path is None or not path.is_file():
-        return {}
-    try:
-        from pyulog import ULog
-
-        ulog = ULog(str(path), ["follow_target", "follow_target_estimator"])
-        found = {d.name: d.data for d in ulog.data_list}
-        return follow_target_in_ulog(
-            found.get("follow_target"), found.get("follow_target_estimator"), start, end, world, truth
-        )
-    except Exception as e:  # noqa: BLE001 - the report must still be written
-        return {"ulog_follow_target_hatasi": f"{type(e).__name__}: {e}"}
-
-
 def evaluate(sc: Scenario, m: dict) -> list[tuple[str, str, float, float, bool]]:
     """(key, description, threshold, value, passed) for every success threshold in the scenario."""
     checks = []
@@ -352,6 +230,122 @@ def plot_image_track(df: pd.DataFrame, camera: dict) -> str:
     return _png(fig)
 
 
+def plot_tracking(
+    sc: Scenario, df: pd.DataFrame, camera: kamera.Camera | None, following: bool, follow_distance: float | None
+) -> str:
+    """Over time: drone-target horizontal distance against the 3 m warning, the camera's near and far ground limit
+    and FLW_TGT_DST; the behind-angle error (following sources); where the referee sees the target in the image."""
+    ratios = [2.2, 1.4, 1.0] if following else [2.2, 1.0]
+    fig, axes = plt.subplots(len(ratios), 1, figsize=(7.6, 1.7 * sum(ratios) + 0.6), sharex=True, height_ratios=ratios)
+    t = df.t.to_numpy()
+    ax = axes[0]
+    _style(ax)
+    for a, b in _runs(t, ~df.kadrajda.to_numpy(dtype=bool)):
+        ax.axvspan(a, b, color=OUT_OF_VIEW, linewidth=0)
+    ax.plot(t, df.yatay_mesafe, color=TARGET_COLOR, linewidth=1.8, label="yatay mesafe")
+    ax.axhline(olcum.NEAR_DISTANCE_M, color=WARNING_COLOR, linewidth=1.0, linestyle="--", label="3 m (uyarı)")
+    if camera is not None and "kamera_z" in df:
+        near, far = olcum.frame_limits(camera, df.kamera_z.to_numpy(dtype=float))
+        ax.plot(t, near, color=TEXT_2, linewidth=1.0, linestyle=(0, (4, 2)), label="kameranın yakın görüş sınırı")
+        ax.plot(t, far, color=TEXT_2, linewidth=1.0, linestyle=":", label="uzak sınır")
+    if follow_distance is not None:
+        ax.axhline(
+            follow_distance, color=DRONE_COLOR, linewidth=0.8, alpha=0.7, label=f"FLW_TGT_DST {follow_distance:g} m"
+        )
+    ax.axvline(sc.start_time, color=TEXT_2, linewidth=0.8)
+    ax.set_ylim(bottom=0)
+    ax.set_ylabel("Mesafe [m]")
+    # above the plot: inside it the legend covers the far limit line
+    ax.legend(frameon=False, fontsize=8, ncol=3, loc="lower left", bbox_to_anchor=(0.0, 1.0), labelcolor=TEXT)
+    ax.set_title(
+        "Takip zaman çizelgesi (gri: hedef kadraj dışında; dikey çizgi: hedef yürümeye başlar)",
+        color=TEXT,
+        fontsize=11,
+        loc="left",
+        pad=34,
+    )
+    if following:
+        ax = axes[1]
+        _style(ax)
+        tb, error = olcum.behind_error_series(df.to_dict("records"))
+        ax.plot(tb, error, color=DRONE_COLOR, linewidth=1.4)
+        ax.axhline(olcum.OVERSHOOT_DEG, color=WARNING_COLOR, linewidth=0.8, linestyle="--")
+        ax.text(
+            t[0], olcum.OVERSHOOT_DEG, " 90°: dron hedefin yanında/önünde", color=WARNING_COLOR, fontsize=7, va="bottom"
+        )
+        ax.set_ylim(0, 180)
+        ax.set_yticks([0, 45, 90, 135, 180])
+        ax.set_ylabel("Arkada kalma\nhatası [°]")
+    ax = axes[-1]
+    _style(ax)
+    lanes = (
+        (
+            "tamamı kadrajda",
+            df.ayak_gorunur.to_numpy(dtype=bool) & df.bas_gorunur.to_numpy(dtype=bool)
+            if "ayak_gorunur" in df
+            else None,
+        ),
+        ("merkezi kadrajda", df.kadrajda.to_numpy(dtype=bool)),
+        ("görünür (örtülü değil)", df.gorunur.to_numpy(dtype=bool) if "gorunur" in df else None),
+    )
+    for y, (_, mask) in enumerate(reversed(lanes)):
+        if mask is None:
+            continue
+        spans = [(a, b - a) for a, b in _runs(t, mask)]
+        ax.broken_barh(spans, (y - 0.35, 0.7), color=TARGET_COLOR, alpha=0.75)
+    ax.set_yticks(range(len(lanes)), [label for label, _ in reversed(lanes)], fontsize=8)
+    ax.set_ylim(-0.6, len(lanes) - 0.4)
+    ax.grid(False)
+    ax.axvline(sc.start_time, color=TEXT_2, linewidth=0.8)
+    ax.set_xlabel("Simülasyon zamanı [s]")
+    fig.align_ylabels(axes)
+    return _png(fig)
+
+
+def plot_px4_follow(sc: Scenario, status: Mapping, df: pd.DataFrame) -> str:
+    """PX4's Follow Target task against the truth (NED, 0 = north, 90 = east): the target course it assumes (starts at
+    0, updated only above 1 m/s) and its orbit angle setpoint (where around the target it sends the drone) against
+    the drone's real orbit angle and the ideal "behind" (true course + 180 deg)."""
+    fig, axes = plt.subplots(2, 1, figsize=(7.6, 5.0), sharex=True)
+    ts = np.asarray(status["timestamp"], dtype=float) / 1e6
+    course = olcum.wrap_deg(np.degrees(np.asarray(status["tracked_target_course"], dtype=float)))
+    orbit = olcum.wrap_deg(np.degrees(np.asarray(status["orbit_angle_setpoint"], dtype=float)))
+    t = df.t.to_numpy()
+    moving = df.hedef_hiz.to_numpy(dtype=float) >= olcum.MOVING_SPEED
+    true_course = olcum.wrap_deg(90.0 - np.degrees(df.hedef_yaw.to_numpy(dtype=float)))  # ENU yaw -> NED course
+    actual = np.degrees(np.arctan2(df.dron_x - df.hedef_x, df.dron_y - df.hedef_y).to_numpy(dtype=float))
+    ax = axes[0]
+    _style(ax)
+    ax.plot(
+        t[moving], true_course[moving], ".", color=TARGET_COLOR, markersize=2, label="hedefin gerçek rotası (yürürken)"
+    )
+    ax.plot(ts, course, ".", color=PX4_COLOR, markersize=4, label="PX4'ün varsaydığı rota")
+    ax.set_ylabel("Rota [°]")
+    ax.set_ylim(-185, 185)
+    ax.set_yticks([-180, -90, 0, 90, 180])
+    ax.legend(frameon=False, fontsize=8, loc="upper left", labelcolor=TEXT)
+    ax.set_title(
+        "PX4 Follow Target: hedefin rotası ve yörünge açısı (NED, 0° kuzey, 90° doğu)",
+        color=TEXT,
+        fontsize=11,
+        loc="left",
+    )
+    ax = axes[1]
+    _style(ax)
+    behind = olcum.wrap_deg(true_course + 180.0)
+    ax.plot(t[moving], behind[moving], ".", color=TARGET_COLOR, markersize=2, label="olması gereken: hedefin arkası")
+    ax.plot(t, actual, ".", color=DRONE_COLOR, markersize=2, label="dronun gerçek yörünge açısı")
+    ax.plot(ts, orbit, ".", color=PX4_COLOR, markersize=4, label="PX4'ün yörünge açısı hedefi")
+    ax.set_ylabel("Yörünge açısı [°]")
+    ax.set_ylim(-185, 185)
+    ax.set_yticks([-180, -90, 0, 90, 180])
+    ax.legend(frameon=False, fontsize=8, loc="upper left", labelcolor=TEXT)
+    for a in axes:
+        a.axvline(sc.start_time, color=TEXT_2, linewidth=0.8)
+    axes[-1].set_xlabel("Simülasyon zamanı [s]")
+    return _png(fig)
+
+
 def _git_commit() -> str:
     try:
         git = ["git", "-C", str(SIM_DIR)]
@@ -362,90 +356,213 @@ def _git_commit() -> str:
         return "?"
 
 
-def _fmt(value: float | None, key: str = "") -> str:
+PERCENT_KEYS = {
+    "kadrajda_kalma",
+    "kadrajda_ortulu",
+    "gorunur_kalma",
+    "segmentasyon_kare_orani",
+    "hedef_kadrajda_orani",
+    "ayak_kadrajda_orani",
+    "atlanan_kare_orani",
+    "secili_kare_orani",
+    "secim_dogru_orani",
+    "algilama_orani",
+    "kacirma_orani",
+    "yanlis_kisi_orani",
+    "yanlis_kisi_ayni_kiyafet_orani",
+    "tez_los_px4_orani",
+    "px4_kestirim_gecerli_orani",
+    "mod_korunma_orani",
+}
+
+
+def _fmt(value: object, key: str = "") -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "–"
-    if key.startswith(("kadrajda", "gorunur", "segmentasyon", "atlanan_kare", "secili_kare", "secim_dogru")) or (
-        key in ("tez_los_px4_orani", "px4_kestirim_gecerli_orani")
-    ):
+    if isinstance(value, dict):
+        return ", ".join(f"{k} {v}" for k, v in value.items()) or "–"
+    if key in PERCENT_KEYS:
         return f"%{100 * value:.1f}"
-    if isinstance(value, int):
-        return str(value)
+    if isinstance(value, bool | int):
+        return str(int(value))
     return f"{value:.2f}"
 
 
-METRIC_LABELS = {
-    "hedef_yol_m": "Hedefin yolu [m]",
-    "hedef_hareket_suresi_s": "Hedefin hareket süresi [s]",
-    "yatay_mesafe_min_m": "Yatay mesafe, en az [m]",
-    "yatay_mesafe_ort_m": "Yatay mesafe, ortalama [m]",
-    "yatay_mesafe_max_m": "Yatay mesafe, en fazla [m]",
-    "kadrajda_kalma": "Hedefin kadrajda kaldığı süre",
-    "en_uzun_kayip_s": "En uzun kadraj dışı aralık [s]",
-    "gorunur_kalma": "Hedefin gerçekten göründüğü süre (ağaç arkası hariç)",
-    "kadrajda_ortulu": "Hedef kadrajda ama örtülü (ör. ağaç arkasında)",
-    "diger_insan_kadrajda_ort": "Kadrajdaki diğer insan sayısı, ortalama",
-    "dron_yukseklik_ort_m": "Dron yüksekliği, ortalama [m]",
-    "dron_yatay_hareket_max_m": "Dronun kalkış noktasından en büyük yatay uzaklığı [m]",
-    "egim_max_deg": "Dronun en büyük eğimi (ULog) [°]",
-    "kayit_suresi_s": "Kayıt süresi [s]",
-    "rtf_ort": "Gerçek zaman oranı (RTF), kayıt penceresi ortalaması",
-    "rtf_min_5s": "RTF, en yavaş 5 s'lik dilim",
-    "uretilen": "Model sürecine ulaşan kamera karesi (kayıt penceresi)",
-    "islenen": "Modelin işlediği kare",
-    "atlanan": "Model meşgulken atlanan kare",
-    "atlanan_kare_orani": "Atlanan kare oranı",
-    "islenen_kare_hizi_hz": "İşlenen kare hızı [kare/sim-s]",
-    "okuyucuya_ulasmayan": "Kameranın üretip model sürecine hiç ulaşmayan kare",
-    "model_ms_ort": "Model süresi (model_ms), ortalama [ms]",
-    "model_ms_p95": "Model süresi, p95 [ms]",
-    "ulasma_ms_ort": "Karenin model sürecine ulaşma gecikmesi, ortalama [sim ms]",
-    "bekleme_ms_ort": "Karenin modeli bekleme süresi, ortalama [ms]",
-    "islem_ms_ort": "Kare başına toplam işlem (çözme + kusur + model), ortalama [ms]",
-    "iou05_kare_sayisi": "Hedefle IoU ≥ 0.5 model kutusu bulunan işlenmiş kare (geçici kontrol)",
-    "iou_max": "Hedefle en iyi IoU",
-    "secili_kare_orani": "Bir kutunun hedef seçildiği işlenmiş kare",
-    "secim_dogru_orani": "Hedef görünürken seçilen kutunun hedef olduğu kare (IoU ≥ 0.5)",
-    "kilit_kaybi_sayisi": "Kilit kaybı (10 işlenmiş karede eşleşme yok)",
-    "yeniden_kilit_sayisi": "Hakemle yeniden kilit",
-    "los_i_ii_fark_ort_deg": "LOS (i) model ile LOS (ii) hakem arası açı, ortalama [°] (seçilen kutu hedefken)",
-    "los_i_ii_fark_p95_deg": "LOS (i)–(ii) açısı, p95 [°]",
-    "los_i_ii_fark_maks_deg": "LOS (i)–(ii) açısı, en çok [°]",
-    "tez_los_gonderilen": "Gönderilen TEZ_LOS (gönderim anı kayıt penceresinde)",
-    "tez_los_hedef_yok": "Bunlardan 'hedef yok' (NaN)",
-    "tez_los_gecersiz": "Geçersiz olduğu için gönderilmeyen TEZ_LOS",
-    "tez_los_hizi_hz": "TEZ_LOS hızı [mesaj/sim-s]",
-    "tez_los_px4_sayisi": "PX4'ün ULog'a yazdığı TEZ_LOS (debug_vect)",
-    "tez_los_px4_orani": "PX4'e ulaşan / gönderilen TEZ_LOS",
-    "uctan_uca_px4_ms_ort": "Uçtan uca gecikme, PX4'ün varış damgasıyla (yakalama → PX4), ortalama [sim ms]",
-    "uctan_uca_px4_ms_p95": "Uçtan uca gecikme, PX4'ün varış damgasıyla, p95 [sim ms]",
-    "uctan_uca_ms_ort": "Uçtan uca gecikme (yakalama → gönderim), ortalama [sim ms]",
-    "uctan_uca_ms_p50": "Uçtan uca gecikme, p50 [sim ms]",
-    "uctan_uca_ms_p95": "Uçtan uca gecikme, p95 [sim ms]",
-    "uctan_uca_ms_maks": "Uçtan uca gecikme, en çok [sim ms]",
-    "yatay_mesafe_hatasi_ort_m": "Follow Me: |yatay mesafe − FLW_TGT_DST|, ortalama [m]",
-    "follow_target_gonderilen": "Gönderilen FOLLOW_TARGET (gönderim anı kayıt penceresinde)",
-    "follow_target_hizi_hz": "FOLLOW_TARGET hızı [mesaj/sim-s]",
-    "follow_target_konumsuz_kare": "Konumu hesaplanamadığı için FOLLOW_TARGET gitmeyen işlenmiş kare",
-    "follow_target_uctan_uca_ms_ort": "FOLLOW_TARGET uçtan uca gecikme (yakalama → gönderim), ortalama [sim ms]",
-    "geolocation_hatasi_ort_m": "Gönderilen hedef konumu − karenin anındaki gerçek konum, ortalama [m]",
-    "geolocation_hatasi_p95_m": "Gönderilen hedef konumu hatası, p95 [m]",
-    "geolocation_hatasi_maks_m": "Gönderilen hedef konumu hatası, en çok [m]",
-    "geolocation_hatasi_gonderimde_ort_m": "Gönderilen konum − gönderim anındaki gerçek konum, ortalama [m]",
-    "follow_target_px4_sayisi": "PX4'ün ULog'a yazdığı follow_target (kaydedici en çok 500 ms'de bir yazar)",
-    "px4_kestirim_hatasi_ort_m": "PX4'ün hedef kestirimi (follow_target_estimator) − gerçek konum, ortalama [m]",
-    "px4_kestirim_hatasi_p95_m": "PX4'ün hedef kestirimi hatası, p95 [m]",
-    "px4_kestirim_hatasi_maks_m": "PX4'ün hedef kestirimi hatası, en çok [m]",
-    "px4_kestirim_gecerli_orani": "PX4'ün hedef kestiriminin geçerli olduğu süre",
-    "px4_kestirim_bayat_s": "PX4'ün hedefi 'bayat' saydığı süre (3 s FOLLOW_TARGET yok) [s]",
-    "konum_hesaplanan": "Konumu hesaplanan işlenmiş kare (kutunun alt ortası → düz zemin)",
-    "konum_hatasi_ort_m": "Model kutusunun konumu − gerçek konum (EKF pozuyla, kutu hedefken), ortalama [m]",
-    "konum_hatasi_p95_m": "Model kutusunun konum hatası, p95 [m]",
-    "konum_hatasi_maks_m": "Model kutusunun konum hatası, en çok [m]",
-    "konum_hatasi_gercek_pozla_ort_m": "Aynı kutular dronun gerçek pozuyla: konum hatası, ortalama [m] (kutunun payı)",
-    "ekf_yaw_hatasi_ort_deg": "EKF yaw − gerçek yaw, ortalama [°]",
-    "ekf_yatay_konum_hatasi_ort_m": "EKF yatay konumu − gerçek konum, ortalama [m]",
-}
+# Report tables: (title, [(key, label)]), in the order of the report; every key of olcum.KEYS is in one of them.
+METRIC_GROUPS = (
+    (
+        "Takip: mesafe ve kadraj (hakeme göre, kayıt penceresi)",
+        (
+            ("yatay_mesafe_ort_m", "Dron–hedef yatay mesafe, ortalama [m]"),
+            ("en_az_yatay_mesafe_m", "Yatay mesafe, en az [m]"),
+            ("en_az_yatay_mesafe_t_s", "En az mesafenin anı [s]"),
+            ("yatay_mesafe_max_m", "Yatay mesafe, en fazla [m]"),
+            ("yatay_mesafe_hatasi_ort_m", "Follow Me: |yatay mesafe − FLW_TGT_DST|, ortalama [m]"),
+            ("yakin_mesafe_3m_suresi_s", "Yatay mesafenin 3 m altında kaldığı süre [s] (uyarı, eşik değil)"),
+            ("yakin_mesafe_3m_olay_sayisi", "3 m altına iniş sayısı"),
+            ("kadraj_yakin_sinir_m", "Kameranın yakın görüş sınırı: yerde görülen en yakın nokta, ortalama [m]"),
+            (
+                "kadraj_yakin_sinir_alti_s",
+                "Dronun bu sınırdan yakın kaldığı süre (kişinin ayakları kadraj altında) [s]",
+            ),
+            ("kadraj_uzak_sinir_m", "Kameranın uzak sınırı: yerde görülen en uzak nokta, ortalama [m]"),
+            ("kadraj_uzak_sinir_ustu_s", "Hedefin bu sınırdan uzak kaldığı süre [s]"),
+            ("kadrajda_kalma", "Hedefin gövde merkezi kadrajda"),
+            ("hedef_kadrajda_orani", "Hedefin tamamı (ayak ve baş) kadrajda"),
+            ("ayak_kadrajda_orani", "Hedefin ayakları kadrajda (konum hesabının noktası)"),
+            ("gorunur_kalma", "Hedef gerçekten görünüyor (ağaç arkası hariç)"),
+            ("kadrajda_ortulu", "Hedef kadrajda ama örtülü (ör. ağaç arkasında)"),
+            ("en_uzun_kayip_s", "En uzun kadraj dışı aralık [s]"),
+            ("dron_yukseklik_ort_m", "Dron yüksekliği, ortalama [m]"),
+            ("egim_max_deg", "Dronun en büyük eğimi (ULog) [°]"),
+            ("dron_yatay_hareket_max_m", "Dronun kalkış noktasından en büyük yatay uzaklığı [m]"),
+            ("diger_insan_kadrajda_ort", "Kadrajdaki diğer insan sayısı, ortalama"),
+        ),
+    ),
+    (
+        "Takip: hedefin arkasında kalma ve yörünge (stok Follow Me davranışı)",
+        (
+            ("arkada_kalma_hatasi_ort_deg", "Arkada kalma açısı hatası, ortalama [°] (hedef ≥ 0.5 m/s iken)"),
+            ("arkada_kalma_hatasi_p95_deg", "Arkada kalma açısı hatası, p95 [°]"),
+            ("arkada_kalma_hatasi_maks_deg", "Arkada kalma açısı hatası, en çok [°]"),
+            ("arkada_kalma_hatasi_90_ustu_s", "Dron hedefin yanında ya da önünde (hata > 90°) [s]"),
+            ("arkada_kalma_suresi_s", "Hedefin yürüdüğü süre (açının tanımlı olduğu) [s]"),
+            ("baslangic_yorunge_donusu_deg", "Takip başı: hedef dururken dronun etrafında döndüğü açı [°]"),
+            ("yuruyus_basi_yorunge_donusu_deg", "Yürüyüşün ilk 10 s'si: dronun hedef etrafında döndüğü açı [°]"),
+            ("px4_rota_kuzey_varsayimi_s", "PX4'ün hedef rotasını kuzey (0°) varsaydığı süre [s]"),
+            ("px4_rota_hatasi_ort_deg", "PX4'ün hedef rotası − gerçek rota, ortalama [°] (hedef ≥ 1 m/s)"),
+            ("px4_rota_hatasi_p95_deg", "PX4'ün hedef rotası hatası, p95 [°]"),
+            ("px4_yorunge_donusu_baslangic_deg", "PX4'ün yörünge açısı hedefinin dönüşü, hedef dururken [°]"),
+            ("px4_yorunge_donusu_yuruyus_basi_deg", "PX4'ün yörünge açısı hedefinin dönüşü, yürüyüşün ilk 10 s'si [°]"),
+            ("px4_yorunge_acisi_ilk_deg", "PX4'ün ilk yörünge açısı hedefi [°] (0 = hedefin kuzeyi)"),
+            ("px4_durum_sayisi", "ULog'daki follow_target_status kaydı (400 ms'de bir)"),
+            ("mod_korunma_orani", "İstenen PX4 modunda geçen süre / kayıt penceresi"),
+        ),
+    ),
+    (
+        "Takip: konum ve FOLLOW_TARGET",
+        (
+            ("follow_target_gonderilen", "Gönderilen FOLLOW_TARGET (gönderim anı kayıt penceresinde)"),
+            ("follow_target_hizi_hz", "FOLLOW_TARGET hızı [mesaj/sim-s]"),
+            ("follow_target_konumsuz_kare", "Konumu hesaplanamadığı için FOLLOW_TARGET gitmeyen işlenmiş kare"),
+            (
+                "follow_target_uctan_uca_ms_ort",
+                "FOLLOW_TARGET uçtan uca gecikme (yakalama → gönderim), ortalama [sim ms]",
+            ),
+            ("follow_target_uctan_uca_ms_p95", "FOLLOW_TARGET uçtan uca gecikme, p95 [sim ms]"),
+            ("follow_target_uctan_uca_ms_maks", "FOLLOW_TARGET uçtan uca gecikme, en çok [sim ms]"),
+            ("geolocation_hatasi_ort_m", "Gönderilen hedef konumu − karenin anındaki gerçek konum, ortalama [m]"),
+            ("geolocation_hatasi_p50_m", "Gönderilen hedef konumu hatası, p50 [m]"),
+            ("geolocation_hatasi_p95_m", "Gönderilen hedef konumu hatası, p95 [m]"),
+            ("geolocation_hatasi_maks_m", "Gönderilen hedef konumu hatası, en çok [m]"),
+            ("geolocation_hatasi_gonderimde_ort_m", "Gönderilen konum − gönderim anındaki gerçek konum, ortalama [m]"),
+            ("geolocation_hatasi_gonderimde_p95_m", "Gönderilen konum − gönderim anındaki gerçek konum, p95 [m]"),
+            ("konum_hesaplanan", "Konumu hesaplanan işlenmiş kare (kutunun alt ortası → düz zemin)"),
+            ("konum_durumlari", "Konum durumları"),
+            ("konum_kare", "Konum hatasının ölçüldüğü kare (seçilen kutu hedefken)"),
+            ("konum_hatasi_ort_m", "Model kutusunun konumu − gerçek konum (EKF pozuyla), ortalama [m]"),
+            ("konum_hatasi_p50_m", "Model kutusunun konum hatası, p50 [m]"),
+            ("konum_hatasi_p95_m", "Model kutusunun konum hatası, p95 [m]"),
+            ("konum_hatasi_maks_m", "Model kutusunun konum hatası, en çok [m]"),
+            ("konum_hatasi_gercek_pozla_ort_m", "Aynı kutular dronun gerçek pozuyla, ortalama [m] (kutunun payı)"),
+            ("konum_hatasi_gercek_pozla_p95_m", "Aynı kutular dronun gerçek pozuyla, p95 [m]"),
+            ("ekf_yaw_hatasi_ort_deg", "EKF yaw − gerçek yaw, model kareleri, ortalama [°]"),
+            ("ekf_yaw_hatasi_maks_deg", "EKF yaw − gerçek yaw, model kareleri, en çok |·| [°]"),
+            ("ekf_yaw_hatasi_ulog_ort_deg", "EKF yaw − gerçek yaw, ULog (her örnek), ortalama [°]"),
+            ("ekf_yaw_hatasi_ulog_maks_deg", "EKF yaw − gerçek yaw, ULog, en çok |·| [°]"),
+            ("mag_sapma_olculen_deg", "Manyetometrenin ölçtüğü alanın sapması (declination) [°]; PX4 WMM: +3.41°"),
+            ("ekf_yatay_konum_hatasi_ort_m", "EKF yatay konumu − gerçek konum, ortalama [m]"),
+            ("ekf_yatay_konum_hatasi_maks_m", "EKF yatay konumu − gerçek konum, en çok [m]"),
+        ),
+    ),
+    (
+        "PX4'ün hedef kestirimi (ULog)",
+        (
+            ("follow_target_px4_sayisi", "PX4'ün ULog'a yazdığı follow_target (kaydedici en çok 500 ms'de bir yazar)"),
+            (
+                "px4_kestirim_hatasi_ort_m",
+                "PX4'ün hedef kestirimi (follow_target_estimator) − gerçek konum, ortalama [m]",
+            ),
+            ("px4_kestirim_hatasi_p50_m", "PX4'ün hedef kestirimi hatası, p50 [m]"),
+            ("px4_kestirim_hatasi_p95_m", "PX4'ün hedef kestirimi hatası, p95 [m]"),
+            ("px4_kestirim_hatasi_maks_m", "PX4'ün hedef kestirimi hatası, en çok [m]"),
+            ("px4_kestirim_gecerli_orani", "PX4'ün hedef kestiriminin geçerli olduğu süre"),
+            ("px4_kestirim_bayat_s", "PX4'ün hedefi 'bayat' saydığı süre (3 s FOLLOW_TARGET yok) [s]"),
+        ),
+    ),
+    (
+        "(a) Model",
+        (
+            ("model_kare", "Hakemi olan işlenmiş kare (kayıt penceresi)"),
+            ("hedef_gorunur_islenen", "Hedefin göründüğü işlenmiş kare"),
+            ("algilama_orani", "Algılama oranı: hedef görünürken hedefle IoU ≥ 0.5 kutu bulunan kare"),
+            ("kacirma_orani", "Kaçırma oranı (1 − algılama)"),
+            ("iou_ort", "Bulunan karelerde en iyi kutunun IoU'su, ortalama"),
+            ("iou_p50", "Bulunan karelerde en iyi kutunun IoU'su, p50"),
+            ("iou_max", "Hedefle en iyi IoU"),
+            ("secili_kare_orani", "Bir kutunun hedef seçildiği işlenmiş kare"),
+            ("secim_dogru_orani", "Hedef görünürken seçilen kutunun hedef olduğu kare (IoU ≥ 0.5)"),
+            ("yanlis_kisi_orani", "Seçilen kutu başka bir insanın (IoU ≥ 0.3, hedefinkinden büyük)"),
+            ("yanlis_kisi_ayni_kiyafet_orani", "… hedefle aynı kıyafetli bir insanın"),
+            ("yanlis_pozitif_kare_basi", "Yanlış pozitif kutu / işlenmiş kare (hiçbir insanla IoU ≥ 0.3 değil)"),
+            ("kilit_kaybi_sayisi", "Kilit kaybı (10 işlenmiş karede eşleşme yok)"),
+            ("yeniden_kilit_sayisi", "Hakemle yeniden kilit"),
+        ),
+    ),
+    (
+        "(b) Görüş vektörü (LOS)",
+        (
+            ("los_aci_kare", "Ölçülen kare (seçilen kutu hedefken)"),
+            ("los_aci_hatasi_ort_deg", "LOS (i) model − LOS (ii) hakem açısı, ortalama [°]"),
+            ("los_aci_hatasi_p50_deg", "LOS açı hatası, p50 [°]"),
+            ("los_aci_hatasi_p95_deg", "LOS açı hatası, p95 [°]"),
+            ("los_aci_hatasi_maks_deg", "LOS açı hatası, en çok [°]"),
+            ("los_sapma_farki_yatay_ort_deg", "Sistematik fark, yatay (sağa +), ortalama [°]"),
+            ("los_sapma_farki_dikey_ort_deg", "Sistematik fark, dikey (aşağı +), ortalama [°]"),
+        ),
+    ),
+    (
+        "(c) Zaman, kareler ve TEZ_LOS",
+        (
+            ("rtf_ort", "Gerçek zaman oranı (RTF), kayıt penceresi ortalaması"),
+            ("rtf_min_5s", "RTF, en yavaş 5 s'lik dilim"),
+            ("uretilen", "Model sürecine ulaşan kamera karesi"),
+            ("islenen", "Modelin işlediği kare"),
+            ("atlanan", "Model meşgulken atlanan kare"),
+            ("atlanan_kare_orani", "Atlanan kare oranı"),
+            ("islenen_kare_hizi_hz", "İşlenen kare hızı [kare/sim-s]"),
+            ("okuyucuya_ulasmayan", "Kameranın üretip model sürecine hiç ulaşmayan kare"),
+            ("model_ms_ort", "Model süresi (model_ms), ortalama [ms]"),
+            ("model_ms_p95", "Model süresi, p95 [ms]"),
+            ("ulasma_ms_ort", "Karenin model sürecine ulaşma gecikmesi, ortalama [sim ms]"),
+            ("bekleme_ms_ort", "Karenin modeli bekleme süresi, ortalama [ms]"),
+            ("islem_ms_ort", "Kare başına toplam işlem (çözme + kusur + model), ortalama [ms]"),
+            ("uctan_uca_ms_ort", "Uçtan uca gecikme (yakalama → gönderim), ortalama [sim ms]"),
+            ("uctan_uca_ms_p50", "Uçtan uca gecikme, p50 [sim ms]"),
+            ("uctan_uca_ms_p95", "Uçtan uca gecikme, p95 [sim ms]"),
+            ("uctan_uca_ms_maks", "Uçtan uca gecikme, en çok [sim ms]"),
+            ("uctan_uca_px4_ms_ort", "Uçtan uca gecikme, PX4'ün varış damgasıyla (yakalama → PX4), ortalama [sim ms]"),
+            ("uctan_uca_px4_ms_p95", "Uçtan uca gecikme, PX4'ün varış damgasıyla, p95 [sim ms]"),
+            ("px4_varis_eksi_gonderim_ms_ort", "PX4'ün varış damgası − gönderim, ortalama [ms]"),
+            ("tez_los_gonderilen", "Gönderilen TEZ_LOS (gönderim anı kayıt penceresinde)"),
+            ("tez_los_hedef_yok", "Bunlardan 'hedef yok' (NaN)"),
+            ("tez_los_gecersiz", "Geçersiz olduğu için gönderilmeyen TEZ_LOS"),
+            ("tez_los_reddedilen", "Akış kurallarına takılan TEZ_LOS (aynı / eski kare, hız sınırı)"),
+            ("tez_los_hizi_hz", "TEZ_LOS hızı [mesaj/sim-s]"),
+            ("tez_los_px4_sayisi", "PX4'ün ULog'a yazdığı TEZ_LOS (debug_vect)"),
+            ("tez_los_px4_eslesen", "Değeriyle gönderilenle eşleşen ULog kaydı"),
+            ("tez_los_px4_orani", "PX4'e ulaşan / gönderilen TEZ_LOS"),
+        ),
+    ),
+    (
+        "Senaryo",
+        (
+            ("hedef_yol_m", "Hedefin yolu [m]"),
+            ("hedef_hareket_suresi_s", "Hedefin hareket süresi [s]"),
+            ("kayit_suresi_s", "Kayıt süresi [s]"),
+        ),
+    ),
+)
 
 
 def _json_safe(value: object) -> object:
@@ -459,13 +576,97 @@ def _json_safe(value: object) -> object:
     return value
 
 
+def _value(m: Mapping, key: str) -> float:
+    v = m.get(key)
+    return math.nan if v is None else float(v)
+
+
+def checks(m: Mapping, sections: Mapping, model_ran: bool) -> list[dict]:
+    """The report's checks and warnings, [{ad, durum (tamam | uyari | hata), metin, olay}]: olay = the text also goes
+    to the events (the RTF and mode events come from senaryo.py already). Measurements, not success thresholds."""
+    out = []
+    if model_ran:
+        found, seen, best = _value(m, "iou05_kare_sayisi"), _value(m, "hedef_gorunur_islenen"), _value(m, "iou_max")
+        ok = found > 0
+        text = (
+            f"Model görüntüde çalışıyor: hedefin göründüğü {seen:.0f} işlenmiş karenin {found:.0f} tanesinde bir model "
+            f"kutusu hedefle IoU ≥ {olcum.IOU_MATCH} (en iyi {_fmt(best)})"
+            if ok
+            else "Model kontrolü: hiçbir işlenmiş karede model kutusu hedefle IoU ≥ 0.5 değil (model görüntüde "
+            "çalışmıyor olabilir)"
+        )
+        out.append({"ad": "model", "durum": "tamam" if ok else "hata", "metin": text, "olay": not ok})
+    near = sections.get("yakin_mesafe", {}).get("olaylar", [])
+    if near:
+        worst = min(near, key=lambda e: e["en_az_m"])
+        spans = "; ".join(f"{e['baslangic_s']:.1f}–{e['bitis_s']:.1f} s (en az {e['en_az_m']:.2f} m)" for e in near[:6])
+        more = f"; … {len(near) - 6} kez daha" if len(near) > 6 else ""
+        out.append(
+            {
+                "ad": "yakin_mesafe",
+                "durum": "uyari",
+                "metin": f"Dron–hedef yatay mesafe {olcum.NEAR_DISTANCE_M:g} m altına indi: {len(near)} kez, toplam "
+                f"{_value(m, 'yakin_mesafe_3m_suresi_s'):.1f} s, en az {worst['en_az_m']:.2f} m "
+                f"({worst['en_az_t_s']:.1f} s): "
+                f"{spans}{more}. Eşik m01'e önerilecek bir ölçüm eşiğidir, başarı eşiği değildir.",
+                "olay": True,
+            }
+        )
+    elif not math.isnan(_value(m, "en_az_yatay_mesafe_m")):
+        out.append(
+            {
+                "ad": "yakin_mesafe",
+                "durum": "tamam",
+                "metin": f"Dron–hedef yatay mesafe {olcum.NEAR_DISTANCE_M:g} m altına inmedi (en az "
+                f"{_value(m, 'en_az_yatay_mesafe_m'):.2f} m)",
+                "olay": False,
+            }
+        )
+    below = _value(m, "kadraj_yakin_sinir_alti_s")
+    if below > 0:
+        out.append(
+            {
+                "ad": "kadraj_yakin_siniri",
+                "durum": "uyari",
+                "metin": f"Dron kameranın yakın görüş sınırından ({_value(m, 'kadraj_yakin_sinir_m'):.1f} m) yakına "
+                f"{below:.1f} s girdi: o sırada kişinin ayakları kadrajın altındadır (konum hesabı ayak noktasını "
+                "kullanır)",
+                "olay": False,
+            }
+        )
+    kept = _value(m, "mod_korunma_orani")
+    if not math.isnan(kept) and kept < 0.999:
+        out.append(
+            {
+                "ad": "mod",
+                "durum": "uyari",
+                "metin": f"Dron kayıt penceresinin %{100 * (1 - kept):.1f}'inde senaryonun modunda değildi "
+                f"('{sections.get('mod', {}).get('istenen', '')}')",
+                "olay": False,
+            }
+        )
+    rtf = _value(m, "rtf_ort")
+    if not math.isnan(rtf) and rtf < RTF_WARNING:
+        out.append(
+            {
+                "ad": "rtf",
+                "durum": "uyari",
+                "metin": f"RTF {rtf:.2f} (< {RTF_WARNING}): simülasyon gerçek zamandan yavaş aktı; model CPU'yu "
+                "Gazebo'dan alıyor olabilir (sim saatiyle ölçülen süreler etkilenmez, model sim saatine göre hızlı "
+                "görünür)",
+                "olay": False,
+            }
+        )
+    return out
+
+
 def write(
     out: Path,
     sc: Scenario,
     rows: list[dict],
     events: list[str],
     completed: bool,
-    checks: list[dict],
+    checks_: list[dict],
     camera: dict | None,
     camera_mount: dict | None,
     ulog: Path | None,
@@ -474,18 +675,26 @@ def write(
     sections: dict | None = None,
 ) -> dict:
     """Write dogru_cevap.csv, ozet.json and rapor.html; `settings` is the run's "ayarlar" (senaryo.settings),
-    `more_metrics` go into "olcutler" (model, frame and RTF numbers, task group 4), `sections` are more top level
-    parts of ozet.json (e.g. "kare_defteri")."""
+    `more_metrics` go into "olcutler" (olcum.measure and the RTF), `sections` are more top level parts of ozet.json
+    (e.g. "kare_defteri", "mod", "yakin_mesafe"). checks_: the overhead verification (dogrulama.py). Every key of
+    olcum.KEYS is written (NaN = null where it does not apply); the checks go to "kontroller", failed ones and the
+    3 m warning to "olaylar" too."""
+    sections = dict(sections or {})
     df = pd.DataFrame(rows)
     if not df.empty:
         df.to_csv(out / "dogru_cevap.csv", index=False, float_format="%.4f")
     m = metrics(sc, df) if not df.empty else {}
     m.update(ulog_summary(ulog))
     m.update(more_metrics or {})
+    for key in olcum.KEYS:
+        m.setdefault(key, math.nan)
+    model_ran = bool(settings and settings.get("algilama", {}).get("model_bilgisi"))
+    report_checks = checks(m, sections, model_ran)
+    events = list(events) + [c["metin"] for c in report_checks if c["olay"]]
     success = evaluate(sc, m)
-    verify_ok = dogrulama.passed(checks)
-    if checks:
-        diffs = [c["fark"] for c in checks if not math.isnan(c["fark"])]
+    verify_ok = dogrulama.passed(checks_)
+    if checks_:
+        diffs = [c["fark"] for c in checks_ if not math.isnan(c["fark"])]
         m["dogrulama_fark_max_m"] = max(diffs) if diffs else math.nan
     if not completed or df.empty:
         result = "TAMAMLANMADI"
@@ -501,9 +710,10 @@ def write(
         "commit": _git_commit(),
         "ayarlar": settings or {},
         "olcutler": m,
-        **(sections or {}),
+        "kontroller": report_checks,
+        **sections,
         "basari": [{"alan": k, "esik": th, "deger": v, "gecti": ok} for k, _, th, v, ok in success],
-        "dogrulama": checks,
+        "dogrulama": checks_,
         "olaylar": events,
         "kamera": camera,
         "kamera_montaji": camera_mount,
@@ -513,6 +723,13 @@ def write(
 
     figures = []
     if not df.empty:
+        cam = camera_of(camera)
+        following = sc.tracking_source != "yok"
+        distance = _follow_distance(settings) if sc.tracking_source == "follow_me" else None
+        figures.append(("Takip zaman çizelgesi", plot_tracking(sc, df, cam, following, distance)))
+        status = olcum.Topics.read([ulog], ["follow_target_status"]).get("follow_target_status") if ulog else None
+        if status is not None and len(status["timestamp"]):
+            figures.append(("PX4 Follow Target", plot_px4_follow(sc, status, df)))
         figures.append(("Üstten görünüm", plot_map(sc, df)))
         figures.append(("Mesafe", plot_distance(sc, df)))
         figures.append(("Hedefin hızı", plot_target_speed(sc, df)))
@@ -522,15 +739,132 @@ def write(
     return summary
 
 
+def camera_of(camera: Mapping | None) -> kamera.Camera | None:
+    """The camera back from its ozet.json form (kamera.Camera.as_dict)."""
+    if camera is None:
+        return None
+    return kamera.Camera(
+        int(camera["w"]),
+        int(camera["h"]),
+        camera["fx"],
+        camera["fy"],
+        camera["cx"],
+        camera["cy"],
+        tuple(camera["dist"]),
+    )
+
+
+def _follow_distance(settings: Mapping | None) -> float | None:
+    """FLW_TGT_DST as PX4 held it (read back before takeoff), else as asked."""
+    entry = (settings or {}).get("px4_parametreleri", {}).get("FLW_TGT_DST")
+    if not entry:
+        return None
+    value = entry.get("px4") if entry.get("px4") is not None else entry.get("deger")
+    return float(value) if value is not None else None
+
+
+CHECK_MARK = {"tamam": ("✓", "#1a7f37"), "uyari": ("!", "#9a6700"), "hata": ("✗", WARNING_COLOR)}
+
+
+def _metric_tables(m: Mapping) -> str:
+    e = html.escape
+    parts = []
+    for title, rows in METRIC_GROUPS:
+        present = [(k, label) for k, label in rows if k in m]
+        if not present:
+            continue
+        body = "".join(
+            f"<tr><td>{e(label)}<br><code>{e(k)}</code></td><td class=num>{e(_fmt(m[k], k))}</td></tr>"
+            for k, label in present
+        )
+        empty = all(_fmt(m[k], k) == "–" for k, _ in present)
+        note = "<p class=muted>Bu koşuda uygulanmaz (değerler NaN).</p>" if empty else ""
+        parts.append(f"<h3>{e(title)}</h3>{note}<table>{body}</table>")
+    return "".join(parts)
+
+
+def _settings_html(settings: Mapping) -> str:
+    e = html.escape
+    if not settings:
+        return "<p class=muted>Ayar yok.</p>"
+    t = settings.get("takip", {})
+    d = settings.get("algilama", {})
+    f = d.get("model_dosyasi") or {}
+    info = d.get("model_bilgisi") or {}
+    lines = [
+        ("Takip kaynağı / PX4 modu", f"{t.get('kaynak')} / {t.get('mod')}"),
+        ("TEZ_LOS kaynağı (takip.los)", str(t.get("los"))),
+        ("PX4'ün seçilebilir modları", ", ".join(t.get("px4_modlari") or []) or "–"),
+        ("PX4 başlatma komutları", ", ".join(t.get("px4_baslat") or []) or "–"),
+        ("Algılama", "açık" if d.get("etkin") else "kapalı (--modelsiz)"),
+    ]
+    if d.get("etkin"):
+        known = f"modeller.yaml'da {f.get('kayitli')}" if f.get("kayitli") else "modeller.yaml'da kayıtlı değil"
+        lines += [
+            ("Model dosyası", f"{f.get('yol', d.get('model'))} ({f.get('boyut_bayt')} bayt)"),
+            ("Model sha256", f"{f.get('sha256')} ({known})" + (f"; UYARI: {f.get('uyari')}" if f.get("uyari") else "")),
+            (
+                "Model ayarları",
+                f"sınıf {info.get('sinif')} ({info.get('sinif_adi')}), imgsz {info.get('imgsz')} "
+                f"(adım {info.get('adim')}), "
+                f"conf {info.get('conf')}, {info.get('cekirdek')} çekirdek, ilk çağrı {_fmt(info.get('isinma_ms'))} ms",
+            ),
+        ]
+    g = settings.get("gecikme", {})
+    lines.append(("Gecikme", ", ".join(f"{k} {v}" for k, v in g.items()) or "–"))
+    lines.append(("Kamera kusurları", ", ".join(settings.get("kusurlar") or {}) or "kapalı"))
+    waiting = settings.get("henuz_bagli_degil") or {}
+    if waiting:
+        lines.append(
+            ("Henüz bağlanmamış (varsayılanı etkin değil)", ", ".join(f"{k} (grup {v})" for k, v in waiting.items()))
+        )
+    table = "".join(f"<tr><td>{e(k)}</td><td>{e(str(v))}</td></tr>" for k, v in lines)
+    params = settings.get("px4_parametreleri") or {}
+    prow = "".join(
+        f"<tr><td><code>{e(name)}</code></td><td class=num>{e(str(p.get('deger')))}</td>"
+        f"<td class=num>{e(_fmt(p.get('px4')) if isinstance(p.get('px4'), float) else str(p.get('px4')))}</td>"
+        f"<td class=muted>{e(str(p.get('kaynak')))}</td></tr>"
+        for name, p in params.items()
+    )
+    ptable = (
+        f"<h3>PX4 başlangıç parametreleri ({len(params)})</h3>"
+        "<table><tr><th>Ad</th><th>İstenen</th><th>PX4'ten okunan</th>"
+        f"<th>Kaynak</th></tr>{prow}</table>"
+        if params
+        else ""
+    )
+    return f"<table>{table}</table>{ptable}"
+
+
+def _mode_html(mode: Mapping | None) -> str:
+    e = html.escape
+    if not mode:
+        return ""
+    spans = mode.get("ulog") or []
+    rows = "".join(
+        f"<tr><td class=num>{s['baslangic_s']:.1f}</td><td class=num>{s['bitis_s']:.1f}</td>"
+        f"<td>{e(s['ad'])} <span class=muted>({s['nav_state']})</span></td></tr>"
+        for s in spans
+    )
+    kept = mode.get("korunma_kaynagi")
+    head = (
+        f"<p>İstenen mod <b>{e(str(mode.get('istenen')))}</b>, seçildiği an {_fmt(mode.get('secildi_s'))} s"
+        f" (PX4 nav_state {mode.get('istenen_nav_state')}); korunma oranının kaynağı: {e(str(kept))}.</p>"
+    )
+    table = (
+        "<table><tr><th>Başlangıç [s]</th><th>Bitiş [s]</th><th>PX4 modu (vehicle_status.nav_state)</th></tr>"
+        f"{rows}</table>"
+        if rows
+        else "<p class=muted>ULog'da vehicle_status yok.</p>"
+    )
+    return f"<h2>Mod zaman çizelgesi (ULog)</h2>{head}{table}"
+
+
 def _html(sc: Scenario, s: dict, success: list, figures: list[tuple[str, str]], out: Path) -> str:
     e = html.escape
     badge = {"GEÇTİ": ("✓", "#1a7f37"), "KALDI": ("✗", "#c62828"), "TAMAMLANMADI": ("!", "#9a6700")}[s["sonuc"]]
     m = s["olcutler"]
-    metric_rows = "".join(
-        f"<tr><td>{e(label)}</td><td class=num>{_fmt(m[k], k)}</td></tr>"
-        for k, label in METRIC_LABELS.items()
-        if k in m
-    )
+    m = {k: (math.nan if v is None else v) for k, v in m.items()}
     if success:
         success_rows = "".join(
             f"<tr><td>{e(desc)}<br><code>{e(k)}</code></td><td class=num>{_fmt(th, k)}</td>"
@@ -542,6 +876,12 @@ def _html(sc: Scenario, s: dict, success: list, figures: list[tuple[str, str]], 
         )
     else:
         success_html = "<p class=muted>Bu senaryoda başarı eşiği tanımlı değil (<code>basari</code> boş).</p>"
+    check_items = "".join(
+        f'<li class="{c["durum"]}"><span class=mark style="color:{CHECK_MARK[c["durum"]][1]}">'
+        f"{CHECK_MARK[c['durum']][0]}</span> {e(c['metin'])}</li>"
+        for c in s.get("kontroller", [])
+    )
+    checks_html = f"<ul class=checks>{check_items}</ul>" if check_items else "<p class=muted>Kontrol yok.</p>"
     verify_html = ""
     if s["dogrulama"]:
         rows = "".join(
@@ -560,7 +900,10 @@ altında kalan anlar sayılmaz; hedef kontrol anlarının en az yarısında gör
 <table><tr><th>Zaman [s]</th><th>Hesap x, y [m]</th><th>Görüntü x, y [m]</th><th>Fark [m]</th></tr>
 {rows}</table>{img}"""
     events = "".join(f"<li>{e(x)}</li>" for x in s["olaylar"]) or "<li>Olay yok</li>"
-    figs = "".join(f'<figure><img alt="{e(t)}" src="data:image/png;base64,{b}"></figure>' for t, b in figures)
+    figs = "".join(
+        f'<figure><img alt="{e(t)}" src="data:image/png;base64,{b}"><figcaption>{e(t)}</figcaption></figure>'
+        for t, b in figures
+    )
     files = ", ".join(f"<code>{p.name}</code>" for p in sorted(out.iterdir()) if p.is_file())
     return f"""<!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -568,13 +911,18 @@ altında kalan anlar sayılmaz; hedef kontrol anlarının en az yarısında gör
 <style>
 :root {{ --surface:{SURFACE}; --text:{TEXT}; --text-2:{TEXT_2}; --rule:{GRID}; }}
 body {{ background:var(--surface); color:var(--text); font:15px/1.5 system-ui, sans-serif; margin:0 auto;
-  max-width:860px; padding:24px 16px; }}
+  max-width:900px; padding:24px 16px; }}
 h1 {{ font-size:22px; margin:0 0 4px; }} h2 {{ font-size:17px; margin:28px 0 8px; }}
+h3 {{ font-size:15px; margin:18px 0 6px; }}
 .muted, figcaption {{ color:var(--text-2); }}
 .badge {{ display:inline-block; padding:4px 12px; border-radius:6px; color:#fff; font-weight:600; }}
 table {{ border-collapse:collapse; width:100%; font-size:14px; }}
 th, td {{ border-bottom:1px solid var(--rule); padding:6px 8px; text-align:left; vertical-align:top; }}
 td.num {{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+td code {{ color:var(--text-2); font-size:12px; }}
+ul.checks {{ list-style:none; padding:0; }} ul.checks li {{ padding:6px 10px; margin:4px 0; border-radius:6px;
+  background:#f3f2ee; }} ul.checks li.uyari {{ background:#fff4d6; }} ul.checks li.hata {{ background:#fde2e1; }}
+.mark {{ font-weight:700; margin-right:4px; }}
 figure {{ margin:16px 0; }} img {{ max-width:100%; height:auto; }}
 code {{ font-size:13px; }}
 </style></head><body>
@@ -583,9 +931,16 @@ code {{ font-size:13px; }}
 <p><span class=badge style="background:{badge[1]}">{badge[0]} {e(s["sonuc"])}</span>
 <span class=muted>&nbsp;{e(s["tarih"])} · commit {e(s["commit"])} · takip kaynağı <code>{e(sc.tracking_source)}</code>,
 {sc.altitude:.0f} m</span></p>
+<h2>Kontroller ve uyarılar</h2>{checks_html}
+<p class=muted>Bunlar ölçümdür, başarı eşiği değildir (eşikleri m01 belirler).</p>
 <h2>Başarı ölçütleri</h2>{success_html}
-<h2>Ölçümler</h2><table>{metric_rows}</table>
+<h2>Ölçümler</h2>
+<p class=muted>Yalnız kayıt penceresi ({sc.start_time:.0f} s → {sc.end_time:.1f} s); "takip başı" ölçütleri mod
+seçiminden hedefin yürümeye başlamasına kadardır. Tanımlar: spec "Ölçüt Tanımları". "–" = bu koşuda uygulanmaz.</p>
+{_metric_tables(m)}
 <h2>Grafikler</h2>{figs}
+{_mode_html(s.get("mod"))}
+<h2>Ayarlar</h2>{_settings_html(s.get("ayarlar") or {})}
 {verify_html}
 <h2>Olaylar</h2><ul>{events}</ul>
 <h2>Dosyalar</h2><p>{files}</p>

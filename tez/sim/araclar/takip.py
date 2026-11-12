@@ -60,7 +60,6 @@ LOCK_MIN_IOU = 0.3
 MOUNT_PITCH_DOWN = konumlama.MOUNT_PITCH_DOWN  # nominal camera mount (spec "Kamera parametreleri"; the Pi: measured)
 NOMINAL_MOUNT = konumlama.NOMINAL_MOUNT  # C_cb, optical -> body FRD
 REFEREE_KEEP_S = 3.0  # [s sim] referee frames kept for the lock of a model frame (a model result is ~0.15 s late)
-MATCH_IOU = algilama.IOU_MATCH  # the chosen box is the target (spec "Ölçüt Tanımları": seçim doğru)
 SOURCES = ("model", "hakem")
 
 
@@ -111,12 +110,6 @@ def box_diagonal(box: Kutu) -> float:
 def los_of_box(camera: kamera.Camera, box: Kutu, mount: np.ndarray = NOMINAL_MOUNT) -> np.ndarray:
     """LOS (i): unit vector camera -> the box's centre in body FRD (camera_info intrinsics and distortion, mount)."""
     return mount @ camera.pixel_to_los(*box_centre(box))
-
-
-def angle_deg(a: Sequence[float], b: Sequence[float]) -> float:
-    """Angle between two directions [deg]; atan2 keeps it exact for the small angles that matter here."""
-    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
-    return math.degrees(math.atan2(float(np.linalg.norm(np.cross(a, b))), float(np.dot(a, b))))
 
 
 class Selection:
@@ -628,7 +621,7 @@ class Tracker:
 
     def summary(self) -> dict:
         """ozet.json "tez_los": the whole run (not only the window); "follow_target": FOLLOW_TARGET and the box
-        positions of the whole run."""
+        positions of the whole run. The window's numbers: olcum.py (attempts, follow_attempts, events)."""
         with self._lock:
             attempts, events, errors = list(self.attempts), list(self.events), list(self.errors)
             follow, fixes = list(self.follow_attempts), dict(self.fixes)
@@ -674,150 +667,6 @@ class Tracker:
             mean = f", konum hatası ort. {statistics.fmean(errors):.2f} m" if errors else ""
             text += f"FOLLOW_TARGET: {len(follow)} gönderildi{mean}; "
         return text + state
-
-    def metrics(
-        self,
-        start: float,
-        end: float,
-        detection_rows: list[dict],
-        referee_rows: list[dict],
-        mount: tuple[tuple[float, float, float], np.ndarray] | None = None,
-    ) -> dict:
-        """Numbers of the window start..end [s sim] for ozet.json "olcutler" (temporary, task group 7 moves them to
-        olcum.py). TEZ_LOS and FOLLOW_TARGET by send time (what PX4 can log in the window), selection, LOS (i) and the
-        box positions by frame time. mount: the camera's true offset (FLU) and C_cb from Gazebo
-        (Recorder.camera_offset, camera_dcm), for the box positions with the true drone pose."""
-        with self._lock:
-            attempts, events, follow = list(self.attempts), list(self.events), list(self.follow_attempts)
-        span = end - start
-        sent = [a for a in attempts if a["sonuc"] == "gonderildi" and start <= a["gonderim_sim"] <= end]
-        tried = [a for a in attempts if start <= a["t"] <= end]
-        latency = [a["uctan_uca_ms"] for a in sent]
-        m = {
-            "tez_los_gonderilen": len(sent),
-            "tez_los_hedef_yok": sum(1 for a in sent if not a["hedef"]),
-            "tez_los_gecersiz": sum(1 for a in tried if a["sonuc"] == "gecersiz"),
-            "tez_los_reddedilen": sum(1 for a in tried if a["sonuc"] in ("ayni_kare", "eski_kare", "hiz_siniri")),
-            "tez_los_hizi_hz": len(sent) / span if span > 0 else math.nan,
-        } | _stats("uctan_uca_ms", latency)
-        m |= _stats("ek_gecikme_ms", [a["ek_gecikme_ms"] for a in sent], ("ort", "maks"))
-        m |= _stats("hazir_ms", [a["hazir_ms"] for a in sent], ("ort", "p95"))
-        inside = [e for e in events if start <= e["t"] <= end]
-        m["kilit_kaybi_sayisi"] = sum(1 for e in inside if e["olay"] == "kilit_kaybi")
-        m["yeniden_kilit_sayisi"] = sum(1 for e in inside if e["olay"] == "yeniden_kilit")
-        m |= _selection_metrics(start, end, detection_rows, referee_rows)
-        m |= _follow_metrics(start, end, follow, detection_rows)
-        return m | self._position_metrics(start, end, detection_rows, referee_rows, mount)
-
-    def _position_metrics(
-        self,
-        start: float,
-        end: float,
-        rows: list[dict],
-        referee_rows: list[dict],
-        mount: tuple[tuple[float, float, float], np.ndarray] | None,
-    ) -> dict:
-        """The box positions of the window (every tracking source): how often there was one and why not, and where
-        the chosen box was the target (IoU >= 0.5) how far it was from the target, with the EKF pose (what goes to
-        PX4) and with the true pose and mount (the box's own part). The EKF's yaw and position against Gazebo's."""
-        frames = [r for r in rows if start <= r["t"] <= end and "konum" in r]
-        referee = {algilama.time_key(x["t"]): x for x in referee_rows}
-        origin = self.poses.origin if self.poses is not None else None
-        px4 = konumlama.MapProjection(origin.lat, origin.lon) if origin is not None else None
-        camera = self._camera()
-        errors, true_errors, yaw_errors, ekf_errors = [], [], [], []
-        for r in frames:
-            ref = referee.get(r["t_us"])
-            if ref is None:
-                continue
-            if math.isfinite(r["ekf_yaw_deg"]):
-                yaw_errors.append((r["ekf_yaw_deg"] - ref["dron_yaw_deg"] + 180.0) % 360.0 - 180.0)
-                if px4 is not None and self._world is not None:
-                    x, y, _ = self._world.to_local(*px4.reproject(r["ekf_n"], r["ekf_e"]))
-                    ekf_errors.append(math.hypot(x - ref["dron_x"], y - ref["dron_y"]))
-            if r["konum"] != "hesaplandi" or not ref.get("gorunur"):
-                continue
-            target = tuple(float(ref.get(f"hedef_kutu_{k}", math.nan)) for k in ("u0", "v0", "u1", "v1"))
-            if algilama.iou(tuple(r[f"secilen_{k}"] for k in ("u0", "v0", "u1", "v1")), target) < MATCH_IOU:
-                continue
-            errors.append(r["konum_hatasi_m"])
-            if camera is not None and mount is not None and mount[0] is not None:
-                x, y = konumlama.true_pose_hit(camera, (r["ayak_u"], r["ayak_v"]), ref, mount[0], mount[1])
-                true_errors.append(math.hypot(x - ref["hedef_x"], y - ref["hedef_y"]))
-        statuses = Counter(r["konum"] for r in frames)
-        m = {"konum_hesaplanan": statuses["hesaplandi"], "konum_durumlari": dict(statuses), "konum_kare": len(errors)}
-        m |= _stats("konum_hatasi", errors, ("ort", "p50", "p95", "maks"), unit="_m")
-        m |= _stats("konum_hatasi_gercek_pozla", true_errors, ("ort", "p95"), unit="_m")
-        m |= _stats("ekf_yaw_hatasi", yaw_errors, ("ort",), unit="_deg")
-        m["ekf_yaw_hatasi_maks_deg"] = max((abs(v) for v in yaw_errors), default=math.nan)
-        return m | _stats("ekf_yatay_konum_hatasi", ekf_errors, ("ort", "maks"), unit="_m")
-
-
-def _follow_metrics(start: float, end: float, attempts: list[dict], rows: list[dict]) -> dict:
-    """FOLLOW_TARGET of the window: sent by send time (what PX4 can have fused), refused by capture time; how far the
-    sent position was from the target at the capture time (geolocation_hatasi, spec "Ölçüt Tanımları") and at the
-    send time (the target walked on meanwhile)."""
-    span = end - start
-    sent = [a for a in attempts if a["sonuc"] == "gonderildi" and start <= a["gonderim_sim"] <= end]
-    tried = [a for a in attempts if start <= a["t"] <= end]
-    m = {
-        "follow_target_gonderilen": len(sent),
-        "follow_target_hizi_hz": len(sent) / span if span > 0 else math.nan,
-        "follow_target_reddedilen": sum(1 for a in tried if a["sonuc"] in ("ayni_kare", "eski_kare", "hiz_siniri")),
-        "follow_target_gecersiz": sum(1 for a in tried if a["sonuc"] == "gecersiz"),
-        "follow_target_konumsuz_kare": sum(
-            1 for r in rows if start <= r["t"] <= end and r.get("ft_sonuc") == "konum_yok"
-        ),
-    }
-    m |= _stats("follow_target_uctan_uca_ms", [a["uctan_uca_ms"] for a in sent], ("ort", "p95", "maks"))
-    m |= _stats("geolocation_hatasi", [a["hata_m"] for a in sent], ("ort", "p50", "p95", "maks"), unit="_m")
-    return m | _stats(
-        "geolocation_hatasi_gonderimde", [a["hata_gonderimde_m"] for a in sent], ("ort", "p95"), unit="_m"
-    )
-
-
-def _selection_metrics(start: float, end: float, rows: list[dict], referee_rows: list[dict]) -> dict:
-    """Processed frames of the window: how often a box was chosen, how often it was the target while the target was
-    visible, and LOS (i) against the referee's LOS (ii) of the same frame while the chosen box is the target."""
-    frames = [r for r in rows if start <= r["t"] <= end and "secim" in r]
-    referee = {algilama.time_key(x["t"]): x for x in referee_rows}
-    chosen = right = visible = 0
-    angles: list[float] = []
-    for r in frames:
-        has_box = r.get("secilen_kutu") is not None
-        chosen += has_box
-        ref = referee.get(r["t_us"])
-        if ref is None or not ref.get("gorunur"):
-            continue
-        visible += 1
-        target = tuple(float(ref.get(f"hedef_kutu_{k}", math.nan)) for k in ("u0", "v0", "u1", "v1"))
-        box = tuple(r[f"secilen_{k}"] for k in ("u0", "v0", "u1", "v1")) if has_box else (math.nan,) * 4
-        if algilama.iou(box, target) >= MATCH_IOU:
-            right += 1
-            angles.append(angle_deg([r[f"los_i_{k}"] for k in "xyz"], [ref[f"los_govde_{k}"] for k in "xyz"]))
-    m = {
-        "secili_kare_orani": chosen / len(frames) if frames else math.nan,
-        "secim_dogru_orani": right / visible if visible else math.nan,
-        "los_i_ii_kare": len(angles),
-    }
-    return m | _stats("los_i_ii_fark", angles, ("ort", "p50", "p95", "maks"), unit="_deg")
-
-
-def _stats(
-    name: str, values: list[float], kinds: tuple[str, ...] = ("ort", "p50", "p95", "maks"), unit: str = ""
-) -> dict:
-    values = [v for v in values if not math.isnan(v)]
-    out = {}
-    for kind in kinds:
-        if not values:
-            out[f"{name}_{kind}{unit}"] = math.nan
-        elif kind == "ort":
-            out[f"{name}_{kind}{unit}"] = statistics.fmean(values)
-        elif kind == "maks":
-            out[f"{name}_{kind}{unit}"] = max(values)
-        else:
-            out[f"{name}_{kind}{unit}"] = float(np.percentile(values, float(kind[1:])))
-    return out
 
 
 def _vector(los: np.ndarray | None) -> tuple[float, float, float]:

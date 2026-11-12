@@ -229,13 +229,5 @@ def test_detection_log_rows_boxes_and_books(tmp_path: Path) -> None:
         boxes = list(csv.DictReader(f))
     assert [b["t_us"] for b in boxes] == ["59940000", "60060000", "60180000"] and float(boxes[0]["u1"]) == 140.0
 
-    target = {"hedef_kutu_u0": 100, "hedef_kutu_v0": 200, "hedef_kutu_u1": 140, "hedef_kutu_v1": 300, "gorunur": True}
-    referee = [{"t": t} | target for t in frames + [60.19]]  # 60.19: a camera frame the reader never got
-    m = log.metrics(60.0, 60.2, referee)
-    # window 60.0..60.2 s: received 60.02 .. 60.18 (5), processed 60.06 and 60.18, skipped 60.02, 60.10, 60.14
-    assert (m["uretilen"], m["islenen"], m["atlanan"]) == (5, 2, 3)
-    assert (m["kamera_karesi"], m["okuyucuya_ulasmayan"]) == (6, 1)
-    assert m["atlanan_kare_orani"] == pytest.approx(1 - 2 / 5)
-    assert m["islenen_kare_hizi_hz"] == pytest.approx(2 / 0.2)
-    assert (m["model_ms_ort"], m["ulasma_ms_ort"]) == (pytest.approx(60.0), pytest.approx(20.0, abs=0.01))
-    assert (m["iou05_kare_sayisi"], m["iou_max"], m["hedef_gorunur_islenen"]) == (2, 1.0, 2)
+    # the window's frame and time numbers of these rows: olcum.frame_metrics (test_olcum)
+    assert [len(s) for s in (log.rows, log.skipped)] == [3, 6] and log.boxes[60_060_000] == (box,)
