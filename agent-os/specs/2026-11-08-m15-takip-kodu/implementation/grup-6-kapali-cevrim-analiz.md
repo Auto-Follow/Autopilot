@@ -354,6 +354,8 @@ Bütün bölümlerde durum hep TAKIP, atılan mesaj yok, `hold_request_count` 0,
 
 ### 12.6 Kullanıcıya soru
 
+**Cevaplar (2026-11-12):** Soru 1 → **(a)**, kullanıcı: "benim bilgisayarımda kalsın" (seçenek eklenmez; S7 yerel sarmalayıcıyla). Soru 2 → "b-c denenip optimum bulunsun" (tarama Bölüm 12). Soru 3 → **(a) şimdilik**. Soru 4 → **(a)+(c)**: T2b sonucu kabul; Hold reddinin gerçek testi m16'ya / gerçek uçuş öncesi GPS'li yer testine.
+
 **Soru 5 — `AF_K_FF` / `AF_BETA` varsayılanları ne olsun?** (Bölüm 12.5)
 - (a) İkisi de değişmesin (`AF_K_FF` 0, `AF_BETA` 0,17); tarama yalnız bilgi olarak kalsın.
 - (b) `AF_BETA` 0,10, `AF_K_FF` 0 kalsın (Claude'un önerisi); `AF_K_FF` uçuşta QGC'den açılır.
