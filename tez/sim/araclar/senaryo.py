@@ -12,8 +12,9 @@
 Steps: check the mode name and the model file (sha256), start the model process and wait for the loaded model, write
 the scenario world (base world + target), start Gazebo + PX4 (calistir.sh) with the start parameters, read them back
 from PX4, take off, switch by name to the mode of the scenario's tracking source (takip.kaynak; "yok" = PX4 "Hold",
-"tez_los" = takip.mod_adi / --mod-adi), record ground truth while the target walks, stop the model process and the
-TEZ_LOS stream, land, shut down, collect the ULog, write the report to tez/sim/sonuclar/<date>_<scenario>/.
+"follow_me" = "Follow Target", "tez_los" = takip.mod_adi / --mod-adi), record ground truth while the target walks,
+stop the model process and the TEZ_LOS / FOLLOW_TARGET streams, land, shut down, collect the ULog, write the report
+to tez/sim/sonuclar/<date>_<scenario>/.
 ozet.json "ayarlar" holds every setting of the run (scenario + command line). A setting that a later task group of
 spec 2026-11-10-m06-sim-ortami wires in, or a mode name PX4 does not offer, stops the run before anything starts.
 
@@ -24,6 +25,11 @@ message per processed frame, NaN = no target), or the referee's (--los hakem, ev
 source, "yok" included. algilama.csv has one row per processed frame (times, model_ms, boxes, selection, LOS,
 TEZ_LOS), kutular.csv every box, tez_los.csv every TEZ_LOS attempt; all join dogru_cevap.csv on round(t * 1e6).
 --modelsiz (algilama.etkin: false) starts no model process at all.
+
+follow_me closes the loop with PX4's stock Follow Me: the chosen box's flat-ground position (konumlama.py, the EKF
+pose of the frame) goes to PX4 as FOLLOW_TARGET (at most every third camera frame); with --los hakem the person's
+true position, only while they are visible. FLW_TGT_HT is drone.yukseklik_m unless given. follow_target.csv has
+every FOLLOW_TARGET attempt; algilama.csv the position of every chosen box (every tracking source).
 """
 
 import argparse
@@ -32,6 +38,7 @@ import importlib.util
 import math
 import shutil
 import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -40,6 +47,7 @@ import algilama
 import dogrulama
 import goruntu
 import hedef
+import konumlama
 import parametreler
 import rapor
 import takip
@@ -54,6 +62,9 @@ PROGRESS_EVERY = 10.0  # [s sim] the model's numbers in the log while recording
 # PX4 must have logged the TEZ_LOS messages sent in the window (ULog debug_vect) within this share (tasks.md 5.7)
 TEZ_LOS_ULOG_TOLERANCE = 0.05
 LOCK_EVENTS_LISTED = 12  # lock events written into the report's events one by one
+# follow_me: FOLLOW_TARGETs sent before PX4's logger is restarted, so that the follow_target topic exists (see
+# simulasyon.restart_logger); ~0.3 s after the first one. The restart must be done before the window starts.
+LOGGER_RESTART_AFTER = 3
 # PX4 mode (AVAILABLE_MODES name) of each tracking source; chosen by name, never by number (tez_los: takip.mod_adi)
 TRACKING_MODES = {"yok": HOLD_MODE_NAME, "follow_me": FOLLOW_TARGET_MODE_NAME}
 
@@ -134,12 +145,14 @@ def fly(
     model: algilama.ModelProcess | None = None,
     detections: algilama.DetectionLog | None = None,
     tracker: takip.Tracker | None = None,
+    restart_logger: Callable[[], tuple[bool, str]] | None = None,
 ) -> bool:
+    """restart_logger: Simulation.restart_logger, called once in follow_me (the follow_target topics into the ULog)."""
     v = Vehicle()
     if tracker is not None:  # TEZ_LOS goes out from the moment the link to PX4 exists
         tracker.attach(v)
     try:
-        return _fly(v, sc, rec, events, run_settings, model, detections, tracker)
+        return _fly(v, sc, rec, events, run_settings, model, detections, tracker, restart_logger)
     finally:
         if tracker is not None:
             tracker.detach()
@@ -188,6 +201,7 @@ def _fly(
     model: algilama.ModelProcess | None,
     detections: algilama.DetectionLog | None,
     tracker: takip.Tracker | None,
+    restart_logger: Callable[[], tuple[bool, str]] | None = None,
 ) -> bool:
     if not check_start_params(v, run_settings["px4_parametreleri"], events):
         return False
@@ -208,6 +222,8 @@ def _fly(
     if not v.takeoff(sc.altitude):
         events.append("Kalkış başarısız")
         return False
+    if tracker is not None and not v.wait_references():  # home is valid once armed
+        events.append("EKF kökeni (GPS_GLOBAL_ORIGIN) ya da ev noktası alınamadı: kutuların konumu hesaplanamaz")
     time.sleep(3)  # let the takeoff mode settle into its hover
     if not v.switch_mode(mode):
         events.append(f"'{name}' moduna geçilemedi")
@@ -225,7 +241,9 @@ def _fly(
     log(f"Kayıt başladı; hedef {sc.start_time:.0f} s'de yürümeye başlayacak, senaryo {sc.end_time:.0f} s'de bitecek")
     last_t, last_change = rec.sim_time, time.monotonic()
     next_progress = sc.start_time
+    logger = _LoggerRestart(restart_logger if tracker is not None and tracker.follow else None, events)
     while rec.sim_time < sc.end_time:
+        logger.poll(tracker, rec.sim_time, sc.start_time)
         current = v.current_mode(timeout=1.0)
         if current is not None and current != mode:
             events.append(f"{rec.sim_time:.1f} s: dron senaryo modundan çıktı")
@@ -247,14 +265,44 @@ def _fly(
     if model is not None:  # the recording is over: the CPU goes back to Gazebo and PX4 for the landing
         model.stop()
         log(f"Model süreci kapandı: {model.results} kare işlendi")
-    if tracker is not None:  # like the Pi's model: the TEZ_LOS stream ends with the recording
+    if tracker is not None:  # like the Pi's model: the TEZ_LOS / FOLLOW_TARGET streams end with the recording
         tracker.close()
         sent = tracker.sender.counts["gonderildi"]
-        log(f"TEZ_LOS akışı kapandı: {sent} mesaj gönderildi")
+        follow = f", FOLLOW_TARGET {tracker.follow_sender.counts['gonderildi']}" if tracker.follow else ""
+        log(f"TEZ_LOS akışı kapandı: {sent} mesaj gönderildi{follow}")
     log("Senaryo bitti, iniş")
     if not v.land():
         events.append("İniş/disarm tamamlanamadı")
     return True
+
+
+class _LoggerRestart:
+    """follow_me: restart PX4's logger once FOLLOW_TARGET flows (in its own thread: the main thread keeps reading
+    MAVLink, the pose history must not stall), before the window starts."""
+
+    def __init__(self, restart: Callable[[], tuple[bool, str]] | None, events: list[str]) -> None:
+        self._restart, self._events = restart, events
+        self._thread: threading.Thread | None = None
+        self._gave_up = False
+
+    def poll(self, tracker: takip.Tracker | None, now: float, window_start: float) -> None:
+        if self._restart is None or self._thread is not None or self._gave_up:
+            return
+        if tracker.follow_sender.counts["gonderildi"] >= LOGGER_RESTART_AFTER:
+            self._thread = threading.Thread(target=self._run, args=(now,), name="tez-logger", daemon=True)
+            self._thread.start()
+        elif now >= window_start - 1.0:
+            self._gave_up = True
+            self._events.append(
+                "PX4 kaydedicisi yeniden başlatılmadı (kayıt penceresinden önce FOLLOW_TARGET gitmedi): ULog'da "
+                "follow_target konuları yok"
+            )
+
+    def _run(self, now: float) -> None:
+        ok, text = self._restart()
+        log(f"PX4 kaydedicisi yeniden başlatıldı ({now:.1f} s): follow_target konuları ULog'a girsin diye")
+        if not ok:
+            self._events.append(f"PX4 kaydedicisi yeniden başlatılamadı: {text}")
 
 
 def start_model(
@@ -334,6 +382,39 @@ def _tracking_log_lines(m: dict, summary: dict) -> None:
         )
 
 
+def _follow_log_lines(m: dict, follow: dict) -> None:
+    if follow["etkin"]:
+        log(
+            f"FOLLOW_TARGET ({follow['kaynak']}): kayıt penceresinde {m['follow_target_gonderilen']} gönderildi "
+            f"({m['follow_target_hizi_hz']:.1f} mesaj/sim-s), konumsuz kare {m['follow_target_konumsuz_kare']}; "
+            f"gönderilen konumun hatası ort. {m['geolocation_hatasi_ort_m']:.2f} m (p95 "
+            f"{m['geolocation_hatasi_p95_m']:.2f}, en çok {m['geolocation_hatasi_maks_m']:.2f}; gönderim anına göre "
+            f"{m['geolocation_hatasi_gonderimde_ort_m']:.2f}); bütün koşuda {follow['sonuclar']}"
+        )
+        if "follow_target_px4_sayisi" in m:
+            log(
+                f"PX4: ULog'da {m['follow_target_px4_sayisi']} follow_target (kaydedici 500 ms'de bir); hedef "
+                f"kestirimi gerçek konumdan ort. {m.get('px4_kestirim_hatasi_ort_m', math.nan):.2f} m (p95 "
+                f"{m.get('px4_kestirim_hatasi_p95_m', math.nan):.2f}), bayat {m.get('px4_kestirim_bayat_s', 0):.1f} s"
+            )
+        if "follow_mesafe" in follow:
+            d = follow["follow_mesafe"]
+            log(
+                f"Follow Me: dron-hedef yatay mesafe ort. {d['ort']:.2f} m (en az {d['min']:.2f}, en çok "
+                f"{d['max']:.2f}; FLW_TGT_DST {d['hedef']:g}); |mesafe - FLW_TGT_DST| ort. "
+                f"{m['yatay_mesafe_hatasi_ort_m']:.2f} m"
+            )
+    if m.get("konum_hesaplanan"):
+        log(
+            f"Konum (model kutusu, düz zemin): kayıt penceresinde {m['konum_hesaplanan']} kare, durumlar "
+            f"{m['konum_durumlari']}; kutu hedefken hata ort. {m['konum_hatasi_ort_m']:.2f} m (p95 "
+            f"{m['konum_hatasi_p95_m']:.2f}, en çok {m['konum_hatasi_maks_m']:.2f}; {m['konum_kare']} kare), gerçek "
+            f"pozla {m['konum_hatasi_gercek_pozla_ort_m']:.2f} m; EKF yaw hatası ort. "
+            f"{m['ekf_yaw_hatasi_ort_deg']:+.2f}°, EKF yatay konum hatası ort. "
+            f"{m['ekf_yatay_konum_hatasi_ort_m']:.2f} m"
+        )
+
+
 def tracking_results(
     tracker: takip.Tracker,
     sc: hedef.Scenario,
@@ -341,10 +422,15 @@ def tracking_results(
     rows: list[dict],
     ulog: Path | None,
     events: list[str],
-) -> tuple[dict, dict]:
-    """The TEZ_LOS stream's and the selection's numbers in the window (olcutler) and the whole run (ozet.json
-    "tez_los"); events for the lock changes and a ULog count off by more than TEZ_LOS_ULOG_TOLERANCE."""
-    m = tracker.metrics(sc.start_time, sc.end_time, detections.rows if detections is not None else [], rows)
+    mount: tuple | None = None,
+    world: konumlama.WorldGeo | None = None,
+    follow_distance: float | None = None,
+) -> tuple[dict, dict, dict]:
+    """The TEZ_LOS / FOLLOW_TARGET streams' and the selection's numbers in the window (olcutler) and the whole run
+    (ozet.json "tez_los", "follow_target"); events for the lock changes and a ULog count off by more than
+    TEZ_LOS_ULOG_TOLERANCE. mount: the camera's true offset and C_cb (Recorder); world: the world's geodetic origin;
+    follow_distance: FLW_TGT_DST [m] in follow_me."""
+    m = tracker.metrics(sc.start_time, sc.end_time, detections.rows if detections is not None else [], rows, mount)
     sent = [a for a in tracker.attempts if a["sonuc"] == "gonderildi"]
     m |= rapor.ulog_tez_los(ulog, sc.start_time, sc.end_time, sent)
     if "tez_los_px4_sayisi" in m:
@@ -356,6 +442,20 @@ def tracking_results(
                 f"izin verilen fark %{100 * TEZ_LOS_ULOG_TOLERANCE:.0f})"
             )
     summary = tracker.summary()
+    follow = summary.pop("follow_target")
+    if follow["etkin"]:
+        m |= rapor.ulog_follow_target(ulog, sc.start_time, sc.end_time, world, lambda s: sc.truth(s)[:2])
+        distances = [r["yatay_mesafe"] for r in rows if sc.start_time <= r["t"] <= sc.end_time]
+        if follow_distance is not None and distances:
+            m["yatay_mesafe_hatasi_ort_m"] = sum(abs(d - follow_distance) for d in distances) / len(distances)
+            follow["follow_mesafe"] = {
+                "hedef": follow_distance,
+                "ort": sum(distances) / len(distances),
+                "min": min(distances),
+                "max": max(distances),
+            }
+        if m["follow_target_gonderilen"] == 0:
+            events.append("FOLLOW_TARGET: kayıt penceresinde hiç gönderilmedi (Follow Me'nin hedefi yok)")
     lock_events = summary["kilit"]["olaylar"]
     names = {"ilk_kilit": "ilk kilit", "yeniden_kilit": "yeniden kilit", "kilit_kaybi": "kilit kaybı"}
     for e in lock_events[:LOCK_EVENTS_LISTED]:
@@ -365,7 +465,8 @@ def tracking_results(
         events.append(f"... {len(lock_events) - LOCK_EVENTS_LISTED} kilit olayı daha (ozet.json tez_los.kilit)")
     events += [f"Takip: {e}" for e in summary["hatalar"]]
     _tracking_log_lines(m, summary)
-    return m, summary
+    _follow_log_lines(m, follow)
+    return m, summary, follow
 
 
 def run(
@@ -396,9 +497,19 @@ def run(
     rec: Recorder | None = None
     detections = algilama.DetectionLog(out, clock, takip.ROW_COLUMNS) if model_file is not None else None
     tracker = None
-    if t.los is not None:  # the tracking threads: selection, LOS, delay line, TEZ_LOS
+    world = konumlama.world_geo(hedef.SIM_DIR / "worlds" / f"{sc.world}.sdf")  # the drone's GPS comes from it
+    if t.los is not None:  # the tracking threads: selection, LOS, position, delay line, TEZ_LOS (+ FOLLOW_TARGET)
         tracker = takip.Tracker(
-            t.los, clock, out, detections, lambda: rec.camera if rec is not None else None, sc.delay.extra_ms
+            t.los,
+            clock,
+            out,
+            detections,
+            lambda: rec.camera if rec is not None else None,
+            sc.delay.extra_ms,
+            follow=t.source == "follow_me",
+            locator=konumlama.Locator() if model_file is not None else None,
+            world=world,
+            truth=lambda s: sc.truth(s)[:2],
         )
     model = None
     try:
@@ -436,7 +547,7 @@ def run(
                 events.append("Simülasyon açılmadı (sim.log'a bakın)")
             else:
                 log("PX4 ve Gazebo hazır")
-                completed = fly(sc, rec, events, run_settings, model, detections, tracker)
+                completed = fly(sc, rec, events, run_settings, model, detections, tracker, sim.restart_logger)
             log("Simülasyon kapatılıyor")
     except KeyboardInterrupt:
         events.append("Kullanıcı durdurdu (Ctrl+C)")
@@ -451,9 +562,12 @@ def run(
             detections.close()
     events += sim.problems()
 
-    ulog = sim.newest_ulog()
+    ulogs = sim.ulogs()
+    ulog = ulogs[-1] if ulogs else None
     if ulog is not None:
         shutil.copy(ulog, out / "ucus.ulg")
+    for i, earlier in enumerate(ulogs[:-1]):  # follow_me: before PX4's logger was restarted
+        shutil.copy(earlier, out / ("ucus_once.ulg" if i == len(ulogs) - 2 else f"ucus_once_{i}.ulg"))
     rows = rec.snapshot()
     checks = check.results(out) if check is not None else []
     # sim seconds per wall second in the scenario window (Gazebo does not wait for the model)
@@ -466,8 +580,17 @@ def run(
     log(f"RTF (kayıt penceresi): ort. {more['rtf_ort']:.3f}, en düşük {more['rtf_min_5s']:.3f} ({RTF_SPAN:.0f} s'lik)")
     sections = {}
     if tracker is not None:
-        tracking, sections["tez_los"] = tracking_results(
-            tracker, sc, detections, rows, (out / "ucus.ulg") if ulog else None, events
+        distance = run_settings["px4_parametreleri"].get("FLW_TGT_DST", {}).get("px4")
+        tracking, sections["tez_los"], sections["follow_target"] = tracking_results(
+            tracker,
+            sc,
+            detections,
+            rows,
+            (out / "ucus.ulg") if ulog else None,
+            events,
+            (rec.camera_offset, rec.camera_dcm),
+            world,
+            distance if t.source == "follow_me" else None,
         )
         sections["tez_los"]["hakem_eksik_kare"] = rec.join_dropped
         events += [f"Hakem akışı: {e}" for e in rec.errors]

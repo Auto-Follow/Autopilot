@@ -399,7 +399,6 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     hedef.check_wired(sc)  # defaults only: the run may start
     assert hedef.settings(sc)["henuz_bagli_degil"] == {"video.mp4": 8}  # TEZ_LOS (LOS model) is sent since group 5
     later = [
-        (hedef.CommandLine(source="follow_me"), "takip.kaynak: follow_me (--takip): Görev grubu 6'da bağlanacak"),
         (hedef.CommandLine(px4_start=("x start",)), "takip.px4_baslat / --px4-baslat: Görev grubu 10'da"),
         (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
         (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
@@ -418,11 +417,29 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     model = hedef.CommandLine(model="~/m.pt", imgsz=960, conf=0.5, class_name="Person")
     hedef.check_wired(hedef.load(write(tmp_path, GOOD + "algilama: {cekirdek: 2}\n"), model))
 
-    # the Follow Me scenario (tasks.md 2.4): the walk of yuruyen_insan at 8 m; only its tracking source waits
+    # the Follow Me scenario (tasks.md 2.4): the walk of yuruyen_insan at 8 m, wired since group 6
     follow, walk = hedef.load("takip_yuruyen"), hedef.load("yuruyen_insan")
     assert (follow.altitude, follow.tracking.source, follow.tracking.los) == (8.0, "follow_me", "model")
-    assert [(p.name, p.value) for p in follow.tracking.px4_params] == [("FLW_TGT_DST", 8)]
     assert np.array_equal(follow.track.x, walk.track.x) and np.array_equal(follow.track.y, walk.track.y)
-    with pytest.raises(ValueError, match="Görev grubu 6'da bağlanacak") as error:
-        hedef.check_wired(follow)
-    assert str(error.value).count("bağlanacak") == 1
+    hedef.check_wired(follow)
+    hedef.check_wired(hedef.load("takip_yuruyen", hedef.CommandLine(los="hakem", no_model=True)))
+
+
+def test_follow_me_flies_at_the_scenario_height_unless_flw_tgt_ht_is_given(tmp_path: Path) -> None:
+    """Follow Me keeps FLW_TGT_HT above home: without the parameter in the scenario or on the command line it is
+    drone.yukseklik_m (the take-off height), loaded after the .params files like a scenario parameter; given, it
+    stays as given. Other tracking sources leave it alone."""
+    follow = hedef.load("takip_yuruyen")
+    assert [(p.name, p.value, p.source) for p in follow.tracking.px4_params] == [
+        ("FLW_TGT_HT", 8.0, "drone.yukseklik_m (follow_me)"),
+        ("FLW_TGT_DST", 8, "takip.px4_parametreleri"),
+    ]
+    high = write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: follow_me"))  # GOOD flies at 10 m
+    params = hedef.settings(hedef.load(high))["px4_parametreleri"]
+    assert params["FLW_TGT_HT"] == {"deger": 10.0, "kaynak": "drone.yukseklik_m (follow_me)"}
+    assert params["FLW_TGT_DST"]["kaynak"].startswith("gercek_dron.params:")  # 8 m from the real vehicle
+    given = hedef.load(high, hedef.CommandLine(params=("FLW_TGT_HT=15",)))
+    assert [(p.name, p.value, p.source) for p in given.tracking.px4_params] == [("FLW_TGT_HT", 15, "--param")]
+    scenario = write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: follow_me, px4_parametreleri: {FLW_TGT_HT: 9}"))
+    assert [(p.name, p.value) for p in hedef.load(scenario).tracking.px4_params] == [("FLW_TGT_HT", 9)]
+    assert hedef.load(write(tmp_path, GOOD)).tracking.px4_params == ()  # yok: Hold, no Follow Me parameters

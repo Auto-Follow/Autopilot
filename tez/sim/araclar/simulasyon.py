@@ -3,6 +3,11 @@
 with Simulation(out_dir, world_file, headless=True, params={"FLW_TGT_DST": 10}) as sim:
     if sim.wait_ready(): ...
 sim.problems()   # what was wrong with the run: processes left over, an external mode marked unresponsive
+
+restart_logger(): PX4 v1.17.0's logger subscribes to its optional topics only if they exist when it starts
+(LoggedTopics::add_topic, orb_exists). follow_target, follow_target_estimator and follow_target_status come into
+being only with the first FOLLOW_TARGET and the Follow Target mode, so a follow_me run restarts the logger once they
+exist: the ULog then has them, in a second file from that moment on (ulogs()).
 """
 
 import os
@@ -19,6 +24,9 @@ REPO = SIM_DIR.parent.parent
 BUILD = REPO / "build" / "px4_sitl_tez"
 READY_LINE = "Startup script returned successfully"  # PX4 ran its whole rcS: attached to Gazebo, all modules up
 FAILED_LINES = ("Startup script returned with return value", "Unknown model", "gz_bridge failed")
+# logger start arguments of the SITL start (init.d-posix/rcS + init.d/rc.logging with the parameter defaults this sim
+# keeps: LOGGER_BUF 1000, EKF2_EN 1 -> poll ekf2_timestamps, SDLOG_MODE 1 -> -e, SDLOG_BACKEND 3 -> -m all)
+LOGGER_START_ARGS = ("-b", "1000", "-t", "-p", "ekf2_timestamps", "-e", "-m", "all")
 
 
 def running() -> bool:
@@ -105,6 +113,23 @@ class Simulation:
             self.proc.terminate()
             self.proc.wait(10)
 
+    def restart_logger(self) -> tuple[bool, str]:
+        """Stop PX4's logger and start it again with the start arguments: a new ULog file with every topic that
+        exists now. -> (both commands succeeded, their output)."""
+        texts, ok = [], True
+        for args in (("stop",), ("start", *LOGGER_START_ARGS)):
+            done = subprocess.run(
+                [str(BUILD / "bin" / "px4-logger"), *args],
+                cwd=BUILD / "rootfs",
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+            ok &= done.returncode == 0
+            texts.append(f"logger {args[0]}: {done.returncode} {(done.stdout + done.stderr).strip()}")
+        return ok, "; ".join(texts)
+
     def problems(self) -> list[str]:
         """Checks after stop(): nothing left running; with an external mode, the commander never dropped it."""
         found = []
@@ -118,6 +143,11 @@ class Simulation:
             found.append("PX4 harici modu 'unresponsive' olarak işaretledi (sim.log)")
         return found
 
-    def newest_ulog(self) -> Path | None:
+    def ulogs(self) -> list[Path]:
+        """ULog files of this start, oldest first (more than one after restart_logger())."""
         logs = [p for p in (BUILD / "rootfs" / "log").rglob("*.ulg") if p.stat().st_mtime >= self.started]
-        return max(logs, key=lambda p: p.stat().st_mtime) if logs else None
+        return sorted(logs, key=lambda p: p.stat().st_mtime)
+
+    def newest_ulog(self) -> Path | None:
+        logs = self.ulogs()
+        return logs[-1] if logs else None

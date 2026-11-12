@@ -258,15 +258,18 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 #### Görev Grubu 6: Düz zemin konum hesabı, `FOLLOW_TARGET` ve stok Follow Me ile kapalı döngü
 **Bağımlılık:** Görev Grubu 5 · **Emek:** ~0.6 gün
 
-- [ ] 6.0 Model kutusundan hesaplanan konumla stok Follow Me'nin hedefi izlemesi
-  - [ ] 6.1 Testleri yaz (5–7 test)
+- [x] 6.0 Model kutusundan hesaplanan konumla stok Follow Me'nin hedefi izlemesi
+  - [x] 6.1 Testleri yaz (5–7 test)
     - `test_konumlama.py`: bilinen pozda zemin noktası → piksel → konum, hata < 1 cm; `u_D < 0.25` reddi; kenara 8 px'ten yakın kutu reddi; poz geçmişi kare anını 0.15 s içinde kapsamıyorsa ret; NED ↔ enlem/boylam gidiş-dönüş
     - `test_mesajlar.py`'ye: `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities=1`, `alt` = ev noktası AMSL)
-  - [ ] 6.2 `araclar/konumlama.py`: kutunun alt ortası → `kamera.py` zinciri → zemin düzlemi (ev D + 0.227 m); kare anındaki EKF pozu (`ATTITUDE_QUATERNION` + `LOCAL_POSITION_NED`, `time_boot_ms` interpolasyonu); `GPS_GLOBAL_ORIGIN`'e göre enlem/boylam
-  - [ ] 6.3 `px4_baglanti.py`: `message_hooks` ile poz geçmişi (ana `recv_match` döngüsü bozulmaz); `send_follow_target` (en çok 10 Hz)
+    - (Uygulamada: 14 test fonksiyonu, 25 durum: `test_konumlama.py` 5 (gidiş-dönüş 4 duruş × 2 kamera, `u_D`, kenar, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `test_mesajlar.py` +4 (FOLLOW_TARGET, akış kuralları, poz kancası, EKF kökeninin istenmesi), `test_takip.py` +3 (model ve hakem kaynağıyla FOLLOW_TARGET, kaydedicinin yeniden başlatılması), `test_hedef.py` +1 (`FLW_TGT_HT` kuralı; ara durum testi güncellendi), `test_rapor.py` +1 (ULog'da `follow_target` ve PX4'ün kestirimi). `alt` uygulamada zeminin AMSL'si: ev − 0.227 m. Ayrıntı: `implementation/gorev-grubu-06.md`.)
+  - [x] 6.2 `araclar/konumlama.py`: kutunun alt ortası → `kamera.py` zinciri → zemin düzlemi (ev D + 0.227 m); kare anındaki EKF pozu (`ATTITUDE_QUATERNION` + `LOCAL_POSITION_NED`, `time_boot_ms` interpolasyonu); `GPS_GLOBAL_ORIGIN`'e göre enlem/boylam
+  - [x] 6.3 `px4_baglanti.py`: `message_hooks` ile poz geçmişi (ana `recv_match` döngüsü bozulmaz); `send_follow_target` (en çok 10 Hz)
     (5. gruptan hazır: bağlantının bütün gönderimleri `serialize_sends` kilidinden geçer, `send_follow_target` de `self.m.mav` üstünden gönderince kilitlidir; `TEZ_LOS` akış kuralları `LosSender`'da, `FOLLOW_TARGET` için benzeri yazılabilir. Konum hesabı `takip.Tracker.on_model`'in seçtiği kutuyu (`Choice.box`) kullanır; `algilama.csv` sütunları `takip.ROW_COLUMNS`'a eklenir.)
-  - [ ] 6.4 `follow_me` kaynağı: "Follow Target"e adla geçiş; `FLW_TGT_HT` senaryoda yoksa `drone.yukseklik_m` (parametre sırasına uygun); `--los hakem` iken `FOLLOW_TARGET` gerçek konumdan, yalnız hedef görünürken ("mükemmel algılayıcı"); `algilama.csv` konum sütunları. 2. gruptaki `follow_me` ara hatası kaldırılır.
-  - [ ] 6.5 Doğrulama
+    (Uygulamada: iki akışın ortak kuralları `FrameStream`'e taşındı (`LosSender`, `FollowTargetSender`); "en çok 10 Hz" = kare zamanları ≥ 96 ms; akış hızları `ATTITUDE_QUATERNION` 50 Hz, `LOCAL_POSITION_NED` 30 Hz. PX4 konumu en sık 500 ms'de bir kaynaştırır, 3 s mesaj gelmezse kestirimi bayat sayar.)
+  - [x] 6.4 `follow_me` kaynağı: "Follow Target"e adla geçiş; `FLW_TGT_HT` senaryoda yoksa `drone.yukseklik_m` (parametre sırasına uygun); `--los hakem` iken `FOLLOW_TARGET` gerçek konumdan, yalnız hedef görünürken ("mükemmel algılayıcı"); `algilama.csv` konum sütunları. 2. gruptaki `follow_me` ara hatası kaldırılır.
+    (Uygulamada eklendi: PX4 kaydedicisi `follow_target*` konularını ancak kendisi başlarken varlarsa yazdığı için `follow_me` koşusunda kayıt penceresinden önce bir kez yeniden başlatılır (`simulasyon.restart_logger`; ULog `ucus_once.ulg` + `ucus.ulg`); `follow_target.csv`; konum her takip kaynağında hesaplanır.)
+  - [x] 6.5 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_konumlama.py tez/sim/testler/test_mesajlar.py -q
@@ -448,10 +451,11 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 **Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.3 gün
 
 - [ ] 12.0 Yakalama → PX4 yoluna ayarlanabilir gecikme eklemek ve koşuları yan yana koymak
-  - [ ] 12.1 Testleri yaz (4–6 test): `test_gecikme.py` (sıra korunur; `ek_ms`; tohumlu titreşim aynı tohumla aynı; `saat_ofset_ms` ve `saat_kayma_ppm` ile `time_usec`); `karsilastir.py` iki `ozet.json`'dan tablo
+  - [ ] 12.1 Testleri yaz (4–6 test): `test_gecikme.py` (sıra korunur; `ek_ms`; tohumlu titreşim aynı tohumla aynı; `saat_ofset_ms` ve `saat_kayma_ppm` ile `time_usec`); `karsilastir.py` iki `ozet.json`'dan tablo; `test_takip.py`'ye yeniden kilit bekleme süresi (12.4: kilit düştükten sonra süre dolana kadar yeniden kilit yok, 0 s'de bugünkü davranış)
   - [ ] 12.2 (5. gruptan hazır: `gecikme.DelayLine.put(item, hazir, extra_ms)` öğe başına gecikme alır ve sırayı korur; `Tracker` hattı `sc.delay.extra_ms` ile kurar; `time_usec` bugün yakalama anıdır, saat modeli `takip.Tracker._attempt`'teki `time_usec` alanına girer.) `gecikme.py`, 2. kısım: `ek_ms` + `titresim_ms` (düzgün dağılım, tohumlu), saat modeli; `ek_gecikme_ms` loglanır. `gecikme` bloğu ve `--gecikme-ms` bağlanır; ara hata kaldırılır. Faz A varsayılanları 0'dır.
   - [ ] 12.3 `araclar/karsilastir.py`: birden çok koşunun `ozet.json`'unu (ölçütler + `ayarlar`) tek tabloda yan yana koyar
-  - [ ] 12.4 Doğrulama
+  - [ ] 12.4 Yeniden kilit için operatör/kod tepki süresi (kullanıcı kararı, 12.11, 5. grubun açık kararı): senaryo alanı `takip.yeniden_kilit_bekleme_s` (sim saniyesi, ≥ 0, varsayılan **0** = bugünkü davranış, bir sonraki işlenen karede yeniden kilit). Kilit düştükten sonra bu süre dolmadan hakemle yeniden kilitlenilmez (gerçekte operatör QGC'de ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi çalışır). `algilama.csv`'de bekleme sırasında `kilitsiz_neden = tepki_bekleniyor`; değer `ozet.json` → `ayarlar.takip` ve raporda görünür. `hedef.py` alan doğrulaması (`_number`, en az 0) ve `--yeniden-kilit-bekleme-s` bayrağı bu alt görevde eklenir.
+  - [ ] 12.5 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_gecikme.py -q

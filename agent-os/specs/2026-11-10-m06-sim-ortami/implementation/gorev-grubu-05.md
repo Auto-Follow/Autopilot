@@ -189,11 +189,15 @@ sürüm sabitlemesi 8. grubun işi, repo kodu kullanmıyor). Boyut 1280×1060 (g
 ## Açık kararlar ve bekleyenler
 
 - **Yeniden kilidin zamanı (kullanıcı / m11):** operatör tepki süresi 0 mı kalsın, bir `takip.*` alanı mı eklensin?
+  **Karar (12.11, kullanıcı): 12. grupta, varsayılan 0** — senaryo alanı `takip.yeniden_kilit_bekleme_s` (tasks.md
+  12.4); `algilama.csv` ve raporda görünür.
 - **İlk kilidin en az IoU'su 0.3 (kullanıcı / m11):** spec'te sayı yoktu; ölçütlerle tutarlı olsun diye seçildi.
+  **Karar (12.11, kullanıcı): 0.3 kalıyor.**
 - **`TEZ_LOS` biçimi (Kurt / Algan, m05):** ad, gövde FRD birim vektör, NaN = hedef yok, `time_usec` = yakalama;
   PX4 `time_usec`'i düşürüyor. Takılan modun `name == "TEZ_LOS"` ile süzmesi ve zaman aşımını varış zamanına göre
   uygulaması gerekiyor (spec C5).
-- 4. gruptan süren: model çekirdek sayısı ve RTF; `imgsz`.
+- 4. gruptan süren: model çekirdek sayısı ve RTF (**karar, 12.11, kullanıcı: 4 iş parçacığı kalıyor**, RTF ≈ 0.83,
+  raporda uyarı); `imgsz`.
 
 ## Sonraki gruplar için notlar
 

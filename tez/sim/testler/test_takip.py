@@ -13,6 +13,7 @@ import goruntu
 import hedef
 import kamera
 import kayit
+import konumlama
 import takip
 import yuruyus
 
@@ -243,3 +244,168 @@ def test_referee_source_sends_every_camera_frame_and_nan_while_the_target_is_hid
     assert {a["kaynak"] for a in attempts} == {"hakem"}
     assert [float(a["hazir_ms"]) for a in attempts] == pytest.approx([40.0] * 4, abs=0.01)
     assert [float(a["uctan_uca_ms"]) for a in attempts] == pytest.approx([40.0] * 4, abs=0.01)
+
+
+WORLD = konumlama.WorldGeo(47.397971057728974, 8.546163739800146, 0.0)  # tez/sim/worlds spherical_coordinates
+EKF_ORIGIN = konumlama.GeoPoint(47.3979712, 8.5461638, 0.227)  # GPS of the drone on the ground, 1e-7 deg
+
+
+class FollowLink(FakeLink):
+    """What the tracking thread needs from px4_baglanti.Vehicle in follow_me: the two senders and the pose history
+    the message hook fills."""
+
+    def __init__(self, poses: konumlama.PoseHistory) -> None:
+        super().__init__()
+        self.poses = poses
+        self.follow: list[tuple[int, konumlama.GeoPoint]] = []
+
+    def send_follow_target(self, timestamp_ms: int, point: konumlama.GeoPoint) -> None:
+        self.follow.append((timestamp_ms, point))
+
+
+def hovering(t0: float, t1: float, q: np.ndarray, p: np.ndarray) -> konumlama.PoseHistory:
+    h = konumlama.PoseHistory()
+    for k in range(round((t1 - t0) / 0.02) + 1):
+        h.add_attitude(t0 + 0.02 * k, q)
+        h.add_position(t0 + 0.02 * k, p)
+    h.set_origin(EKF_ORIGIN)
+    h.set_home(np.zeros(3), EKF_ORIGIN.alt)
+    return h
+
+
+def world_of(ned: np.ndarray) -> tuple[float, float]:
+    """Where an EKF NED point is in the Gazebo world: PX4's projection back to latitude / longitude, then WGS84."""
+    lat, lon = konumlama.MapProjection(EKF_ORIGIN.lat, EKF_ORIGIN.lon).reproject(ned[0], ned[1])
+    x, y, _ = WORLD.to_local(lat, lon)
+    return x, y
+
+
+def test_follow_me_sends_the_ground_point_of_the_chosen_box_as_follow_target(tmp_path: Path) -> None:
+    """follow_me with the model (spec 6): chosen box -> foot point -> EKF pose of the capture time -> ground plane ->
+    latitude / longitude -> FOLLOW_TARGET (at most every third camera frame, never without a position); the position,
+    its refusal and the FOLLOW_TARGET go into algilama.csv, every attempt into follow_target.csv."""
+    clock = goruntu.SimClock()
+    for k in range(1001):
+        clock.add(sim=60.0 + k * 0.01, wall=1000.0 + k * 0.01)
+    now = FakeClock(1000.0)
+    q, p = np.array([math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4)]), np.array([0.0, 0.0, -8.0])  # east
+    ground = np.array([0.5, 9.0, konumlama.GROUND_BELOW_HOME_M])
+    c_bn = kamera.quat_to_dcm(*q)
+    u, v = CM3.project(konumlama.NOMINAL_MOUNT.T @ c_bn.T @ (ground - p - c_bn @ konumlama.NOMINAL_OFFSET_FRD))
+    person = box(u - 30, v - 190, u + 30, v)
+    true_xy = world_of(ground)
+    detections = algilama.DetectionLog(tmp_path, clock, takip.ROW_COLUMNS)
+    tr = takip.Tracker(
+        "model", clock, tmp_path, detections, camera=lambda: CM3, now=now, follow=True,
+        locator=konumlama.Locator(), world=WORLD, truth=lambda t: true_xy,
+    )  # fmt: skip
+    link = FollowLink(hovering(60.8, 61.6, q, p))
+    tr.attach(link)
+    row = {"t": 61.0, "gorunur": True, "los_govde_x": 0.7, "los_govde_y": 0.0, "los_govde_z": 0.7}
+    row |= {"hedef_x": true_xy[0], "hedef_y": true_xy[1]}
+    corners = (u - 30, v - 190, u + 30, v)
+    row |= dict(zip(("hedef_kutu_u0", "hedef_kutu_v0", "hedef_kutu_u1", "hedef_kutu_v1"), corners, strict=True))
+    tr.on_referee(61.0, row, 1001.05)
+    tr.wait_idle()
+    for t, boxes in ((60.95, [person]), (61.0, [person]), (61.05, [person]), (61.10, [person]), (61.15, [person])):
+        now.t = 1000.0 + (t - 60.0) + 0.12
+        tr.on_model(model_result(t, boxes, now.t), now.t)
+    now.t = 1001.32
+    tr.on_model(model_result(61.20, [person], now.t), now.t)
+    tr.close()
+    detections.close()
+
+    with (tmp_path / "algilama.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["konum"] for r in rows] == ["kutu_yok"] + ["hesaplandi"] * 5  # no lock before the referee's frame
+    assert [r["ft_sonuc"] for r in rows] == ["konum_yok", "gonderildi", "hiz_siniri", "gonderildi", "hiz_siniri"] + [
+        "gonderildi"
+    ]
+    located = rows[1]
+    assert [float(located[f"konum_{k}"]) for k in "ned"] == pytest.approx(list(ground), abs=0.01)
+    assert (float(located["ayak_u"]), float(located["ayak_v"])) == pytest.approx((u, v))
+    assert float(located["konum_hatasi_m"]) < 0.01
+    assert (float(located["gercek_x"]), float(located["gercek_y"])) == pytest.approx(true_xy)
+    assert float(located["ekf_yaw_deg"]) == pytest.approx(90.0)
+
+    assert [ms for ms, _ in link.follow] == [61_000, 61_100, 61_200]
+    lat, lon = link.follow[0][1].lat, link.follow[0][1].lon
+    north, east = konumlama.MapProjection(EKF_ORIGIN.lat, EKF_ORIGIN.lon).project(lat, lon)
+    assert (north, east) == pytest.approx((ground[0], ground[1]), abs=0.01)
+    with (tmp_path / "follow_target.csv").open(encoding="utf-8") as f:
+        attempts = list(csv.DictReader(f))
+    assert [(a["t_us"], a["kaynak"], a["sonuc"]) for a in attempts] == [
+        ("61000000", "model", "gonderildi"),
+        ("61050000", "model", "hiz_siniri"),
+        ("61100000", "model", "gonderildi"),
+        ("61150000", "model", "hiz_siniri"),
+        ("61200000", "model", "gonderildi"),
+    ]
+    assert float(attempts[0]["uctan_uca_ms"]) == pytest.approx(120.0, abs=0.01)
+    s = tr.summary()
+    assert s["follow_target"]["sonuclar"] == {"gonderildi": 3, "hiz_siniri": 2}
+    assert s["follow_target"]["konum"] == {"kutu_yok": 1, "hesaplandi": 5}
+
+
+def test_follow_me_with_the_referee_sends_the_true_position_only_while_the_target_is_visible(tmp_path: Path) -> None:
+    """--los hakem in follow_me: a "perfect detector" reference run; FOLLOW_TARGET carries where the person really is
+    (the world's latitude / longitude, like a perfect GPS on the person) but only while the camera sees them."""
+    clock = goruntu.SimClock()
+    for k in range(1001):
+        clock.add(sim=60.0 + k * 0.01, wall=1000.0 + k * 0.01)
+    now = FakeClock(1000.0)
+    tr = takip.Tracker(
+        "hakem", clock, tmp_path, None, camera=lambda: CM3, now=now, follow=True, world=WORLD,
+        truth=lambda t: (12.0, -1.5),
+    )  # fmt: skip
+    link = FollowLink(konumlama.PoseHistory())
+    tr.attach(link)
+    seen = {"gorunur": True, "los_govde_x": 0.6, "los_govde_y": 0.0, "los_govde_z": 0.8, "hedef_x": 12.0}
+    seen |= {"hedef_y": -1.5, "hedef_kutu_u0": 1.0, "hedef_kutu_v0": 1.0, "hedef_kutu_u1": 9.0, "hedef_kutu_v1": 9.0}
+    frames = [(60.000, None), (60.032, seen), (60.068, seen), (60.100, seen | {"gorunur": False}), (60.132, seen)]
+    for t, row in frames:
+        now.t = 1000.0 + (t - 60.0) + 0.040
+        tr.on_referee(t, None if row is None else row | {"t": t}, now.t)
+        tr.wait_idle()
+    tr.close()
+    lat, lon, alt = WORLD.to_geodetic(12.0, -1.5)
+    assert [(ms, p.lat, p.lon, p.alt) for ms, p in link.follow] == [
+        (60_032, pytest.approx(lat, abs=1e-12), pytest.approx(lon, abs=1e-12), pytest.approx(alt)),
+        (60_132, pytest.approx(lat, abs=1e-12), pytest.approx(lon, abs=1e-12), pytest.approx(alt)),
+    ]
+    with (tmp_path / "follow_target.csv").open(encoding="utf-8") as f:
+        attempts = list(csv.DictReader(f))
+    assert [(a["t_us"], a["kaynak"], a["sonuc"]) for a in attempts] == [
+        ("60032000", "hakem", "gonderildi"),
+        ("60068000", "hakem", "hiz_siniri"),
+        ("60132000", "hakem", "gonderildi"),
+    ]
+    assert [float(a["hata_m"]) for a in attempts] == pytest.approx([0.0] * 3, abs=1e-6)
+
+
+def test_follow_me_restarts_px4s_logger_once_follow_target_flows() -> None:
+    """PX4 v1.17.0 logs an optional topic only if it existed when the logger started; the follow_target topics appear
+    with the first FOLLOW_TARGET and the Follow Target mode. So a follow_me run restarts the logger once (in its own
+    thread), a few messages after the first one and before the window; if none went out by then it says so."""
+    import senaryo
+
+    class Counts:
+        def __init__(self) -> None:
+            self.follow_sender = type("S", (), {"counts": {"gonderildi": 0}})()
+
+    calls: list[float] = []
+    events: list[str] = []
+    restart = senaryo._LoggerRestart(lambda: (calls.append(1.0), (True, "ok"))[1], events)
+    tracker = Counts()
+    restart.poll(tracker, 30.0, 60.0)
+    tracker.follow_sender.counts["gonderildi"] = senaryo.LOGGER_RESTART_AFTER
+    restart.poll(tracker, 31.0, 60.0)
+    restart._thread.join(5)
+    restart.poll(tracker, 32.0, 60.0)
+    assert calls == [1.0] and events == []
+
+    late = senaryo._LoggerRestart(lambda: (calls.append(2.0), (True, "ok"))[1], events)
+    late.poll(Counts(), 59.5, 60.0)
+    late.poll(Counts(), 70.0, 60.0)
+    assert calls == [1.0] and len(events) == 1 and "follow_target konuları yok" in events[0]
+    assert senaryo._LoggerRestart(None, events).poll(None, 30.0, 60.0) is None  # not follow_me: nothing to do

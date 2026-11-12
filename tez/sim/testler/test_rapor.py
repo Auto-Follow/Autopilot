@@ -8,6 +8,7 @@ import pytest
 
 import dogrulama
 import hedef
+import konumlama
 import rapor
 import yuruyus
 
@@ -83,3 +84,27 @@ def test_tez_los_messages_that_reached_px4_are_counted_from_the_ulog_columns() -
     assert m["tez_los_px4_sayisi"] == 3 and m["tez_los_px4_eslesen"] == 2  # the NaN one at 61.5 s is not matched
     assert m["uctan_uca_px4_ms_ort"] == pytest.approx(120.0, abs=0.01)
     assert m["px4_varis_eksi_gonderim_ms_ort"] == pytest.approx(2.5, abs=0.01)  # arrived 2 and 3 ms after the send
+
+
+def test_follow_target_in_the_ulog_and_where_px4_thought_the_target_was() -> None:
+    """follow_target (the logger keeps one sample per 500 ms) and follow_target_estimator (every 200 ms): its estimate
+    against where the target really was at the same PX4 time (= sim time in SITL), and how long it was stale (no
+    FOLLOW_TARGET for 3 s: PX4 keeps the last position and stops moving it)."""
+    world = konumlama.WorldGeo(47.397971057728974, 8.546163739800146, 0.0)
+    target = {"timestamp": np.array([59.5e6, 60.0e6, 60.5e6, 61.0e6, 62.9e6])}
+    t = np.round(np.arange(60.0, 63.001, 0.2), 6)
+    geo = [world.to_geodetic(10.0 + (s - 60.0) - 0.3, 2.0) for s in t]  # 0.3 m behind a target walking east at 1 m/s
+    estimator = {
+        "timestamp": t * 1e6,
+        "valid": np.array([0] + [1] * (len(t) - 1), dtype=np.uint8),  # the first one before any fusion
+        "stale": (t >= 62.0).astype(np.uint8),
+        "lat_est": np.array([math.nan] + [g[0] for g in geo[1:]]),
+        "lon_est": np.array([math.nan] + [g[1] for g in geo[1:]]),
+    }
+    m = rapor.follow_target_in_ulog(target, estimator, 60.0, 63.0, world, lambda s: (10.0 + (s - 60.0), 2.0))
+    assert (m["follow_target_px4_sayisi"], m["follow_target_px4_hizi_hz"]) == (4, pytest.approx(4 / 3))
+    assert m["px4_kestirim_hatasi_ort_m"] == pytest.approx(0.3, abs=1e-6)
+    assert m["px4_kestirim_hatasi_maks_m"] == pytest.approx(0.3, abs=1e-6)
+    assert m["px4_kestirim_gecerli_orani"] == pytest.approx(15 / 16)
+    assert m["px4_kestirim_bayat_s"] == pytest.approx(1.0)  # 62.0 -> 63.0 s
+    assert rapor.follow_target_in_ulog(None, None, 60.0, 63.0, world, None)["follow_target_px4_sayisi"] == 0

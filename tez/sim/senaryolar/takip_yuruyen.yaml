@@ -5,8 +5,7 @@
 # Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
 # Kamera raporunun stad ayarı 8/8: 8 m yükseklik, 8 m geride; 45° kamera yerde dronun ~3.6–17.5 m önünü görür.
 # Döngü: Gazebo kamerası → model (kutu) → düz zemin konum hesabı → FOLLOW_TARGET → PX4 "Follow Target" → dron.
-# Takip kaynağı follow_me m06'nın 6. görev grubunda bağlanır; o zamana kadar senaryo.py koşuyu sim açılmadan
-# "Görev grubu 6'da bağlanacak" diyerek durdurur.
+# --los hakem: model yerine hedefin gerçek konumu gider (yalnız göründüğü karelerde, "mükemmel algılayıcı").
 
 ad: takip_yuruyen
 aciklama: >
@@ -24,7 +23,7 @@ takip:
   los: model                # TEZ_LOS'un kaynağı: model (model kutusu) | hakem (doğru cevap, "mükemmel algılayıcı")
   px4_parametreleri:        # parametre dosyalarından sonra, --param'dan önce yüklenir; koşuda PX4'ten geri okunur
     FLW_TGT_DST: 8          # Follow Me: hedefin 8 m gerisinde dur (kamera raporu, stad 8/8)
-  # FLW_TGT_HT verilmezse drone.yukseklik_m kullanılır (6. görev grubu)
+  # FLW_TGT_HT verilmezse drone.yukseklik_m kullanılır (Follow Me yüksekliği = kalkış yüksekliği)
 
 # Diğer bloklar varsayılanlarıyla (spec "Senaryo alanları"; komut satırı bayrakları bunları ezer):
 # algilama: {etkin: true, model: ~/auto-follow-modeller/person_detection_model_v0.2.pt, conf: 0.25, cekirdek: 4}

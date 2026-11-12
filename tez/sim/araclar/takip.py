@@ -21,6 +21,13 @@ Tracker: model results come in ModelProcess' result thread (on_model), the refer
 thread (on_referee -> its own thread). The chosen source's messages go: DelayLine (gecikme.py) -> LosSender (one per
 frame, NaN = no target, never an invalid vector; px4_baglanti.py) -> Vehicle.send_los. A model frame becomes an
 algilama.csv row once its TEZ_LOS went out (or was refused); every TEZ_LOS attempt is a tez_los.csv row.
+
+follow_me (spec 6): every chosen model box also gets its flat-ground position (konumlama.Locator, the EKF pose of the
+frame's capture time from the link's pose history), in every tracking source; with follow=True it goes to PX4 as
+FOLLOW_TARGET behind the frame's TEZ_LOS on the same delay line (FollowTargetSender: at most every third camera frame,
+none without a position). With the referee as the source (takip.los: hakem) FOLLOW_TARGET carries where the person
+really is, only while the camera sees them: a "perfect detector" reference run. Every FOLLOW_TARGET attempt is a
+follow_target.csv row. The truth columns (gercek_x/y, hatasi) are evaluation only, from the scenario's path.
 """
 
 import csv
@@ -40,6 +47,7 @@ import algilama
 import gecikme
 import goruntu
 import kamera
+import konumlama
 import px4_baglanti
 from algilama import Kutu
 
@@ -49,10 +57,8 @@ LOST_AFTER = 10  # spec 5: processed frames in a row without a match drop the lo
 # a box belongs to a person at all (spec "Ölçüt Tanımları": yanlış kişi / yanlış pozitif, 0.3). Without it a box far
 # off would lock with an IoU of 0.01, where an operator would not have clicked.
 LOCK_MIN_IOU = 0.3
-MOUNT_PITCH_DOWN = math.radians(
-    45.0
-)  # nominal camera mount (spec "Kamera parametreleri"; the Pi uses its measured one)
-NOMINAL_MOUNT = kamera.camera_to_body(MOUNT_PITCH_DOWN)  # C_cb, optical -> body FRD
+MOUNT_PITCH_DOWN = konumlama.MOUNT_PITCH_DOWN  # nominal camera mount (spec "Kamera parametreleri"; the Pi: measured)
+NOMINAL_MOUNT = konumlama.NOMINAL_MOUNT  # C_cb, optical -> body FRD
 REFEREE_KEEP_S = 3.0  # [s sim] referee frames kept for the lock of a model frame (a model result is ~0.15 s late)
 MATCH_IOU = algilama.IOU_MATCH  # the chosen box is the target (spec "Ölçüt Tanımları": seçim doğru)
 SOURCES = ("model", "hakem")
@@ -67,12 +73,14 @@ class Referee:
     visible: bool  # enough of it is not hidden (kayit.VISIBLE_PX)
     los_body: tuple[float, float, float]  # los_govde: camera -> body centre, body FRD, unit
     ready: float  # [s monotonic] row and segmentation frame were both in
+    position: tuple[float, float] = (math.nan, math.nan)  # [m] where the target is: Gazebo world x east, y north
 
     @classmethod
     def from_row(cls, row: dict, ready: float) -> "Referee":
         box = tuple(float(row.get(f"hedef_kutu_{k}", math.nan)) for k in ("u0", "v0", "u1", "v1"))
         los = tuple(float(row[f"los_govde_{k}"]) for k in "xyz")
-        return cls(float(row["t"]), box, bool(row.get("gorunur")), los, ready)
+        position = (float(row.get("hedef_x", math.nan)), float(row.get("hedef_y", math.nan)))
+        return cls(float(row["t"]), box, bool(row.get("gorunur")), los, ready, position)
 
 
 @dataclass(frozen=True)
@@ -202,6 +210,35 @@ ROW_COLUMNS = (
     "takip_ms",  # [ms] hazir - alinma: selection + LOS in the tracking thread
     "ek_gecikme_ms",  # [ms] serbest - hazir: time in the delay line (no artificial delay before task group 12)
     "uctan_uca_ms",  # [ms sim] gonderim - capture
+    # flat-ground position of the chosen box (konumlama.py), every tracking source
+    "konum",  # konumlama.STATUSES: hesaplandi | kutu_yok | kamera_yok | kenar | poz_yok | referans_yok | ufka_yakin
+    "ayak_u",  # [px] foot point: bottom middle of the chosen box
+    "ayak_v",
+    "isin_asagi",  # u_D, down component of the unit foot ray in NED
+    "poz_once_ms",  # [ms] EKF samples around the capture time: the older one before, the later one after
+    "poz_sonra_ms",
+    "ekf_n",  # [m] EKF position (NED, EKF origin) and attitude [deg] of the capture time, interpolated
+    "ekf_e",
+    "ekf_d",
+    "ekf_roll_deg",
+    "ekf_pitch_deg",
+    "ekf_yaw_deg",
+    "konum_n",  # [m] ground point, EKF local NED
+    "konum_e",
+    "konum_d",
+    "konum_lat",  # [deg] what FOLLOW_TARGET carries, and its AMSL height [m]
+    "konum_lon",
+    "konum_alt",
+    "konum_menzil_m",  # [m] camera -> ground point
+    "konum_yatay_m",  # [m] drone -> ground point, horizontal
+    "konum_x",  # [m] the same point in the Gazebo world (x east, y north; evaluation)
+    "konum_y",
+    "gercek_x",  # [m] where the target really was at the capture time (scenario path; evaluation only)
+    "gercek_y",
+    "konum_hatasi_m",  # [m] horizontal distance konum - gercek
+    "ft_sonuc",  # FOLLOW_TARGET of this frame (follow_me, LOS model): FollowTargetSender result, konum_yok, or empty
+    "ft_gonderim_sim",
+    "ft_uctan_uca_ms",  # [ms sim] FOLLOW_TARGET send - capture
 )
 # tez_los.csv: every TEZ_LOS attempt of the run, whichever source; t_us joins algilama.csv / dogru_cevap.csv
 LOS_COLUMNS = (
@@ -224,11 +261,34 @@ LOS_COLUMNS = (
     "ek_gecikme_ms",
     "uctan_uca_ms",
 )
+# follow_target.csv: every FOLLOW_TARGET attempt (follow_me); t_us joins the other files
+FOLLOW_COLUMNS = (
+    "t_us",
+    "t",  # [s sim] capture of the frame the position is from
+    "kaynak",  # model (flat-ground position of the chosen box) | hakem (the true position)
+    "lat",  # [deg], [m AMSL]: as sent
+    "lon",
+    "alt",
+    "x",  # [m] the sent point in the Gazebo world (x east, y north)
+    "y",
+    "gercek_x",  # [m] the target at the capture time (evaluation)
+    "gercek_y",
+    "hata_m",  # [m] horizontal, sent - true at the capture time
+    "hata_gonderimde_m",  # [m] sent - true at the send time (the target walked on meanwhile)
+    "sonuc",  # FollowTargetSender: gonderildi | gecersiz | baglanti_yok | ayni_kare | eski_kare | hiz_siniri | hata
+    "kaynak_hazir",
+    "hazir",
+    "serbest",
+    "gonderim",
+    "gonderim_sim",
+    "uctan_uca_ms",
+)
 
 
 class Tracker:
-    """The tracking threads of a run (see the module text). source: what TEZ_LOS carries, "model" (LOS (i)) or
-    "hakem" (LOS (ii)); the model's frames are selected either way, for algilama.csv and the metrics."""
+    """The tracking threads of a run (see the module text). source: what TEZ_LOS (and in follow_me FOLLOW_TARGET)
+    carries, "model" (LOS (i), the box's ground point) or "hakem" (LOS (ii), the true position); the model's frames
+    are selected and located either way, for algilama.csv and the metrics."""
 
     def __init__(
         self,
@@ -239,20 +299,40 @@ class Tracker:
         camera: Callable[[], kamera.Camera | None],
         extra_ms: float = 0.0,
         now: Callable[[], float] = time.monotonic,
+        follow: bool = False,
+        locator: konumlama.Locator | None = None,
+        world: konumlama.WorldGeo | None = None,
+        truth: Callable[[float], tuple[float, float]] | None = None,
     ) -> None:
-        """clock: sim <-> wall; out: run folder (tez_los.csv); detections: algilama.csv (None without a model);
-        camera: the drone camera's camera_info once known (Recorder.camera); extra_ms [ms]: artificial delay (0 until
-        task group 12); now: monotonic clock [s]."""
+        """clock: sim <-> wall; out: run folder (tez_los.csv, follow_target.csv); detections: algilama.csv (None
+        without a model); camera: the drone camera's camera_info once known (Recorder.camera); extra_ms [ms]:
+        artificial delay (0 until task group 12); now: monotonic clock [s]; follow: send FOLLOW_TARGET (follow_me);
+        locator: flat-ground positions of the model's boxes (None: none); world: the Gazebo world's geodetic origin
+        (evaluation columns; the referee's FOLLOW_TARGET); truth: the target's true (x, y) [m] at a sim time
+        (evaluation only)."""
         if source not in SOURCES:
             raise ValueError(f"takip.los: {list(SOURCES)} olmalı, gelen: {source!r}")
+        if follow and source == "hakem" and world is None:
+            raise ValueError("follow_me + hakem: gerçek konumu enlem/boylama çevirmek için dünyanın kökeni gerekir")
         self.source = source
+        self.follow = follow
         self._clock = clock
         self._out = out
         self._detections = detections
         self._camera = camera
         self._now = now
+        self._locator = locator
+        self._world = world
+        self._truth = truth
+        self._poses: konumlama.PoseHistory | None = None
+        self.poses: konumlama.PoseHistory | None = None  # the last link's history, kept after detach (metrics)
         self.selection = Selection()
         self.sender = px4_baglanti.LosSender(now)
+        self.follow_sender = px4_baglanti.FollowTargetSender(now)
+        self.fixes: Counter[str] = Counter()  # Locator results of the whole run
+        self.follow_attempts: list[dict] = []  # follow_target.csv rows
+        self._ft_file = None
+        self._ft_writer = None
         self._line = gecikme.DelayLine(self._deliver, extra_ms, now, name="tez-gecikme-hatti")
         self._lock = threading.Lock()
         self._referees: dict[int, Referee] = {}
@@ -270,11 +350,16 @@ class Tracker:
     # --- inputs -------------------------------------------------------------------------------------------------
 
     def attach(self, link: object) -> None:
-        """The MAVLink link (Vehicle) TEZ_LOS goes out on, once it exists."""
+        """The MAVLink link (Vehicle) TEZ_LOS and FOLLOW_TARGET go out on, once it exists; its pose history (poses)
+        gives the EKF pose of the frames."""
         self.sender.attach(link)
+        self.follow_sender.attach(link)
+        self._poses = self.poses = getattr(link, "poses", None)
 
     def detach(self) -> None:
         self.sender.detach()
+        self.follow_sender.detach()
+        self._poses = None
 
     def on_referee(self, t: float, row: dict | None, ready: float) -> None:
         """kayit.Recorder on_frame: one camera frame, the referee's row (None outside the recording). Returns at once
@@ -296,10 +381,16 @@ class Tracker:
         los = los_of_box(camera, choice.box) if choice.box is not None and camera is not None else None
         self._note(choice, r.t)
         extra = _choice_columns(choice, los)
+        fix = None
+        if self._locator is not None:
+            fix = self._locator.locate(choice.box, r.t, camera, self._poses)
+            with self._lock:
+                self.fixes[fix.status] += 1
+            extra |= self._fix_columns(fix, r.t)
         hazir = self._now()
         extra |= {"hazir": hazir, "hazir_sim": self._clock.to_sim(hazir), "takip_ms": (hazir - alinma) * 1000.0}
         if self.source == "model" and not self._closed:
-            self._line.put(("model", r, alinma, extra, los, hazir), hazir)
+            self._line.put(("model", r, alinma, extra, los, fix, hazir), hazir)
         else:
             self._write_row(r, alinma, extra)
 
@@ -314,9 +405,13 @@ class Tracker:
                 if referee is not None:
                     self._keep(referee)
                 if self.source == "hakem" and not self._closed:
-                    los = np.array(referee.los_body) if referee is not None and referee.visible else None
+                    seen = referee is not None and referee.visible
+                    los = np.array(referee.los_body) if seen else None
+                    point = None
+                    if self.follow and seen and all(math.isfinite(c) for c in referee.position):
+                        point = konumlama.GeoPoint(*self._world.to_geodetic(*referee.position))  # a perfect GPS
                     hazir = self._now()
-                    self._line.put(("hakem", t, los, ready, hazir), hazir)
+                    self._line.put(("hakem", t, los, point, ready, hazir), hazir)
             except Exception as e:  # noqa: BLE001 - the thread keeps going; the run reports it
                 self._error(f"hakem karesi işlenemedi: {type(e).__name__}: {e}")
             finally:
@@ -347,20 +442,119 @@ class Tracker:
         """DelayLine: one message leaves the line -> LosSender -> rows. Runs in the producer's or the line's thread."""
         try:
             if item[0] == "model":
-                _, r, alinma, extra, los, hazir = item
+                _, r, alinma, extra, los, fix, hazir = item
                 result, at = self.sender.send(r.t, los)
                 sent = self._attempt(r.t, "model", los, result, alinma, hazir, serbest, at)
                 extra |= {f"tez_los_{k}": v for k, v in zip("xyz", _vector(los), strict=True)}
                 extra |= {"tez_los_sonuc": result, "serbest": serbest, "serbest_sim": self._clock.to_sim(serbest)}
                 extra |= {"ek_gecikme_ms": sent["ek_gecikme_ms"], "gonderim": sent["gonderim"]}
                 extra |= {"gonderim_sim": sent["gonderim_sim"], "uctan_uca_ms": sent["uctan_uca_ms"]}
+                if self.follow:
+                    extra |= self._follow(
+                        r.t, "model", fix.geo if fix is not None and fix.ok else None, alinma, hazir, serbest
+                    )
                 self._write_row(r, alinma, extra)
             else:
-                _, t, los, ready, hazir = item
+                _, t, los, point, ready, hazir = item
                 result, at = self.sender.send(t, los)
                 self._attempt(t, "hakem", los, result, ready, hazir, serbest, at)
+                if self.follow and point is not None:
+                    self._follow(t, "hakem", point, ready, hazir, serbest)
         except Exception as e:  # noqa: BLE001 - one message lost is reported; the line must keep going
-            self._error(f"TEZ_LOS gönderilemedi: {type(e).__name__}: {e}")
+            self._error(f"TEZ_LOS / FOLLOW_TARGET gönderilemedi: {type(e).__name__}: {e}")
+
+    def _follow(
+        self, t: float, source: str, point: konumlama.GeoPoint | None, origin: float, hazir: float, serbest: float
+    ) -> dict:
+        """FOLLOW_TARGET of the frame captured at t (behind its TEZ_LOS); -> its algilama.csv columns."""
+        if point is None:
+            return {"ft_sonuc": "konum_yok"}
+        result, at = self.follow_sender.send(t, point)
+        to_sim = self._clock.to_sim
+        sent = result == "gonderildi"
+        gonderim_sim = to_sim(at) if sent else math.nan
+        x, y = self._world_xy(point)
+        tx, ty = self._true_xy(t)
+        sx, sy = self._true_xy(gonderim_sim) if sent else (math.nan, math.nan)
+        row = {
+            "t_us": algilama.time_key(t),
+            "t": t,
+            "kaynak": source,
+            "lat": point.lat,
+            "lon": point.lon,
+            "alt": point.alt,
+            "x": x,
+            "y": y,
+            "gercek_x": tx,
+            "gercek_y": ty,
+            "hata_m": math.hypot(x - tx, y - ty),
+            "hata_gonderimde_m": math.hypot(x - sx, y - sy),
+            "sonuc": result,
+            "kaynak_hazir": origin,
+            "hazir": hazir,
+            "serbest": serbest,
+            "gonderim": at if sent else math.nan,
+            "gonderim_sim": gonderim_sim,
+            "uctan_uca_ms": (gonderim_sim - t) * 1000.0,
+        }
+        with self._lock:
+            if self._ft_writer is None:
+                self._ft_file = (self._out / "follow_target.csv").open("w", newline="", encoding="utf-8")
+                self._ft_writer = csv.writer(self._ft_file)
+                self._ft_writer.writerow(FOLLOW_COLUMNS)
+            self._ft_writer.writerow([algilama.csv_cell(row[c]) for c in FOLLOW_COLUMNS])
+            self._ft_file.flush()
+            self.follow_attempts.append(row)
+        return {"ft_sonuc": result, "ft_gonderim_sim": gonderim_sim, "ft_uctan_uca_ms": row["uctan_uca_ms"]}
+
+    def _world_xy(self, point: konumlama.GeoPoint | None) -> tuple[float, float]:
+        if point is None or self._world is None:
+            return math.nan, math.nan
+        x, y, _ = self._world.to_local(point.lat, point.lon, point.alt)
+        return x, y
+
+    def _true_xy(self, t: float) -> tuple[float, float]:
+        if self._truth is None or not math.isfinite(t):
+            return math.nan, math.nan
+        return self._truth(t)
+
+    def _fix_columns(self, fix: konumlama.Fix, t: float) -> dict:
+        nan = math.nan
+        pose = fix.pose
+        roll, pitch, yaw = pose.euler_deg() if pose is not None else (nan, nan, nan)
+        p = pose.p if pose is not None else (nan, nan, nan)
+        ned = fix.ned if fix.ned is not None else (nan, nan, nan)
+        geo = fix.geo
+        x, y = self._world_xy(geo)
+        tx, ty = self._true_xy(t) if fix.ok else (nan, nan)
+        foot = fix.foot or (nan, nan)
+        return {
+            "konum": fix.status,
+            "ayak_u": foot[0],
+            "ayak_v": foot[1],
+            "isin_asagi": fix.down,
+            "poz_once_ms": pose.before_ms if pose is not None else nan,
+            "poz_sonra_ms": pose.after_ms if pose is not None else nan,
+            "ekf_n": p[0],
+            "ekf_e": p[1],
+            "ekf_d": p[2],
+            "ekf_roll_deg": roll,
+            "ekf_pitch_deg": pitch,
+            "ekf_yaw_deg": yaw,
+            "konum_n": ned[0],
+            "konum_e": ned[1],
+            "konum_d": ned[2],
+            "konum_lat": geo.lat if geo else nan,
+            "konum_lon": geo.lon if geo else nan,
+            "konum_alt": geo.alt if geo else nan,
+            "konum_menzil_m": fix.range_m,
+            "konum_yatay_m": fix.horizontal_m,
+            "konum_x": x,
+            "konum_y": y,
+            "gercek_x": tx,
+            "gercek_y": ty,
+            "konum_hatasi_m": math.hypot(x - tx, y - ty),
+        }
 
     def _attempt(
         self,
@@ -425,17 +619,22 @@ class Tracker:
             self._thread.join(gecikme.CLOSE_TIMEOUT)
         self._line.close()
         with self._lock:
-            if self._file is not None:
-                self._file.close()
-                self._file = None
+            for name in ("_file", "_ft_file"):
+                if getattr(self, name) is not None:
+                    getattr(self, name).close()
+                    setattr(self, name, None)
 
     # --- numbers ------------------------------------------------------------------------------------------------
 
     def summary(self) -> dict:
-        """ozet.json "tez_los": the whole run (not only the window)."""
+        """ozet.json "tez_los": the whole run (not only the window); "follow_target": FOLLOW_TARGET and the box
+        positions of the whole run."""
         with self._lock:
             attempts, events, errors = list(self.attempts), list(self.events), list(self.errors)
+            follow, fixes = list(self.follow_attempts), dict(self.fixes)
         sent = [a for a in attempts if a["sonuc"] == "gonderildi"]
+        ft_sent = [a for a in follow if a["sonuc"] == "gonderildi"]
+        poses = self.poses
         return {
             "kaynak": self.source,
             "sonuclar": dict(Counter(a["sonuc"] for a in attempts)),
@@ -449,24 +648,47 @@ class Tracker:
                 "olaylar": events,
             },
             "hatalar": errors,
+            "follow_target": {
+                "etkin": self.follow,
+                "kaynak": self.source if self.follow else None,
+                "sonuclar": dict(Counter(a["sonuc"] for a in follow)),
+                "ilk_gonderim_sim_s": ft_sent[0]["gonderim_sim"] if ft_sent else math.nan,
+                "son_gonderim_sim_s": ft_sent[-1]["gonderim_sim"] if ft_sent else math.nan,
+                "konum": fixes,  # Locator results of every processed model frame
+                "ekf_kokeni": None if poses is None or poses.origin is None else vars(poses.origin),
+                "ev_ned": None if poses is None or poses.home_ned is None else poses.home_ned.tolist(),
+                "poz_kancasi_hatalari": poses.errors if poses is not None else 0,
+            },
         }
 
     def recent(self, t_from: float) -> str:
         """One log line about TEZ_LOS since sim time t_from [s]."""
         with self._lock:
             sent = [a for a in self.attempts if a["sonuc"] == "gonderildi" and a["t"] >= t_from]
+            follow = [a for a in self.follow_attempts if a["sonuc"] == "gonderildi" and a["t"] >= t_from]
         target = sum(a["hedef"] for a in sent)
         state = "kilitli" if self.selection.locked else "kilit yok"
-        return (
-            f"TEZ_LOS ({self.source}): {len(sent)} gönderildi ({target} hedefli, {len(sent) - target} hedef yok); "
-            f"{state}"
-        )
+        text = f"TEZ_LOS ({self.source}): {len(sent)} gönderildi ({target} hedefli, {len(sent) - target} hedef yok); "
+        if self.follow:
+            errors = [a["hata_m"] for a in follow if math.isfinite(a["hata_m"])]
+            mean = f", konum hatası ort. {statistics.fmean(errors):.2f} m" if errors else ""
+            text += f"FOLLOW_TARGET: {len(follow)} gönderildi{mean}; "
+        return text + state
 
-    def metrics(self, start: float, end: float, detection_rows: list[dict], referee_rows: list[dict]) -> dict:
+    def metrics(
+        self,
+        start: float,
+        end: float,
+        detection_rows: list[dict],
+        referee_rows: list[dict],
+        mount: tuple[tuple[float, float, float], np.ndarray] | None = None,
+    ) -> dict:
         """Numbers of the window start..end [s sim] for ozet.json "olcutler" (temporary, task group 7 moves them to
-        olcum.py). TEZ_LOS by send time (what PX4 can log in the window), selection and LOS (i) by frame time."""
+        olcum.py). TEZ_LOS and FOLLOW_TARGET by send time (what PX4 can log in the window), selection, LOS (i) and the
+        box positions by frame time. mount: the camera's true offset (FLU) and C_cb from Gazebo
+        (Recorder.camera_offset, camera_dcm), for the box positions with the true drone pose."""
         with self._lock:
-            attempts, events = list(self.attempts), list(self.events)
+            attempts, events, follow = list(self.attempts), list(self.events), list(self.follow_attempts)
         span = end - start
         sent = [a for a in attempts if a["sonuc"] == "gonderildi" and start <= a["gonderim_sim"] <= end]
         tried = [a for a in attempts if start <= a["t"] <= end]
@@ -483,7 +705,75 @@ class Tracker:
         inside = [e for e in events if start <= e["t"] <= end]
         m["kilit_kaybi_sayisi"] = sum(1 for e in inside if e["olay"] == "kilit_kaybi")
         m["yeniden_kilit_sayisi"] = sum(1 for e in inside if e["olay"] == "yeniden_kilit")
-        return m | _selection_metrics(start, end, detection_rows, referee_rows)
+        m |= _selection_metrics(start, end, detection_rows, referee_rows)
+        m |= _follow_metrics(start, end, follow, detection_rows)
+        return m | self._position_metrics(start, end, detection_rows, referee_rows, mount)
+
+    def _position_metrics(
+        self,
+        start: float,
+        end: float,
+        rows: list[dict],
+        referee_rows: list[dict],
+        mount: tuple[tuple[float, float, float], np.ndarray] | None,
+    ) -> dict:
+        """The box positions of the window (every tracking source): how often there was one and why not, and where
+        the chosen box was the target (IoU >= 0.5) how far it was from the target, with the EKF pose (what goes to
+        PX4) and with the true pose and mount (the box's own part). The EKF's yaw and position against Gazebo's."""
+        frames = [r for r in rows if start <= r["t"] <= end and "konum" in r]
+        referee = {algilama.time_key(x["t"]): x for x in referee_rows}
+        origin = self.poses.origin if self.poses is not None else None
+        px4 = konumlama.MapProjection(origin.lat, origin.lon) if origin is not None else None
+        camera = self._camera()
+        errors, true_errors, yaw_errors, ekf_errors = [], [], [], []
+        for r in frames:
+            ref = referee.get(r["t_us"])
+            if ref is None:
+                continue
+            if math.isfinite(r["ekf_yaw_deg"]):
+                yaw_errors.append((r["ekf_yaw_deg"] - ref["dron_yaw_deg"] + 180.0) % 360.0 - 180.0)
+                if px4 is not None and self._world is not None:
+                    x, y, _ = self._world.to_local(*px4.reproject(r["ekf_n"], r["ekf_e"]))
+                    ekf_errors.append(math.hypot(x - ref["dron_x"], y - ref["dron_y"]))
+            if r["konum"] != "hesaplandi" or not ref.get("gorunur"):
+                continue
+            target = tuple(float(ref.get(f"hedef_kutu_{k}", math.nan)) for k in ("u0", "v0", "u1", "v1"))
+            if algilama.iou(tuple(r[f"secilen_{k}"] for k in ("u0", "v0", "u1", "v1")), target) < MATCH_IOU:
+                continue
+            errors.append(r["konum_hatasi_m"])
+            if camera is not None and mount is not None and mount[0] is not None:
+                x, y = konumlama.true_pose_hit(camera, (r["ayak_u"], r["ayak_v"]), ref, mount[0], mount[1])
+                true_errors.append(math.hypot(x - ref["hedef_x"], y - ref["hedef_y"]))
+        statuses = Counter(r["konum"] for r in frames)
+        m = {"konum_hesaplanan": statuses["hesaplandi"], "konum_durumlari": dict(statuses), "konum_kare": len(errors)}
+        m |= _stats("konum_hatasi", errors, ("ort", "p50", "p95", "maks"), unit="_m")
+        m |= _stats("konum_hatasi_gercek_pozla", true_errors, ("ort", "p95"), unit="_m")
+        m |= _stats("ekf_yaw_hatasi", yaw_errors, ("ort",), unit="_deg")
+        m["ekf_yaw_hatasi_maks_deg"] = max((abs(v) for v in yaw_errors), default=math.nan)
+        return m | _stats("ekf_yatay_konum_hatasi", ekf_errors, ("ort", "maks"), unit="_m")
+
+
+def _follow_metrics(start: float, end: float, attempts: list[dict], rows: list[dict]) -> dict:
+    """FOLLOW_TARGET of the window: sent by send time (what PX4 can have fused), refused by capture time; how far the
+    sent position was from the target at the capture time (geolocation_hatasi, spec "Ölçüt Tanımları") and at the
+    send time (the target walked on meanwhile)."""
+    span = end - start
+    sent = [a for a in attempts if a["sonuc"] == "gonderildi" and start <= a["gonderim_sim"] <= end]
+    tried = [a for a in attempts if start <= a["t"] <= end]
+    m = {
+        "follow_target_gonderilen": len(sent),
+        "follow_target_hizi_hz": len(sent) / span if span > 0 else math.nan,
+        "follow_target_reddedilen": sum(1 for a in tried if a["sonuc"] in ("ayni_kare", "eski_kare", "hiz_siniri")),
+        "follow_target_gecersiz": sum(1 for a in tried if a["sonuc"] == "gecersiz"),
+        "follow_target_konumsuz_kare": sum(
+            1 for r in rows if start <= r["t"] <= end and r.get("ft_sonuc") == "konum_yok"
+        ),
+    }
+    m |= _stats("follow_target_uctan_uca_ms", [a["uctan_uca_ms"] for a in sent], ("ort", "p95", "maks"))
+    m |= _stats("geolocation_hatasi", [a["hata_m"] for a in sent], ("ort", "p50", "p95", "maks"), unit="_m")
+    return m | _stats(
+        "geolocation_hatasi_gonderimde", [a["hata_gonderimde_m"] for a in sent], ("ort", "p95"), unit="_m"
+    )
 
 
 def _selection_metrics(start: float, end: float, rows: list[dict], referee_rows: list[dict]) -> dict:

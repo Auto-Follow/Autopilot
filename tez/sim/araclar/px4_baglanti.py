@@ -5,6 +5,15 @@ the target as DEBUG_VECT name "TEZ_LOS", x y z = unit vector in body FRD from th
 capture time; x = y = z = NaN means "no target". LosSender keeps the stream's rules (one message per frame, frames
 only forwards, at most one per camera frame interval) and Vehicle.send_los checks every vector before it goes out
 (two-sided validation: PX4 checks again). Every message of the connection goes through one lock (serialize_sends).
+
+FOLLOW_TARGET (spec 6, "Varsayımlar" 5): the target's flat-ground position for PX4's stock Follow Me ("Follow
+Target"), at most every third camera frame (~10 Hz; FollowTargetSender, same stream rules). PX4 v1.17.0 takes lat,
+lon, alt and vel only (mavlink_receiver handle_message_follow_target), fuses a position at most every 500 ms and a
+velocity only if it is finite (TargetEstimator), so the velocity goes as NaN: a 0 would be fused as "standing still".
+
+Vehicle keeps the autopilot's EKF pose (ATTITUDE_QUATERNION, LOCAL_POSITION_NED), the EKF origin and home in a
+konumlama.PoseHistory through pymavlink's message_hooks: the main thread's recv_match loops read the socket as before
+and every message they parse passes the hook (pose_hook), so no second reader competes for it.
 """
 
 import math
@@ -18,6 +27,8 @@ from collections.abc import Callable, Iterable
 import numpy as np
 from pymavlink import mavutil
 from pymavlink.dialects.v20 import development as mavlink
+
+import konumlama
 
 # Names PX4 gives its own modes in AVAILABLE_MODES (src/lib/modes/ui.hpp nav_state_names; what QGC shows).
 # Modes are always chosen by name: the numbers of external modes depend on the registration order.
@@ -65,6 +76,20 @@ LOS_NORM_TOLERANCE = 1e-3  # |norm - 1| below this: a unit vector (spec 5)
 # and still stops anything faster than one message per frame. Capture times, not send times: the wall-clock spacing
 # of two sends jitters with the threads and would drop good frames.
 LOS_MIN_SPACING_S = 0.030
+# [s, sim] least spacing of the capture times of two FOLLOW_TARGET messages (spec 6: "en çok 10 Hz"): every third
+# camera frame at most, which is 96 or 100 ms after (frames 32, 32, 32, 36 ms apart); a 100 ms limit would take every
+# fourth one (7.6 Hz). PX4 fuses a position at most every 500 ms (MINIMUM_TIME_BETWEEN_POS_FUSIONS_MS) and calls the
+# target lost after 3 s without one (GPS_MESSAGE_STALE_TIMEOUT_MS).
+FOLLOW_MIN_SPACING_S = 0.096
+FOLLOW_POSITION_ONLY = 1  # FOLLOW_TARGET.est_capabilities: bit 0 POS (PX4 v1.17.0 does not read it)
+AUTOPILOT_COMPONENT = 1  # MAV_COMP_ID_AUTOPILOT1: whose pose messages count
+# [Hz] EKF pose streams for the frames' positions: PX4's own rates on an onboard link (mavlink_main.cpp
+# MAVLINK_MODE_ONBOARD), which a Pi on TELEM2 in onboard mode would get if the link has the bandwidth (m04)
+POSE_STREAMS = {"ATTITUDE_QUATERNION": 50, "LOCAL_POSITION_NED": 30}
+# PX4 sends GPS_GLOBAL_ORIGIN only when the EKF origin is set or changes, or when asked (streams/GPS_GLOBAL_ORIGIN.hpp
+# _force_next_send): set before this link was up, it never comes by itself. HOME_POSITION comes every 2 s once valid.
+REFERENCE_MESSAGES = ("GPS_GLOBAL_ORIGIN", "HOME_POSITION")
+REFERENCE_ASK_EVERY_S = 1.0  # [s] while waiting for them
 
 
 def check_los(vec: np.ndarray | None) -> str | None:
@@ -90,6 +115,61 @@ def los_message(mav: object, time_usec: int, vec: np.ndarray | None) -> object:
         raise ValueError(f"{TEZ_LOS_NAME}: {reason}")
     x, y, z = (math.nan,) * 3 if vec is None else (float(c) for c in vec)
     return mav.debug_vect_encode(TEZ_LOS_NAME.encode(), int(time_usec), x, y, z)
+
+
+def check_follow_target(point: konumlama.GeoPoint) -> str | None:
+    """Why a FOLLOW_TARGET position may not be sent, None if it may: finite, a latitude / longitude on the Earth."""
+    if not all(math.isfinite(v) for v in (point.lat, point.lon, point.alt)):
+        return "sonlu olmayan alan"
+    if abs(point.lat) > 90.0 or abs(point.lon) > 180.0:
+        return f"enlem/boylam aralık dışında ({point.lat}, {point.lon})"
+    return None
+
+
+def follow_target_message(mav: object, timestamp_ms: int, point: konumlama.GeoPoint) -> object:
+    """FOLLOW_TARGET of one frame: timestamp [ms] = its capture time (PX4's clock; PX4 does not use it), position only.
+    The velocity is NaN, not MAVLink's "0 for unknown": PX4 v1.17.0 ignores est_capabilities and would fuse a 0;
+    acceleration, attitude and rates are MAVLink's unknown (0) and unused by PX4. ValueError if it may not be sent."""
+    reason = check_follow_target(point)
+    if reason is not None:
+        raise ValueError(f"FOLLOW_TARGET: {reason}")
+    nan = math.nan
+    return mav.follow_target_encode(
+        int(timestamp_ms),
+        FOLLOW_POSITION_ONLY,
+        round(point.lat * 1e7),
+        round(point.lon * 1e7),
+        float(point.alt),
+        [nan, nan, nan],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [nan, nan, nan],
+        0,
+    )
+
+
+def pose_hook(history: konumlama.PoseHistory, system: int) -> Callable[[object, object], None]:
+    """pymavlink message hook (mavfile.message_hooks, called for every parsed message in the reading thread) that
+    keeps the autopilot's EKF pose, EKF origin and home position in `history`. Never raises: the reader must go on."""
+
+    def hook(_conn: object, msg: object) -> None:
+        try:
+            if msg.get_srcSystem() != system or msg.get_srcComponent() != AUTOPILOT_COMPONENT:
+                return
+            kind = msg.get_type()
+            if kind == "ATTITUDE_QUATERNION":
+                history.add_attitude(msg.time_boot_ms / 1000.0, np.array([msg.q1, msg.q2, msg.q3, msg.q4]))
+            elif kind == "LOCAL_POSITION_NED":
+                history.add_position(msg.time_boot_ms / 1000.0, np.array([msg.x, msg.y, msg.z]))
+            elif kind == "GPS_GLOBAL_ORIGIN":
+                history.set_origin(konumlama.GeoPoint(msg.latitude * 1e-7, msg.longitude * 1e-7, msg.altitude * 1e-3))
+            elif kind == "HOME_POSITION":
+                history.set_home(np.array([msg.x, msg.y, msg.z]), msg.altitude * 1e-3)
+        except (AttributeError, ValueError, ZeroDivisionError):  # a malformed message: skipped, the reader goes on
+            history.errors += 1
+
+    return hook
 
 
 def serialize_sends(mav: object, lock: threading.Lock) -> None:
@@ -127,14 +207,15 @@ def check_mode_name(name: str, px4_start: Iterable[str] = ()) -> None:
     )
 
 
-class LosSender:
-    """The TEZ_LOS stream: one message per frame, frames only forwards in time, at most one per LOS_MIN_SPACING_S of
-    capture time, none without a link and none that may not be sent (check_los). Every attempt is counted."""
+class FrameStream:
+    """Rules of a per-frame message stream to PX4: one message per frame, frames only forwards in time, at most one per
+    `min_spacing_s` of capture time, none without a link and none that may not be sent. Every attempt is counted."""
 
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, min_spacing_s: float, clock: Callable[[], float] = time.monotonic) -> None:
+        self.min_spacing_s = min_spacing_s
         self._clock = clock
         self._lock = threading.Lock()
-        self._link: object | None = None  # has send_los(time_usec, vec): Vehicle
+        self._link: object | None = None  # Vehicle
         self._last_t: float | None = None  # [s, sim] capture time of the last message sent
         self.counts: Counter[str] = Counter()
 
@@ -146,16 +227,23 @@ class LosSender:
         with self._lock:
             self._link = None
 
-    def send(self, t: float, vec: np.ndarray | None) -> tuple[str, float]:
-        """TEZ_LOS of the frame captured at `t` [s, sim]; vec None = no target. -> (result, monotonic time of the
-        send or of the decision): gonderildi, gecersiz, baglanti_yok, ayni_kare, eski_kare, hiz_siniri, hata."""
+    def send(self, t: float, payload: object) -> tuple[str, float]:
+        """The message of the frame captured at `t` [s, sim]. -> (result, monotonic time of the send or of the
+        decision): gonderildi, gecersiz, baglanti_yok, ayni_kare, eski_kare, hiz_siniri, hata."""
         with self._lock:
-            result, at = self._send(t, vec)
+            result, at = self._send(t, payload)
             self.counts[result] += 1
             return result, at
 
-    def _send(self, t: float, vec: np.ndarray | None) -> tuple[str, float]:
-        if check_los(vec) is not None:
+    def check(self, payload: object) -> str | None:
+        """Why `payload` may not be sent, None if it may."""
+        raise NotImplementedError
+
+    def write(self, link: object, t: float, payload: object) -> None:
+        raise NotImplementedError
+
+    def _send(self, t: float, payload: object) -> tuple[str, float]:
+        if self.check(payload) is not None:
             return "gecersiz", self._clock()
         if self._link is None:
             return "baglanti_yok", self._clock()
@@ -164,17 +252,45 @@ class LosSender:
                 return "ayni_kare", self._clock()
             if t < self._last_t:
                 return "eski_kare", self._clock()
-            if t - self._last_t < LOS_MIN_SPACING_S - 1e-9:
+            if t - self._last_t < self.min_spacing_s - 1e-9:
                 return "hiz_siniri", self._clock()
         # the send time is read just before the write: after it, the thread waits for the GIL (and on a loaded CPU for
         # the scheduler) and a later reading came out up to ~70 ms late against PX4's own arrival stamp (task group 5)
         at = self._clock()
         try:
-            self._link.send_los(round(t * 1e6), vec)
+            self.write(self._link, t, payload)
         except OSError:  # the UDP socket went away (PX4 shutting down): counted, the stream goes on
             return "hata", at
         self._last_t = t
         return "gonderildi", at
+
+
+class LosSender(FrameStream):
+    """The TEZ_LOS stream: payload = unit LOS in body FRD or None (no target); at most one per camera frame."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        super().__init__(LOS_MIN_SPACING_S, clock)
+
+    def check(self, payload: object) -> str | None:
+        return check_los(payload)
+
+    def write(self, link: object, t: float, payload: object) -> None:
+        link.send_los(round(t * 1e6), payload)
+
+
+class FollowTargetSender(FrameStream):
+    """The FOLLOW_TARGET stream of follow_me: payload = konumlama.GeoPoint; at most every third camera frame."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        super().__init__(FOLLOW_MIN_SPACING_S, clock)
+
+    def check(self, payload: object) -> str | None:
+        if not isinstance(payload, konumlama.GeoPoint):
+            return f"konum yok ({type(payload).__name__})"
+        return check_follow_target(payload)
+
+    def write(self, link: object, t: float, payload: object) -> None:
+        link.send_follow_target(round(t * 1000.0), payload)
 
 
 def decode_param_value(value: float, param_type: int) -> int | float:
@@ -199,10 +315,14 @@ class Vehicle:
         self.m.port.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
         if self.m.wait_heartbeat(timeout=timeout) is None:
             raise RuntimeError("PX4'ten heartbeat gelmedi (calistir.sh çalışıyor mu?)")
+        # the EKF pose of every frame's capture time (follow_me), from now on, in whatever thread reads the link
+        self.poses = konumlama.PoseHistory()
+        self.m.message_hooks.append(pose_hook(self.poses, self.m.target_system))
+        self.request_message("GPS_GLOBAL_ORIGIN")
         # The x500 airframe refuses to arm without a ground station (NAV_DLL_ACT 2): act as one.
         self._closed = threading.Event()
         threading.Thread(target=self._send_gcs_heartbeat, daemon=True).start()
-        for name, rate_hz in (("LOCAL_POSITION_NED", 10), ("EXTENDED_SYS_STATE", 2)):
+        for name, rate_hz in (*POSE_STREAMS.items(), ("EXTENDED_SYS_STATE", 2)):
             msg_id = getattr(mavutil.mavlink, f"MAVLINK_MSG_ID_{name}")
             self.command(mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, msg_id, 1e6 / rate_hz, quiet=True)
 
@@ -243,6 +363,39 @@ class Vehicle:
     def send_los(self, time_usec: int, vec: np.ndarray | None) -> None:
         """One TEZ_LOS (DEBUG_VECT) to PX4; vec None = no target. ValueError if the vector may not be sent."""
         self.m.mav.send(los_message(self.m.mav, time_usec, vec))
+
+    def request_message(self, name: str) -> None:
+        """MAV_CMD_REQUEST_MESSAGE for one message; the ack is not awaited (the message may come before it, and the
+        hooks see it either way)."""
+        msg_id = getattr(mavutil.mavlink, f"MAVLINK_MSG_ID_{name}")
+        self.m.mav.command_long_send(
+            self.m.target_system,
+            self.m.target_component,
+            mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
+            0,
+            msg_id,
+            *[0] * 6,
+        )
+
+    def wait_references(self, timeout: float = 10.0) -> bool:
+        """Until the pose history holds the EKF origin and the home position (the box positions need both), asking for
+        them every REFERENCE_ASK_EVERY_S; reading the link meanwhile lets the hooks see them. Home is valid once
+        armed."""
+        t_end = time.monotonic() + timeout
+        asked = -math.inf
+        while time.monotonic() < t_end:
+            if self.poses.origin is not None and self.poses.home_ned is not None:
+                return True
+            if time.monotonic() - asked >= REFERENCE_ASK_EVERY_S:
+                for name in REFERENCE_MESSAGES:
+                    self.request_message(name)
+                asked = time.monotonic()
+            self.m.recv_match(blocking=True, timeout=0.2)
+        return self.poses.origin is not None and self.poses.home_ned is not None
+
+    def send_follow_target(self, timestamp_ms: int, point: konumlama.GeoPoint) -> None:
+        """One FOLLOW_TARGET to PX4. ValueError if the position may not be sent."""
+        self.m.mav.send(follow_target_message(self.m.mav, timestamp_ms, point))
 
     def modes(self, timeout: float = 15.0) -> dict[str, int]:
         """{mode name: custom_mode} of every mode PX4 offers for selection (AVAILABLE_MODES, what QGC shows)."""

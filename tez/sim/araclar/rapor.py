@@ -10,6 +10,7 @@ import io
 import json
 import math
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib
@@ -21,6 +22,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import dogrulama  # noqa: E402
+import konumlama  # noqa: E402
 from hedef import SIM_DIR, SUCCESS_KEYS, Scenario  # noqa: E402
 
 # Reference palette (dataviz skill): categorical slots 1-2, light surface, text and grid tokens
@@ -194,6 +196,73 @@ def ulog_tez_los(path: Path | None, start: float, end: float, sent: list[dict] |
         return {"ulog_tez_los_hatasi": f"{type(e).__name__}: {e}"}
 
 
+def follow_target_in_ulog(
+    target: dict | None,
+    estimator: dict | None,
+    start: float,
+    end: float,
+    world: konumlama.WorldGeo | None,
+    truth: Callable[[float], tuple[float, float]] | None,
+) -> dict:
+    """What PX4 made of FOLLOW_TARGET in the window start..end [s] (PX4 time = sim time in SITL), from the ULog's
+    pyulog columns: follow_target (what arrived; the logger keeps one sample per 500 ms, so this is not the number of
+    messages) and follow_target_estimator (every 200 ms): how far its estimate (lat_est / lon_est, the position the
+    Follow Me task flies after) was from where the person really was at that time, how often it was valid, and for
+    how long it was stale (no FOLLOW_TARGET for 3 s: PX4 keeps the last position and stops moving it)."""
+    span = end - start
+    m: dict = {"follow_target_px4_sayisi": 0, "follow_target_px4_hizi_hz": 0.0}
+    if target is not None:
+        t = np.asarray(target["timestamp"], dtype=float) / 1e6
+        count = int(((t >= start) & (t <= end)).sum())
+        m = {"follow_target_px4_sayisi": count, "follow_target_px4_hizi_hz": count / span if span > 0 else math.nan}
+    if estimator is None:
+        return m
+    t = np.asarray(estimator["timestamp"], dtype=float) / 1e6
+    inside = (t >= start) & (t <= end)
+    valid = np.asarray(estimator["valid"]).astype(bool) & inside
+    stale = np.asarray(estimator["stale"]).astype(bool)
+    steps = np.diff(t, append=t[-1] if t.size else 0.0)
+    m["px4_kestirim_gecerli_orani"] = float(valid.sum() / inside.sum()) if inside.any() else math.nan
+    m["px4_kestirim_bayat_s"] = float(steps[inside & stale].sum())
+    errors = []
+    if world is not None and truth is not None:
+        lat, lon = np.asarray(estimator["lat_est"], dtype=float), np.asarray(estimator["lon_est"], dtype=float)
+        for i in np.flatnonzero(valid & np.isfinite(lat) & np.isfinite(lon)):
+            x, y, _ = world.to_local(lat[i], lon[i])
+            tx, ty = truth(t[i])
+            errors.append(math.hypot(x - tx, y - ty))
+    for kind, value in (
+        ("ort", np.mean),
+        ("p50", lambda v: np.percentile(v, 50)),
+        ("p95", lambda v: np.percentile(v, 95)),
+        ("maks", np.max),
+    ):
+        m[f"px4_kestirim_hatasi_{kind}_m"] = float(value(errors)) if errors else math.nan
+    return m
+
+
+def ulog_follow_target(
+    path: Path | None,
+    start: float,
+    end: float,
+    world: konumlama.WorldGeo | None,
+    truth: Callable[[float], tuple[float, float]] | None,
+) -> dict:
+    """follow_target_in_ulog of a ULog file (topics that were never published count as none)."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        from pyulog import ULog
+
+        ulog = ULog(str(path), ["follow_target", "follow_target_estimator"])
+        found = {d.name: d.data for d in ulog.data_list}
+        return follow_target_in_ulog(
+            found.get("follow_target"), found.get("follow_target_estimator"), start, end, world, truth
+        )
+    except Exception as e:  # noqa: BLE001 - the report must still be written
+        return {"ulog_follow_target_hatasi": f"{type(e).__name__}: {e}"}
+
+
 def evaluate(sc: Scenario, m: dict) -> list[tuple[str, str, float, float, bool]]:
     """(key, description, threshold, value, passed) for every success threshold in the scenario."""
     checks = []
@@ -297,7 +366,7 @@ def _fmt(value: float | None, key: str = "") -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "–"
     if key.startswith(("kadrajda", "gorunur", "segmentasyon", "atlanan_kare", "secili_kare", "secim_dogru")) or (
-        key == "tez_los_px4_orani"
+        key in ("tez_los_px4_orani", "px4_kestirim_gecerli_orani")
     ):
         return f"%{100 * value:.1f}"
     if isinstance(value, int):
@@ -354,6 +423,28 @@ METRIC_LABELS = {
     "uctan_uca_ms_p50": "Uçtan uca gecikme, p50 [sim ms]",
     "uctan_uca_ms_p95": "Uçtan uca gecikme, p95 [sim ms]",
     "uctan_uca_ms_maks": "Uçtan uca gecikme, en çok [sim ms]",
+    "yatay_mesafe_hatasi_ort_m": "Follow Me: |yatay mesafe − FLW_TGT_DST|, ortalama [m]",
+    "follow_target_gonderilen": "Gönderilen FOLLOW_TARGET (gönderim anı kayıt penceresinde)",
+    "follow_target_hizi_hz": "FOLLOW_TARGET hızı [mesaj/sim-s]",
+    "follow_target_konumsuz_kare": "Konumu hesaplanamadığı için FOLLOW_TARGET gitmeyen işlenmiş kare",
+    "follow_target_uctan_uca_ms_ort": "FOLLOW_TARGET uçtan uca gecikme (yakalama → gönderim), ortalama [sim ms]",
+    "geolocation_hatasi_ort_m": "Gönderilen hedef konumu − karenin anındaki gerçek konum, ortalama [m]",
+    "geolocation_hatasi_p95_m": "Gönderilen hedef konumu hatası, p95 [m]",
+    "geolocation_hatasi_maks_m": "Gönderilen hedef konumu hatası, en çok [m]",
+    "geolocation_hatasi_gonderimde_ort_m": "Gönderilen konum − gönderim anındaki gerçek konum, ortalama [m]",
+    "follow_target_px4_sayisi": "PX4'ün ULog'a yazdığı follow_target (kaydedici en çok 500 ms'de bir yazar)",
+    "px4_kestirim_hatasi_ort_m": "PX4'ün hedef kestirimi (follow_target_estimator) − gerçek konum, ortalama [m]",
+    "px4_kestirim_hatasi_p95_m": "PX4'ün hedef kestirimi hatası, p95 [m]",
+    "px4_kestirim_hatasi_maks_m": "PX4'ün hedef kestirimi hatası, en çok [m]",
+    "px4_kestirim_gecerli_orani": "PX4'ün hedef kestiriminin geçerli olduğu süre",
+    "px4_kestirim_bayat_s": "PX4'ün hedefi 'bayat' saydığı süre (3 s FOLLOW_TARGET yok) [s]",
+    "konum_hesaplanan": "Konumu hesaplanan işlenmiş kare (kutunun alt ortası → düz zemin)",
+    "konum_hatasi_ort_m": "Model kutusunun konumu − gerçek konum (EKF pozuyla, kutu hedefken), ortalama [m]",
+    "konum_hatasi_p95_m": "Model kutusunun konum hatası, p95 [m]",
+    "konum_hatasi_maks_m": "Model kutusunun konum hatası, en çok [m]",
+    "konum_hatasi_gercek_pozla_ort_m": "Aynı kutular dronun gerçek pozuyla: konum hatası, ortalama [m] (kutunun payı)",
+    "ekf_yaw_hatasi_ort_deg": "EKF yaw − gerçek yaw, ortalama [°]",
+    "ekf_yatay_konum_hatasi_ort_m": "EKF yatay konumu − gerçek konum, ortalama [m]",
 }
 
 

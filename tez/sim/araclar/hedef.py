@@ -46,6 +46,10 @@ DELAY_FIELDS |= {"saat_kayma_ppm": "clock_drift_ppm"}
 FLAGS = {"algilama.model": "--model", "algilama.imgsz": "--imgsz", "algilama.conf": "--conf"}
 FLAGS |= {"algilama.sinif": "--sinif", "gecikme.ek_ms": "--gecikme-ms"}
 TAKEOFF_PARAM = "MIS_TAKEOFF_ALT"  # px4_baglanti.takeoff sets it from drone.yukseklik_m
+# Follow Me's height above home (spec 6): drone.yukseklik_m unless the scenario or --param gives it; the 45 deg camera
+# keeps the person in view only if height and distance change together (camera report, 6/8 failed every time)
+FOLLOW_HEIGHT_PARAM = "FLW_TGT_HT"
+FOLLOW_HEIGHT_SOURCE = "drone.yukseklik_m (follow_me)"
 BEHAVIOUR_KEYS = {"dogal", "tohum", "hiz_dalgalanma", "yol_sapmasi_m"}
 PERSON_KEYS = {"baslangic", "yol", "davranis", "kiyafet"}
 TARGET_LABEL = 1  # segmentation label of the target; the other people get OTHER_LABEL + i
@@ -287,8 +291,9 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
             "= dron PX4 Hold'da bekler"
         )
     _check_keys(drone, {"yukseklik_m"}, "drone")
+    altitude = _number(drone, "yukseklik_m", "drone", 10.0, minimum=2.0)
     detection = read_detection(_block(d, "algilama", "{etkin: true, conf: 0.25}"))
-    tracking = _tracking(_block(d, "takip", "{kaynak: yok}"), detection.enabled, cli)
+    tracking = _tracking(_block(d, "takip", "{kaynak: yok}"), detection.enabled, cli, altitude)
 
     target = d.get("hedef") or {}
     _check_keys(target, PERSON_KEYS | {"tur"}, "hedef")
@@ -309,7 +314,7 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
         name=str(d.get("ad", path.stem)),
         description=str(d.get("aciklama", "")),
         world=world,
-        altitude=_number(drone, "yukseklik_m", "drone", 10.0, minimum=2.0),
+        altitude=altitude,
         start=_point(target.get("baslangic"), "hedef.baslangic"),
         start_time=_number(timing, "baslama_s", "zamanlama", 60.0, minimum=20.0),
         end_wait=_number(timing, "son_bekleme_s", "zamanlama", 5.0),
@@ -359,7 +364,7 @@ def _with_command_line(d: dict, cli: CommandLine) -> dict:
     return merged
 
 
-def _tracking(d: dict, detection_on: bool, cli: CommandLine) -> Tracking:
+def _tracking(d: dict, detection_on: bool, cli: CommandLine, altitude: float) -> Tracking:
     _check_keys(d, TRACKING_KEYS, "takip")
     source = d.get("kaynak", "yok")
     if source not in TRACKING_SOURCES:
@@ -382,6 +387,9 @@ def _tracking(d: dict, detection_on: bool, cli: CommandLine) -> Tracking:
     for p in px4_params:
         if p.name == TAKEOFF_PARAM:
             raise ValueError(f"{p.source}: {p.name}: kalkış yüksekliğini drone.yukseklik_m verir; burada yazılmaz")
+    if source == "follow_me" and all(p.name != FOLLOW_HEIGHT_PARAM for p in px4_params):
+        # first of the scenario's layer: after the .params files (their 8 m), before nothing that names it
+        px4_params.insert(0, parametreler.Param(FOLLOW_HEIGHT_PARAM, altitude, FOLLOW_HEIGHT_SOURCE))
     return Tracking(source, mode_name, _los(d, source, detection_on), tuple(starts), tuple(px4_params))
 
 
@@ -507,8 +515,6 @@ def unwired(sc: Scenario) -> list[str]:
     """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet."""
     t, v = sc.tracking, sc.video
     found: list[tuple[str, int]] = []
-    if t.source == "follow_me":
-        found.append(("takip.kaynak: follow_me (--takip)", 6))
     if t.px4_start:
         found.append(("takip.px4_baslat / --px4-baslat", 10))
     found += [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
