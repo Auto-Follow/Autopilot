@@ -67,7 +67,7 @@ Bunlar her grupta ayrıca görev olarak da yazıldı; burada nedenleri toplu dur
   - [ ] 0.2 Hüseyin'in cevabı karar günlüğüne yazılır. Onay gelince listeye ekleme **Hüseyin'in açacağı ayrı PR**'dır; bu dal o PR'ı beklemeden çalışmaya devam eder.
   - [ ] 0.3 Vision (Yusuf Ortatepe) ile `AF_LOS` anlaşması (A5, V2, V6): yerleşim `data[0..2]` LOS x/y/z (body FRD), `data[3]` yaş [ms], `data[4]` sıra no, `data[5]` hedef var (1) / yok (0); `name = "AF_LOS"`; sıra no float geldiği için 2²⁴ sınırı (spec:136); eksen yönleri ve işaretleri m10 ile (V6, **Açık**). MAVLink 2 Vision tarafından doğrulandı (B1), yeniden sorulmaz.
   - [ ] 0.4 Ahmet Kazalcı'dan kamera eğimi (A6): gelene kadar SITL'de `AF_TRK_ANG` = 30°. Gelmezse iş durmaz.
-  - [ ] 0.5 Uygulamada gerekecek, kaynaklarda olmayan şu adlar ve değerler kullanıcıya **tek tek** sorulur ve karar günlüğüne yazılır:
+  - [x] 0.5 Uygulamada gerekecek, kaynaklarda olmayan şu adlar ve değerler kullanıcıya **tek tek** sorulur ve karar günlüğüne yazılır:
     - ~~görev grubu notlarının yeri~~ → karar verildi (yukarıdaki "Bütün gruplar için geçerli kurallar"),
     - `tez/sitl/af_los_gonder.py` ve `tez/analiz/af_log_analiz.py`'nin komut satırı seçeneklerinin adları **(ad kullanıcıya sorulacak)** (ilgili grupta da sorulabilir),
     - açık çevrim testlerde script'in gönderim hızı (Pi 10–30 Hz bekleniyor, V2) ve gönderilecek yaş değeri **(değer kullanıcıya sorulacak)**.
