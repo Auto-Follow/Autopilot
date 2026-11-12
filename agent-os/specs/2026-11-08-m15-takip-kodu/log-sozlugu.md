@@ -55,7 +55,7 @@ Hepsi QGC'den değiştirilir, derleme gerekmez. Açılar QGC'de **derece** giril
 | `AF_VEL_MAX` | En büyük yatay hız isteği | 2 | m/s | 0.1–5 | İlk uçuşlarda düşük tutulur. |
 | `AF_ACC_MAX` | Hız isteğinin değişim sınırı (ivme) | 3 | m/s² | 0.5–5 | Sert eğilme görülürse azaltılır. 3 = PX4'ün otomatik modlarındaki değer. |
 | `AF_ALPHA` | Alpha-beta filtresinin konum katsayısı: büyük = ölçüme hızlı uyar ama gürültülü | 0.5 | — | 0–1 | SITL'de log analizine göre ayarlanır. |
-| `AF_BETA` | Alpha-beta filtresinin hız katsayısı: büyük = hız kestirimi hızlı ama gürültülü | 0.17 | — | 0–1 | `AF_ALPHA` ile birlikte; başlangıç β ≈ α²/(2−α) (Benedict–Bordner). |
+| `AF_BETA` | Alpha-beta filtresinin hız katsayısı: büyük = hız kestirimi hızlı ama gürültülü | **0.10** | — | 0–1 | `AF_ALPHA` ile birlikte. İlk değer 0.17 idi (β ≈ α²/(2−α), Benedict–Bordner); S7 taramasından sonra **0.10** (kullanıcı kararı 2026-11-12, Grup 6 soru 5-b): `AF_K_FF` = 1,0'da 0.17 hız kestirimini titretiyordu (±0,3 m/s), 0.10'da sakin (±0,03 m/s); bedeli hedefin hızına ~0,56 s'de yetişmesi (0.17'de 0,3–0,4 s). |
 | `AF_DATA_TOUT` | Veri zaman aşımı: bu süre geçerli veri gelmezse KAYIP_BEKLE. Yaşı bundan büyük mesaj da atılır | 0.5 | s | 0.1–5 | Pi'nin gönderim hızına göre. |
 | `AF_LOST_T` | KAYIP_BEKLE'de bu süre dolarsa Hold istenir | 1.0 | s | 0–30 | İlk uçuşlarda kısa. Güven arttıkça uzatılır (kısa kayıplarda takip kesilmesin). |
 | `AF_YAW_MIN_D` | Hedefe yatay mesafe bunun altındaysa burun çevrilmez (son yaw tutulur) | 1 | m | 0–10 | Hedef tam altındayken burun sağa sola savrulmasın diye. |

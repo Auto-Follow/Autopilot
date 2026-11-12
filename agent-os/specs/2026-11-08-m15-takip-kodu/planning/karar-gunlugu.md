@@ -551,3 +551,9 @@ Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10.
 - **3 — Burnun 5–7° aşması.** Kullanıcı: **"a (şimdilik)"** → **Karar:** böyle kalır; ileride yeniden bakılabilir.
 - **4 — T2 yerine `EKF2_GPS_CTRL` = 0 denemesi.** Kullanıcı: "bunu anlamadım" → sade anlatım verildi; (amaç Hold reddini görmekti; `failure gps off` Gazebo Harmonic'te çalışmıyor; parametre denemesinde bütün konum birlikte gitti, PX4 Descend ile indirdi, Hold yolu devreye girmedi). Seçenekler: (a) ek deneme T2 sonucu olarak kabul · (b) başka simülatör (Gazebo Classic proje kuralı 5 ile yasak) · (c) Hold reddinin gerçek testi m16'ya / gerçek uçuş öncesi GPS'li yer testine. Öneri (a)+(c). Kullanıcı: **"a+c"** → **Karar.**.
 - Kullanıcı son doğrulama adımına (implementation-verifier) **onay verdi** ("onay veriyorum son adımı yap"). Sıra: önce 2'deki tarama (sonucu dokümanları değiştirebilir), sonra son doğrulama.
+
+### `AF_K_FF` / `AF_BETA` varsayılanları (2026-11-12)
+
+- S7 taraması (8 bölüm; `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 12): geride kalma yalnızca `AF_K_FF`'e bağlı ((1 − `AF_K_FF`) × 2,8 m); titreşimi `AF_BETA` belirliyor (`AF_K_FF` 1,0'da sınır 0,10–0,13); 1,0 / 0,10 geride kalmadan `AF_K_FF` = 0 kadar sakin (iki oturumda tekrarlandı).
+- Seçenekler: (a) değişmesin · (b) `AF_BETA` 0,10, `AF_K_FF` 0 (öneri) · (c) 0,10 ve 1,0 · (d) `AF_BETA` 0,05 · (e) 0,17 ve `AF_K_FF` 0,5 · (f) ek koşu. Öneri gerekçesi: ilk gerçek uçuşlar en sakin ayarla başlar; `AF_K_FF` = 0 iken β'nın etkisi çok küçük; gerçek kameranın gecikmesi titreşim sınırını düşürebilir.
+- Kullanıcı: **"b, o parametrelerin default değerlerini bu şekilde ayarlayabilirsin"** → **Karar (b):** `module.yaml`'da `AF_BETA` 0.17 → **0.10**; `AF_K_FF` 0 kalır. İki derleme uyarısız; 6C flash 1 937 316 B (%98,54, +56 B); birim testi 12/12. Seçilen değerle S6 yeniden koşuldu (sonuç grup 6 notu Bölüm 12).

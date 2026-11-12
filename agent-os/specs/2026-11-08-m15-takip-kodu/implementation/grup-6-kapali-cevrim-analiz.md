@@ -366,6 +366,22 @@ Bütün bölümlerde durum hep TAKIP, atılan mesaj yok, `hold_request_count` 0,
 
 Varsayılan değişirse: `module.yaml`, `log-sozlugu.md` parametre tablosu, spec Bölüm 10 ve rapor §4.6 aynı commit'te güncellenir; PX4 kodu değişmez ama parametre varsayılanı firmware'e girdiği için iki derleme yeniden yapılır (flash değişimi beklenmez). **Kullanıcı onayı olmadan hiçbiri yapılmadı.**
 
+### 12.8 Karar ve S6 tekrarı (2026-11-12)
+
+**Kullanıcının kararı (soru 5-b):** `AF_BETA` varsayılanı 0.17 → **0.10** (`module.yaml`), `AF_K_FF` 0 kalır. İki derleme uyarısız; 6C flash **1 937 316 B (%98,54)**, +56 B; birim testi 12/12.
+
+**S6 yeni varsayılanla yeniden koşuldu** (`19_26_43.ulg`, `~/m15-sitl-araclari/run.sh S6 400`; konsolda `AF_BETA` 0.1000, `AF_K_FF` 0 görüldü). `af_log_analiz.py` ile eski S6 (`21_08_57.ulg`, β 0,17) karşılaştırması:
+
+| Başlangıç | Oturma süresi eski → yeni | Aşma eski → yeni | Kırpma süresi eski → yeni | Burun aşması eski → yeni | Son 5 s mesafe hatası (yeni) |
+|---|---|---|---|---|---|
+| 10 m | 4,78 → 4,94 s | 0,03 → 0,05 m | 1,68 → 1,72 s | 5,5 → 5,9° | 0,00 ± 0,007 m |
+| 15 m | 1,64 → 1,68 s | 0,05 → 0,05 m | 0 → 0 | 7,5 → 7,7° | 0,01 ± 0,012 m |
+| 20 m | 4,40 → 4,32 s | 0,04 → 0,04 m | 1,20 → 1,22 s | 6,9 → 6,7° | 0,00 ± 0,014 m |
+| 25 m | 6,76 → 6,80 s | 0,04 → 0,04 m | 3,68 → 3,66 s | 6,8 → 7,2° | 0,01 ± 0,021 m |
+| 30 m | 9,22 → 9,18 s | 0,01 → 0,01 m | 6,06 → 6,14 s | 6,9 → — | 0,01 ± 0,014 m |
+
+**Sonuç:** fark ölçüm saçılması kadar (birkaç yüzde); duran hedefte yeni değer takibi değiştirmedi. Beklendiği gibi: `AF_K_FF` = 0 iken hız kestirimi hız isteğine girmiyor. Kestirilen hedef hızının en büyük değeri drone hızlanırken her iki değerde de 0,4–1,1 m/s arasında (sahte hız; duran hedefte istek etkilenmiyor).
+
 ### 12.7 Kontroller ve test yardımcıları
 
 | Kontrol | Sonuç |

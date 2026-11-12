@@ -152,7 +152,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 | `AF_VEL_MAX` | En büyük yatay hız | 2 | m/s | 0.1–5 |
 | `AF_ACC_MAX` | Hız komutu değişim sınırı (`MPC_ACC_HOR` varsayılanı, `src/modules/mc_pos_control/multicopter_autonomous_params.c:88`) | 3 | m/s² | 0.5–5 |
 | `AF_ALPHA` | Filtre konum katsayısı | 0.5 (başlangıç; SITL'de ayarlanır) | — | 0–1 |
-| `AF_BETA` | Filtre hız katsayısı | 0.17 (β ≈ α²/(2−α), Benedict–Bordner) | — | 0–1 |
+| `AF_BETA` | Filtre hız katsayısı | **0.10** (ilk değer 0.17, β ≈ α²/(2−α), Benedict–Bordner; S7 taramasından sonra kullanıcı kararıyla 0.10, 2026-11-12, `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 12) | — | 0–1 |
 | `AF_DATA_TOUT` | Veri zaman aşımı | 0.5 | s | 0.1–5 |
 | `AF_LOST_T` | KAYIP_BEKLE'den Hold'a | 1.0 | s | 0–30 |
 | `AF_YAW_MIN_D` | Bu yatay mesafenin altında yaw sabit | 1 | m | 0–10 |
@@ -273,7 +273,8 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 | Görev grubu 2 sonu (doğrulama, geometri, filtre, guidance, setpoint, `auto_follow_status`, 2026-11-10) | 1 936 100 B | %98,48 | 29 980 B | +4 936 B |
 | Grup 2 düzeltme turu (filtre ve sıra no sıfırlama, EKF reset kaydırma, 2026-11-10; Grup 3–4'te kod değişmedi) | 1 936 260 B | %98,48 | 29 820 B | +160 B |
 | Görev grubu 5 sonu (Hold isteği, `AF_YAWRATE_MAX`, yön sıfırlaması, sıra no kuralı, 2026-11-11) | 1 937 252 B | %98,53 | 28 828 B | +992 B |
-| Grup 5 soru 3-b (yön sıfırlamasında filtre sıfırlama, 2026-11-11); **son** — Grup 6'da PX4 kodu değişmedi, 2026-11-12'de yeniden görüldü | 1 937 260 B | %98,53 | 28 820 B | +8 B |
+| Grup 5 soru 3-b (yön sıfırlamasında filtre sıfırlama, 2026-11-11); Grup 6'da PX4 kodu değişmedi | 1 937 260 B | %98,53 | 28 820 B | +8 B |
+| **Son:** `AF_BETA` varsayılanı 0.10 (Grup 6 soru 5-b, 2026-11-12) | 1 937 316 B | %98,54 | 28 764 B | +56 B |
 
 ## Out of Scope
 

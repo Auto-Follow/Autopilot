@@ -42,7 +42,7 @@ Tez araçları (izinli `tez/*`):
 
 ## Pixhawk 6C flash
 
-`make px4_fmu-v6c_default`: **1 937 260 B / 1 966 080 B (%98,53)**, boş 28 820 B. Modül yokken 1 926 408 B (%97,98) → **+10 852 B**. Taşma yok; başka modül kapatılmadı.
+`make px4_fmu-v6c_default`: **1 937 316 B / 1 966 080 B (%98,54)**, boş 28 764 B. Modül yokken 1 926 408 B (%97,98) → **+10 908 B**. Taşma yok; başka modül kapatılmadı.
 
 ## Test
 
