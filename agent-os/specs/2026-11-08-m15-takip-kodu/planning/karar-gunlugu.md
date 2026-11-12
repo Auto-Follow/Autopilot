@@ -557,3 +557,10 @@ Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10.
 - S7 taraması (8 bölüm; `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 12): geride kalma yalnızca `AF_K_FF`'e bağlı ((1 − `AF_K_FF`) × 2,8 m); titreşimi `AF_BETA` belirliyor (`AF_K_FF` 1,0'da sınır 0,10–0,13); 1,0 / 0,10 geride kalmadan `AF_K_FF` = 0 kadar sakin (iki oturumda tekrarlandı).
 - Seçenekler: (a) değişmesin · (b) `AF_BETA` 0,10, `AF_K_FF` 0 (öneri) · (c) 0,10 ve 1,0 · (d) `AF_BETA` 0,05 · (e) 0,17 ve `AF_K_FF` 0,5 · (f) ek koşu. Öneri gerekçesi: ilk gerçek uçuşlar en sakin ayarla başlar; `AF_K_FF` = 0 iken β'nın etkisi çok küçük; gerçek kameranın gecikmesi titreşim sınırını düşürebilir.
 - Kullanıcı: **"b, o parametrelerin default değerlerini bu şekilde ayarlayabilirsin"** → **Karar (b):** `module.yaml`'da `AF_BETA` 0.17 → **0.10**; `AF_K_FF` 0 kalır. İki derleme uyarısız; 6C flash 1 937 316 B (%98,54, +56 B); birim testi 12/12. Seçilen değerle S6 yeniden koşuldu (sonuç grup 6 notu Bölüm 12).
+
+### Son doğrulama sonrası (2026-11-12)
+
+- **Hüseyin'e 7 yol talebi.** Kullanıcı: "Sıkıntı yok, ben konuştum; biz push yaptığımızda onaylayacak." → Grup 0 notu 0.1 güncellendi.
+- **Eski taslak spec klasörleri ve fotoğraf PR'a girecek.** Seçenekler: kalsın · PR'dan çıkarılsın · yalnızca fotoğraf çıksın. Öneri: kalsın. Kullanıcı: **"Kalsınlar"** → PR taslağına "eski taslaklar, bağlayıcı değil" notu eklendi.
+- **Son doğrulamanın bulduğu metin eksikleri.** Kullanıcı: **"Hepsini düzelt"** → yalnızca metin düzeltildi (kod değişmedi).
+- **`AF_ENABLE` varsayılanı.** Kullanıcı: **"AF_ENABLE=1 şeklinde varsayılan olsun; 0 yapılmadığı sürece her derlemede auto follow hep açık açılsın, kapatmak istersek 0 yapar kapatırız. Bunu kesin değiştirelim."** → **Karar:** `module.yaml`'da `AF_ENABLE` varsayılanı 0 → **1** (A13'teki önceki karar 0 idi). C++ ve `rc.mc_apps` değişmez. Not: daha önce elle 0 kaydedilmiş bir parametre dosyası 0'da kalır.

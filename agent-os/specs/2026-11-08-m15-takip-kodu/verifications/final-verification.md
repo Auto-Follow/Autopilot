@@ -220,3 +220,14 @@ Sayılar notlarla aynı. Bu doğrulamanın sonunda arkada px4 ya da gz süreci k
 - `.venv-tez/bin/ruff format --check …` · `ruff check …`
 - `tez/pin/verify_pin.sh --worktree` · `tez/pin/verify_pin.sh`
 - `af_log_analiz.py` iki logda (`19_18_27.ulg`, `19_26_43.ulg`), çıktılar yalnızca geçici klasörde
+
+---
+
+## Ek: doğrulamadan sonra yapılanlar (2026-11-12)
+
+Bu rapor yazıldığı andaki durumu anlatır. Sonrasında kullanıcının kararlarıyla:
+- Bölüm "Bulunan uyuşmazlıklar"daki **metin eksiklerinin hepsi düzeltildi** (yalnızca doküman; kod değişmedi).
+- **`AF_ENABLE` varsayılanı 0 → 1** (`module.yaml`; kullanıcı kararı, rapor §5.1 G6.19). C++ ve `rc.mc_apps` aynı. İki derleme uyarısız; 6C flash **1 937 348 B (%98,54)**, +32 B; birim testi 12/12.
+- Hüseyin: kullanıcı konuştu, push/PR yapılınca 7 yolu onaylayacak.
+- Eski taslak spec klasörleri ve fotoğraf kullanıcı kararıyla PR'da kalır (PR taslağına not düşüldü).
+

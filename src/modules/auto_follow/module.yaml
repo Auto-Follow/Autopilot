@@ -11,7 +11,7 @@ parameters:
             1: auto_follow is started on boot and the AUTO FOLLOW mode is registered.
             0: auto_follow is not started and the mode is not available.
         type: int32
-        default: 0
+        default: 1
         min: 0
         max: 1
         reboot_required: true

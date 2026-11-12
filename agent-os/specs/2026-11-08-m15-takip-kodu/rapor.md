@@ -49,7 +49,7 @@ Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold
 | Hedef kaybı | Kademeli (D): 0.5 s veri yoksa yerinde bekle, 1.0 s daha gelmezse Hold |
 | Log | Kendi mesajımız `auto_follow_status`, her zaman kaydedilir, log sözlüğü yazılır |
 | Test | Kısa birim testi + Gazebo SITL'de S1–S7 senaryoları, sonuçlar pyulog ile ölçülür |
-| Güvenlik | Bu modda arm yasak, kalkış Position'da; yerde arm'lıyken moda geçiş engellenecek; modül açılışta kendiliğinden başlar |
+| Güvenlik | Bu modda arm yasak, kalkış Position'da; yerde arm'lıyken moda geçiş engellenir; modül açılışta kendiliğinden başlar |
 | Adlar | Mod `AUTO FOLLOW`, parametreler `AF_*` |
 
 ---
@@ -359,7 +359,7 @@ Hepsi QGC'den değiştirilebilir, kod yeniden derlenmez. Ön ek `AF_` (PX4 v1.17
 
 | Parametre | Anlamı | Başlangıç | Neden bu değer |
 |---|---|---|---|
-| `AF_ENABLE` | Modülü açılışta başlat (1) / başlatma (0) | 0 | İlk yüklemede mod görünmesin; kullanıcı bilerek açar. Değişince QGC'den reboot yeterli |
+| `AF_ENABLE` | Modülü açılışta başlat (1) / başlatma (0) | **1** | Önce 0 idi (ilk yüklemede kapalı); kullanıcı 2026-11-12'de 1 yaptı: her derlemede açık, kapatmak için 0 + reboot (§5.1 G6.19) |
 | `AF_TRK_ANG` | Takip açısı (kamera eğimi) | 30° (SITL) | m06'dan gelecek |
 | `AF_K_DIST` | Mesafe kazancı | 0.5 1/s | 2 m hata → 1 m/s, yumuşak |
 | `AF_K_FF` | Hedef hızı katsayısı | 0 | Açık çevrim testlerde kaçmayı önler (4.9) |
@@ -589,7 +589,7 @@ Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.** Grup 5'ten sonra
 - **Flash ölçümü (Grup 1 sonu):** modül yokken 1 926 408 B (%97,98), iskelet + 16 parametreyle **1 931 164 B / 1920 KB (%98,22)**; artış **+4 756 B**, boş kalan ~34 KB. Grup 2 (guidance, filtre, log mesajı) bunun üstüne eklenecek.
 - **Flash ölçümü (Grup 2 sonu):** **1 936 100 B / 1920 KB (%98,48)**; Grup 1'e göre artış **+4 936 B**, boş kalan ~29 KB (29 980 B).
 - **Flash ölçümü (Grup 5 sonu):** **1 937 252 B / 1920 KB (%98,53)**; Grup 2 düzeltme turuna göre (1 936 260 B) artış **+992 B**, boş kalan ~28 KB (28 828 B). Taşma yok.
-- **Flash ölçümü (son, `AF_BETA` varsayılanı 0.10 sonrası, 2026-11-12):** **1 937 316 B / 1920 KB (%98,54)**, boş 28 764 B; modül yokken göre toplam **+10 908 B** (önceki: 1 937 260 B, Grup 5 soru 3-b sonrası).
+- **Flash ölçümü (son, `AF_ENABLE` varsayılanı 1 sonrası, 2026-11-12):** **1 937 348 B / 1920 KB (%98,54)**, boş 28 732 B; modül yokken göre toplam **+10 940 B** (öncekiler: 1 937 316 B `AF_BETA` 0.10 sonrası; 1 937 260 B Grup 5 soru 3-b sonrası).
 - **Grup 1'de yazılanlar:** `src/modules/auto_follow/` içinde `AutoFollow.cpp/.hpp`, `CMakeLists.txt`, `Kconfig`, `module.yaml`; iki kart dosyasına birer satır; `rc.mc_apps`'in sonuna 4 satırlık başlatma bloğu. **Grup 2'de yazılanlar:** `AutoFollowGuidance.cpp/.hpp` (ayrı kütüphane), `AlphaBetaFilter.hpp`, `AutoFollow.cpp/.hpp`'ye girdi, setpoint ve log; `msg/AutoFollowStatus.msg`; `msg/CMakeLists.txt` ve `logged_topics.cpp`'ye birer satır. **Grup 3'te yazılanlar:** `AutoFollowGuidanceTest.cpp` ve `CMakeLists.txt`'e `px4_add_unit_gtest` satırı (firmware'e girmez, flash değişmedi). **Grup 5'te değişenler:** yalnızca `src/modules/auto_follow/` içindeki dosyalar (`AutoFollow.cpp/.hpp`, `AutoFollowGuidance.cpp/.hpp`, `AutoFollowGuidanceTest.cpp`, `module.yaml`); kilitli diğer yollara dokunulmadı. **Grup 6'da:** PX4 dosyası değişmedi; yalnızca izinli `tez/analiz/af_log_analiz.py`, `tez/analiz/BENIOKU.md` (yeni) ve `tez/sitl/af_los_gonder.py`.
 
 ---
@@ -636,7 +636,7 @@ Düzeltme turundan sonra (2026-11-10): **9 testin 9'u geçti.** Grup 5'ten sonra
 | A5 | Masa testinde `SDLOG_MODE` | 1 · 2 | Kullanıcı kendisi seçer | "Kendim ayarlayacağım" | Karar |
 | B2 | Modülün açılışta başlaması | a) elle / SD kart · b) `rc.mc_apps` satırı | b (7. kilitli yol) | Unutulma riski yok, kendiliğinden | Karar |
 | B4 | Yerde arm'lıyken moda geçiş | a) PX4'e "çalışamam" bildir · b) girişte Hold iste | a | PX4'ün kendi reddi; drone moda hiç girmez; RTL riski yok | Karar |
-| A13 | Başlatma satırının koşulu | koşulsuz · parametreyle | `AF_ENABLE`, varsayılan 0 | Ucuz kapatma düğmesi; ilk yüklemede kapalı | Karar |
+| A13 | Başlatma satırının koşulu | koşulsuz · parametreyle | `AF_ENABLE`, varsayılan 0 → **1** (2026-11-12) | Ucuz kapatma düğmesi; varsayılan sonradan açık yapıldı (G6.19) | Karar |
 | A2 | RC çubuğuyla müdahale | çubuk modu değiştirmez · Position'a geçer | Position'a geçer | "Güvenlik amaçlı olsun" | Karar |
 | İç | Kodun iç düzeni | — | Hesaplar ayrı kütüphanede saf fonksiyonlar | Birim testi drone'suz çalışsın | Öneri kabul |
 | A3 | Masa testi | — | Liste yeterli; dışarıda GPS fix'li arm'sız testler sonra eklenebilir | "Geliştirmeye açık, düşüneceğim" | Karar |
@@ -781,6 +781,7 @@ Kod yazılırken spec'in söylemediği ya da açık bıraktığı her nokta bura
 | G6.16 | Taramanın ek ölçüleri | — | Repo dışı `~/m15-sitl-araclari/grup6-tarama/tarama_analiz.py` (Grup 6'nın `analiz_s7_ek.py`'sinin genişletilmişi): bacak pencereleri, köşe en küçük/en büyük hata ve oturma (2. bacak son 5 s ortalamasının ±0,3 m'si), hedef hızı baskın frekansı, açısal hız std, köşede en büyük pitch, filtre yetişme süresi (%90; köşede 10°). `af_log_analiz.py` değişmedi | Talimattaki ölçüler `af_log_analiz.py`'de bacak bazında yok; script'i değiştirmek yeni ölçü adı demek (karar gerekir). `21_14_07`'de Grup 6 sayılarını aynen verdi | Kod içi |
 | G6.17 | Varsayılanlar | değiştir · değiştirme | `module.yaml` değişmedi (`AF_K_FF` 0, `AF_ALPHA` 0,5, `AF_BETA` 0,17); ölçüt seçenekleri ve öneri kullanıcıya soruldu | Talimat: "optimum"un tanımı ve varsayılan kullanıcının | Kod içi (soruldu; kullanıcının kararı G6.18) |
 | G6.18 | `AF_K_FF` / `AF_BETA` varsayılanları | a) değişmesin · b) `AF_BETA` 0,10, `AF_K_FF` 0 · c) 0,10 ve 1,0 · d) `AF_BETA` 0,05 · e) 0,17 ve `AF_K_FF` 0,5 · f) ek koşu | **b**: `AF_BETA` 0,10 (`module.yaml`), `AF_K_FF` 0 kalır; gerçek uçuşta gözlem altında QGC'den 1,0'a açılır | S7'de 1,0 / 0,10 geride kalmadan en sakin; `AF_K_FF` = 0 iken β uçuşu neredeyse etkilemez; gerçek kamera gecikmesi titreşim sınırını düşürebilir. İki derleme uyarısız, 6C flash 1 937 316 B (%98,54, +56 B); S6 yeni değerle yeniden koşuldu (§4.9). Kullanıcı: "b, o parametrelerin default değerlerini bu şekilde ayarlayabilirsin" (2026-11-12) | Öneri kabul |
+| G6.19 | `AF_ENABLE` varsayılanı | 0 (A13'teki karar) · 1 | **1** | Kullanıcı: "AF_ENABLE=1 varsayılan olsun; 0 yapılmadığı sürece her derlemede AUTO FOLLOW açık açılsın, kapatmak istersek 0 yaparız" (2026-11-12). Yalnızca `module.yaml` varsayılanı değişti, C++ ve `rc.mc_apps` aynı (`param compare -s AF_ENABLE 1`). İki derleme uyarısız, 6C flash 1 937 348 B (%98,54, +32 B). Etki: ilk yüklemede mod listede görünür; mod yine yalnızca elle seçilince çalışır, bu modda arm yasak (C1) | Kullanıcı |
 
 ---
 
@@ -891,14 +892,14 @@ Uygulamadan açık kalan:
 - G5.3 (cevapsızlıkta tekrar) onaylandı; 3 retten sonraki davranış yeniden değerlendirildi, aynı kaldı (§5.1 G5.14).
 - **Gerçek uçuştan önce:** Pixhawk'ta `COM_LOW_BAT_ACT` = 3 (PX4 varsayılanı 0 = yalnızca uyarı); takım/Hüseyin ile (Grup 0 notu 0.5).
 - **Bilgi:** Hold reddi yolu (3 istek, QGC uyarısı) SITL'de üretilemedi, yalnızca birim testinde sınandı; EKF yön sıfırlaması SITL'de olmadı (ikisi de doğrulanacak).
-- **Grup 6'nın 4 sorusu cevaplandı (2026-11-12):** (1) S7 yolu komut satırına eklenmez, kullanıcının bilgisayarındaki sarmalayıcıyla açılır · (2) `AF_K_FF`/`AF_BETA` taraması yapıldı (§4.9), varsayılan kararı bekleniyor · (3) burun aşması şimdilik kalır · (4) T2b kabul; **Hold reddinin gerçek testi m16'ya / gerçek uçuş öncesi GPS'li yer testine** (Gazebo'da üretilemiyor).
-  - Cevaplananlar (2026-11-12, `planning/karar-gunlugu.md`): (2) "b-c denenip en optimum değer bulunsun" → `AF_K_FF` / `AF_BETA` taraması yapıldı (aşağıda); (3) "a (şimdilik)" → burun aşması böyle kalır. (1) ve (4) cevap bekliyor.
+- **Grup 6'nın 4 sorusu cevaplandı (2026-11-12):** (1) S7 yolu komut satırına eklenmez, kullanıcının bilgisayarındaki sarmalayıcıyla açılır · (2) `AF_K_FF`/`AF_BETA` taraması yapıldı (§4.9), varsayılan karara bağlandı (aşağıda) · (3) burun aşması şimdilik kalır · (4) T2b kabul; **Hold reddinin gerçek testi m16'ya / gerçek uçuş öncesi GPS'li yer testine** (Gazebo'da üretilemiyor).
+  - Cevaplananlar (2026-11-12, `planning/karar-gunlugu.md`): (2) "b-c denenip en optimum değer bulunsun" → `AF_K_FF` / `AF_BETA` taraması yapıldı (aşağıda); (3) "a (şimdilik)" → burun aşması böyle kalır. (1) ve (4) de cevaplandı (yukarıda).
 - **`AF_K_FF` / `AF_BETA` varsayılanları karara bağlandı** (Grup 6 soru 5-b, 2026-11-12): `AF_BETA` 0,10, `AF_K_FF` 0; gerçek uçuşta `AF_K_FF` gözlem altında 1,0'a açılabilir (§5.1 G6.18).
 - **Bilgi (Grup 6):** S6'da drone hızlanırken duran hedefin kestirilen hızı birkaç saniye 0,4–2,3 m/s'ye çıkıyor (sahte hız; `AF_K_FF` = 0 iken etkisiz); batarya failsafe'inde PX4 RTL'den önce 5 s Hold'da bekliyor (`COM_FAIL_ACT_T`); GPS kaybında yerel ve küresel konum birlikte gidiyor, PX4 Descend yapıyor, Hold reddi yolu yine görülmedi.
 - **QGC'de bakılacaklar (kullanıcı):** mod listesinde `AUTO FOLLOW`; yerde arm'lıyken geçiş reddinin ve bu modda arm reddinin QGC'de hangi metinle göründüğü (PX4'ün metni "External 1" diyor); Hold'a geçişin QGC'de nasıl göründüğü.
 
 Bekleyen dış bağımlılıklar:
-- Hüseyin: 7 kilitli yol için onay.
+- Hüseyin: 7 kilitli yol için onay. **Kullanıcı konuştu (2026-11-12):** push/PR yapılınca onaylayacak; ekleme Hüseyin'in ayrı PR'ıyla.
 - Vision: `AF_LOS` yerleşimi ve eksenler (m10).
 - Ahmet (m06): kamera eğimi → `AF_TRK_ANG`; gerçekçi simülasyon.
 - **Geliştirmeye açık (kullanıcı notu):** dışarıda, arm etmeden, GPS fix'liyken yapılacak masa/yer testleri eklenebilir; kullanıcı düşünecek.
@@ -976,3 +977,4 @@ Bekleyen dış bağımlılıklar:
 | 12 | 2026-11-12 | Grup 6 ek iş, `AF_K_FF` / `AF_BETA` taraması (kullanıcı: "b-c denenip en optimum değer bulunsun"): S7 ile 3 oturum, 8 bölüm (`AF_K_FF` 0,25/0,5/0,75/1,0 @ β 0,17; β 0,05/0,10/0,13 ve 0,10 tekrarı @ `AF_K_FF` 1,0); §4.9'a sonuç tablosu ve ölçüt seçenekleri (1,0 / 0,10 geride kalmadan `AF_K_FF` = 0 kadar sakin); §5.1'e G6.13–G6.17; §11'e varsayılan değer kararı (soru 5) ve Grup 6 soru 2–3'ün cevapları; `module.yaml` ve PX4 kodu değişmedi |
 | 13 | 2026-11-12 | Grup 6 soru 1 (S7 yolu yerelde kalır) ve soru 4 (T2b kabul + Hold reddi yer testine) cevapları §11'e işlendi |
 | 14 | 2026-11-12 | Grup 6 soru 5-b: `AF_BETA` varsayılanı 0.10 (`AF_K_FF` 0 kalır; §4.6, §5.1 G6.18, §11); iki derleme, 6C flash 1 937 316 B (%98,54); S6 yeni değerle yeniden koşuldu (`19_26_43.ulg`), sonuçlar eskisiyle aynı (grup 6 notu 12.8) |
+| 15 | 2026-11-12 | Son doğrulamanın bulduğu metin düzeltmeleri (sözlük belge geçmişi ve `latency` tablosu, `BENIOKU.md` `AF_BETA`, §11 çelişkili cümleler, tasks/spec/şema eski ifadeleri, V3 tutum anı); Hüseyin notu (kullanıcı konuştu, push'ta onaylayacak); **`AF_ENABLE` varsayılanı 1** (G6.19) |

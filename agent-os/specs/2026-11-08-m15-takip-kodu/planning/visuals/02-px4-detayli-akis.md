@@ -544,11 +544,11 @@ flowchart TB
         cUmi("UserModeIntention::change(mode_id, ModeChangeSource::User)")
         cArmedQ{"armed mı?"}
         cDisarmOk("Disarm: mod seçimine her zaman izin (masa testi)<br/>bu modda arm engellenir: mode_req_prevent_arming = true<br/>(Karar C1: kalkış Position'da yapılır)")
-        cCanRunQ{"canRun(mode_id)?<br/>can_arm_and_run = true (Karar 5-a)<br/>mod responsive, mode_req_* sağlanıyor mu?"}
+        cCanRunQ{"canRun(mode_id)?<br/>can_arm_and_run = yerde değil ya da mod zaten aktif (Karar A14)<br/>mod responsive, mode_req_* sağlanıyor mu?"}
         cReject("Geçiş reddedilir: mode_req_* sağlanmıyor<br/>veya mod unresponsive<br/>printRejectMode, VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED<br/>mevcut mod korunur")
-        cAccept("Armed: geçiş kabul (yerdeyken de, spec A1, doğrulanacak)<br/>nav_state = mode_id<br/>vehicle_control_mode = config_control_setpoints yapılandırması")
+        cAccept("Armed: havadayken geçiş kabul; yerde arm'lıyken reddedilir (A14, Grup 4'te doğrulandı)<br/>nav_state = mode_id<br/>vehicle_control_mode = config_control_setpoints yapılandırması")
         cOvQ{"Commander::manualControlCheck stick override<br/>armed, valid, sticks_moving, ROTARY_WING ve<br/>flag_control_manual_enabled = false ve<br/>(flag_control_auto_enabled veya flag_control_offboard_enabled) ve<br/>COM_RC_OVERRIDE ilgili biti açık mı?"}
-        cNoOv("Seçenek a (auto = false): stick modu değiştirmez,<br/>flag_control_auto_enabled ve flag_control_offboard_enabled<br/>false olduğundan override_enabled = false kalır.<br/>Seçenek b (auto = true): Position'a geçer.<br/>Açık: spec A2 (SITL S3'te doğrulanacak)")
+        cNoOv("Seçenek a (auto = false): stick modu değiştirmez,<br/>flag_control_auto_enabled ve flag_control_offboard_enabled<br/>false olduğundan override_enabled = false kalır.<br/>Seçenek b (auto = true): Position'a geçer.<br/>Karar A2: b; SITL Grup 4'te doğrulandı (Pilot took over)")
         cOvNote("Not: failsafe aktifken istek _failsafe_user_override_request ile<br/>failsafe/framework.cpp'ye gider ve aynı koşullara bağlıdır (doğrulanacak).<br/>Failsafe sırasında mod anahtarıyla devralma her zaman mümkündür")
         cPosctl("Position'a geçer (NAVIGATION_STATE_POSCTL)<br/>yalnızca auto veya offboard bayraklı modlarda (ör. Hold)")
         cOther("UserModeIntention::change(yeni mod)<br/>armed iken canRun(yeni mod) ise kabul<br/>nav_state != mode_id")

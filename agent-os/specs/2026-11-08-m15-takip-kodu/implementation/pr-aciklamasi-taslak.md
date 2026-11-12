@@ -16,7 +16,7 @@
 PX4 v1.17.0'a **AUTO FOLLOW** adlı bir uçuş modu eklendi (yol haritası m15, issue #6). Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisi (MAVLink 2 `DEBUG_FLOAT_ARRAY`, ad `AF_LOS`: body FRD LOS birim vektörü + yaş + sıra no + hedef var/yok) Pixhawk'ta 9 kontrolden geçirilir, düz zemin kabulüyle hedefin yeri bulunur, alpha-beta filtresiyle yumuşatılır ve hız tabanlı bir kuralla PX4'e `trajectory_setpoint` (yatay hız + sabit irtifa + mutlak yaw) verilir. Hedef kaybolunca drone önce yerinde bekler (0,5 s), 1,0 s içinde hedef dönmezse PX4'ten Hold ister ve takibe kendiliğinden dönmez. Modun her iç durumu kendi log mesajı `auto_follow_status` ile her logda kaydedilir.
 
 - **Entegrasyon yaklaşımı:** external mode modülü (`mc_nn_control` kalıbı); kontrolcü yazılmadı, hızdan PWM'e zincir PX4'ün.
-- **Açma:** `AF_ENABLE` = 1 + reboot (varsayılan 0: ilk yüklemede mod görünmez). Mod QGC'de `AUTO FOLLOW` adıyla, `nav_state` 23–30 aralığından (SITL'de 23) görünür. PX4'ün kendi Follow Me'si (`nav_state` 19) ile ilgisi yoktur.
+- **Açma / kapama:** `AF_ENABLE` varsayılanı **1**: modül her açılışta başlar. Kapatmak için `AF_ENABLE` = 0 + reboot (mod listeden kalkar). Mod QGC'de `AUTO FOLLOW` adıyla, `nav_state` 23–30 aralığından (SITL'de 23) görünür. PX4'ün kendi Follow Me'si (`nav_state` 19) ile ilgisi yoktur.
 - **Parametreler:** 17 adet `AF_*` (QGC grubu `AUTO FOLLOW`).
 - **Spec ve dokümanlar:** `agent-os/specs/2026-11-08-m15-takip-kodu/` (`spec.md`, `rapor.md`, `log-sozlugu.md`, `tasks.md`, `implementation/grup-0..6-*.md`).
 
@@ -42,7 +42,7 @@ Tez araçları (izinli `tez/*`):
 
 ## Pixhawk 6C flash
 
-`make px4_fmu-v6c_default`: **1 937 316 B / 1 966 080 B (%98,54)**, boş 28 764 B. Modül yokken 1 926 408 B (%97,98) → **+10 908 B**. Taşma yok; başka modül kapatılmadı.
+`make px4_fmu-v6c_default`: **1 937 348 B / 1 966 080 B (%98,54)**, boş 28 732 B. Modül yokken 1 926 408 B (%97,98) → **+10 940 B**. Taşma yok; başka modül kapatılmadı.
 
 ## Test
 
@@ -61,12 +61,14 @@ Tez araçları (izinli `tez/*`):
 
 Closes Auto-Follow/Auto-Follow#6
 
+- Dalda M15'ten önceki **eski taslak spec klasörleri** (`agent-os/specs/2026-10-15-m15-target-follow-flight-mode/`, `2026-10-18-m15-fc-only-flow-diagrams/`) ve bir referans fotoğrafı var; bağlayıcı değiller, kullanıcı kararıyla olduğu gibi bırakıldı (2026-11-12).
+
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ````
 
 ## Taslakla ilgili notlar (PR'a girmez)
 
-- Flash sayısı Grup 5 sorusu 3-b'den sonraki son ölçümdür (rapor §4.10); Grup 6'da PX4 kodu değişmedi. PR açılmadan önce CI'daki `derleme-fmu-v6c` çıktısıyla karşılaştırılır.
+- Flash sayısı son ölçümdür (`AF_ENABLE` varsayılanı 1 sonrası, 2026-11-12; rapor §4.10). PR açılmadan önce CI'daki `derleme-fmu-v6c` çıktısıyla karşılaştırılır.
 - `Closes Auto-Follow/Auto-Follow#6` çatı reponun issue'sunu kapatır (issue çatı repoda).
 - PR açıklamasının sonundaki "Generated with Claude Code" satırı ajan talimatı gereği eklendi; kullanıcı istemezse silinir.
 - Commit listesi PR'da GitHub'ın kendi listesinden görünür; squash merge yapılacağı için (çatı kural 3) ayrıca yazılmadı.

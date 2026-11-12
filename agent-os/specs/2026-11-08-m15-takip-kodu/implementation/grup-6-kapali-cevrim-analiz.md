@@ -1,7 +1,7 @@
 # Görev grubu 6: Analiz script'i, kapalı çevrim S6–S7, batarya ve GPS denemeleri, kapanış
 
 - **Tarih:** 2026-11-11/12 · **Dal:** `ozellik/m15-takip-kodu` · **Görev listesi:** `../tasks.md` Grup 6 (6.5, 6.8–6.18, 6.T1, 6.T2)
-- **Durum:** Bitti. Log analiz script'i `tez/analiz/af_log_analiz.py` ve rehberi `tez/analiz/BENIOKU.md` yazıldı; test göndericisine S6/S7 hedefi eklendi; S6 (5 başlangıç mesafesi), S7 (L yolu, `AF_K_FF` 0 ve 1,0), T1 (batarya failsafe'i) ve T2 (GPS arızası) Gazebo'da uçuldu ve script'le ölçüldü. **PX4 kodu bu grupta değişmedi.** Kullanıcıya 4 soru ve 3 bilgi notu var (Bölüm 10). **Ek iş (2026-11-12):** soru 2'nin cevabıyla (b+c) S7'de `AF_K_FF` / `AF_BETA` taraması yapıldı (8 bölüm, Bölüm 12); varsayılan değer kararı kullanıcının (soru 5).
+- **Durum:** Bitti. Log analiz script'i `tez/analiz/af_log_analiz.py` ve rehberi `tez/analiz/BENIOKU.md` yazıldı; test göndericisine S6/S7 hedefi eklendi; S6 (5 başlangıç mesafesi), S7 (L yolu, `AF_K_FF` 0 ve 1,0), T1 (batarya failsafe'i) ve T2 (GPS arızası) Gazebo'da uçuldu ve script'le ölçüldü. **PX4 kodu bu grupta değişmedi** (grup sonunda yalnızca `module.yaml`'da `AF_BETA` varsayılanı 0.10 yapıldı, 12.8). Kullanıcıya 4 soru ve 3 bilgi notu var (Bölüm 10). **Ek iş (2026-11-12):** soru 2'nin cevabıyla (b+c) S7'de `AF_K_FF` / `AF_BETA` taraması yapıldı (8 bölüm, Bölüm 12); varsayılan değer kararı kullanıcının (soru 5).
 - Bu not kod okumadan anlaşılacak şekilde yazıldı. Adların anlamı `../log-sozlugu.md`'de, ölçülerin anlamı ve hesabı `tez/analiz/BENIOKU.md`'de. Bu grubun uygulama kararları ayrıca `../rapor.md` §5.1'de (G6.1–G6.12).
 
 ## 1. Ne yapıldı?
@@ -215,7 +215,7 @@ Grup 5'ten (son SITL koşuları `19_18_27`–`19_25_29`) sonra PX4 kodunda tek d
 
 ### 7.3 Sözlük ↔ kod (6.5)
 
-PX4 kodu bu grupta değişmediği için derlemeler, flash kaydı ve birim testi tekrarlanmadı (6.5 "kod değiştiyse"); son değerler Grup 5'teki gibi: 6C flash **1 937 260 B (%98,53)**, birim testi 12/12. `log-sozlugu.md` son kodla karşılaştırıldı (script'le): `msg/AutoFollowStatus.msg`'deki 39 alanın, 4 `STATE_*` ve 10 `CHECK_*` sabitinin hepsi sözlükte, değerleri aynı; `module.yaml`'daki 17 parametrenin hepsi sözlükte, varsayılan/birim/aralık aynı. Sözlüğe bu grupta yalnızca göndericinin yeni seçenekleri, analiz script'i ve rehber satırları eklendi (sürüm 8).
+PX4 kodu bu grupta değişmediği için derlemeler, flash kaydı ve birim testi tekrarlanmadı (6.5 "kod değiştiyse"); son değerler Grup 5'teki gibi: 6C flash **1 937 260 B (%98,53)** (sonra `AF_BETA` 0.10 ile 1 937 316 B, %98,54; 12.8), birim testi 12/12. `log-sozlugu.md` son kodla karşılaştırıldı (script'le): `msg/AutoFollowStatus.msg`'deki 39 alanın, 4 `STATE_*` ve 10 `CHECK_*` sabitinin hepsi sözlükte, değerleri aynı; `module.yaml`'daki 17 parametrenin hepsi sözlükte, varsayılan/birim/aralık aynı. Sözlüğe bu grupta yalnızca göndericinin yeni seçenekleri, analiz script'i ve rehber satırları eklendi (sürüm 8).
 
 ## 8. Sapmalar (planlanandan farklı yapılanlar)
 
@@ -248,7 +248,7 @@ PX4 kodu bu grupta değişmediği için derlemeler, flash kaydı ve birim testi 
 - (c) `AF_K_FF`'in 1,0 yerine daha küçük bir değerle (ör. 0,5) denenmesi. Artı: döngü kazancı yarıya iner. Eksi: geride kalma 1,4 m kalır.
 - (d) Gecikme telafisi (LOS'u görüntünün çekildiği andaki tutumla çevirmek; tutum geçmişi tutmak gerekir). Artı: sahte hızın kaynağına iner. Eksi: kod ve flash (~%98,5 dolu); kapsam m13/m16.
 - **Öneri: (a)**, m13 için (b) ve (d) not olarak (`requirements.md` §1.3'e yazıldı). İsterseniz (b) bu dalda kısa bir SITL taraması olarak yapılabilir; **`AF_ALPHA`/`AF_BETA` sizin onayınız olmadan değiştirilmedi.**
-- **Cevap (2026-11-12):** "b-c denenip en optimum değer bulunsun" → tarama yapıldı, sonuç ve ölçüt seçenekleri **Bölüm 12**; varsayılan değer kararı bekleniyor (soru 5).
+- **Cevap (2026-11-12):** "b-c denenip en optimum değer bulunsun" → tarama yapıldı, sonuç ve ölçüt seçenekleri **Bölüm 12**; varsayılan değer kararı: soru 5-b, `AF_BETA` 0.10 (12.8).
 
 **Soru 3 — Burun 30°'lik dönüşte 5–7° fazla dönüp geri geliyor (S6).** Yerleşme 2,5–2,6 s; son hata 0,0°. Kanıt: modül yalnızca açı (`yaw`) veriyor, dönüş hızı (`yawspeed`) NaN (`AutoFollow.cpp:414`); açı isteği 60°/s ile rampalanıp birden duruyor ve PX4'ün tutum kontrolcüsü bunu aşmayla izliyor. PX4'ün otomatik modları açıyı yumuşatıp dönüş hızını da veriyor (`FlightTaskAuto.cpp:306-316`, `_heading_smoothing`).
 - (a) Böyle kalsın (m13'e not). Artı: kod yok. Eksi: dönüşlerde ~1 s'lik 5–7° salınım (kamerada hedef biraz kayar).
@@ -274,13 +274,13 @@ PX4 kodu bu grupta değişmediği için derlemeler, flash kaydı ve birim testi 
 |---|---|
 | `ruff format` + `ruff check` (`tez/analiz/af_log_analiz.py`, `tez/sitl/af_los_gonder.py`; ruff 0.16.9) | Temiz |
 | Analiz script'i Grup 4–5 loglarında | Elle ölçülen bütün sayılarla aynı (Bölüm 2) |
-| PX4 kodu | Değişmedi → iki derleme ve birim testi tekrarlanmadı (6.5). `make px4_sitl` güncel; `make px4_fmu-v6c_default` güncel ve **FLASH 1 937 260 B / 1920 KB (%98,53)**, boş 28 820 B (Grup 5 sonuyla aynı) |
+| PX4 kodu | Değişmedi → iki derleme ve birim testi tekrarlanmadı (6.5). `make px4_sitl` güncel; `make px4_fmu-v6c_default` güncel ve **FLASH 1 937 260 B / 1920 KB (%98,53)**, boş 28 820 B (sonra `AF_BETA` 0.10 ile 1 937 316 B, %98,54; 12.8) (Grup 5 sonuyla aynı) |
 | `log-sozlugu.md` ↔ kod | 39 alan, 14 sabit, 17 parametre aynı (Bölüm 7.3) |
 | `tez/pin/verify_pin.sh --worktree` | Beklenen kırmızı: yine **15 dosya, hepsi onay bekleyen 7 yolda**; yeni yol yok (`tez/analiz/`, `tez/sitl/` izinli `tez/*` içinde). `allowed-paths.txt`'e dokunulmadı |
 | Loglar | 6 oturumun ULog'u `~/Desktop/AUTO-FOLLOW LOG/`'da özgün adlarıyla: `21_08_57.ulg` (S6), `21_14_07.ulg` (S7), `21_18_29.ulg` (T1), `21_22_13.ulg` (T1b), `21_24_40.ulg` (T2), `21_26_42.ulg` (T2b). Repoya log, grafik, CSV girmedi |
 | Süreçler | Her oturumdan sonra ve en sonda px4/gz süreci yok (`pgrep -x px4`, `pgrep -f "[g]z sim"`), parametre dosyası silinmiş |
 
-## 12. `AF_K_FF` / `AF_BETA` taraması (S7, 2026-11-12, ek iş) — **varsayılan değer kararı kullanıcının**
+## 12. `AF_K_FF` / `AF_BETA` taraması (S7, 2026-11-12, ek iş) — **karar: `AF_BETA` 0.10, `AF_K_FF` 0 (12.8)**
 
 **Neden:** Soru 2'ye (Bölüm 10) kullanıcının cevabı: **"b-c denenip en optimum değer bulunsun"** (`../planning/karar-gunlugu.md`, "Görev grubu 6 sonrası sorular (2026-11-12)"). Yani (b) `AF_BETA` taraması ve (c) daha küçük `AF_K_FF` SITL'de denendi. **"Optimum"un ne olduğuna kullanıcı karar verecek;** aşağıda ölçüt seçenekleri ve her biri için öne çıkan kombinasyon var. **`module.yaml` varsayılanları değişmedi** (`AF_K_FF` = 0, `AF_ALPHA` = 0,5, `AF_BETA` = 0,17), **PX4 kodu değişmedi**, `AF_ALPHA`'ya dokunulmadı.
 
@@ -366,6 +366,16 @@ Bütün bölümlerde durum hep TAKIP, atılan mesaj yok, `hold_request_count` 0,
 
 Varsayılan değişirse: `module.yaml`, `log-sozlugu.md` parametre tablosu, spec Bölüm 10 ve rapor §4.6 aynı commit'te güncellenir; PX4 kodu değişmez ama parametre varsayılanı firmware'e girdiği için iki derleme yeniden yapılır (flash değişimi beklenmez). **Kullanıcı onayı olmadan hiçbiri yapılmadı.**
 
+### 12.7 Kontroller ve test yardımcıları
+
+| Kontrol | Sonuç |
+|---|---|
+| Loglar | `18_56_51.ulg`, `19_02_38.ulg`, `19_06_16.ulg` `~/Desktop/AUTO-FOLLOW LOG/`'da özgün adlarıyla (masaüstünde başka bir şeye dokunulmadı). Repoya log, grafik, CSV girmedi |
+| Süreçler | Her oturumdan sonra ve en sonda px4/gz/`sleep infinity` yok (`pgrep -x px4`, `pgrep -f "[g]z sim"`, `pgrep -f "[s]leep infinity"` boş); parametre dosyası (`rootfs/parameters*.bson`) silinmiş |
+| PX4 kodu, `module.yaml` | Tarama sırasında değişmedi → derleme ve birim testi tekrarlanmadı (sonra `AF_BETA` 0.10 yapıldı, 12.8) |
+| `tez/pin/verify_pin.sh --worktree` | Beklenen kırmızı: yalnızca onay bekleyen 7 yoldaki dosyalar; bu işte yeni yol yok (yalnız spec klasöründe doküman değişti) |
+
+Test yardımcıları (repo dışı, `~/m15-sitl-araclari/`, BENIOKU tablosu güncellendi): `s7_tarama_ortak.py` (ortak oturum: kalkış, her (`AF_K_FF`, `AF_BETA`) için bir S7 bölümü), `S7tarama_kff.py`, `S7tarama_beta.py`, `S7tarama_ek.py` (`./run.sh <ad> 560`), `grup6-tarama/tarama_analiz.py` (bu bölümdeki ölçüler, karşılaştırma grafiği, CSV). SITL tuzakları sorun çıkarmadı.
 ### 12.8 Karar ve S6 tekrarı (2026-11-12)
 
 **Kullanıcının kararı (soru 5-b):** `AF_BETA` varsayılanı 0.17 → **0.10** (`module.yaml`), `AF_K_FF` 0 kalır. İki derleme uyarısız; 6C flash **1 937 316 B (%98,54)**, +56 B; birim testi 12/12.
@@ -382,13 +392,3 @@ Varsayılan değişirse: `module.yaml`, `log-sozlugu.md` parametre tablosu, spec
 
 **Sonuç:** fark ölçüm saçılması kadar (birkaç yüzde); duran hedefte yeni değer takibi değiştirmedi. Beklendiği gibi: `AF_K_FF` = 0 iken hız kestirimi hız isteğine girmiyor. Kestirilen hedef hızının en büyük değeri drone hızlanırken her iki değerde de 0,4–1,1 m/s arasında (sahte hız; duran hedefte istek etkilenmiyor).
 
-### 12.7 Kontroller ve test yardımcıları
-
-| Kontrol | Sonuç |
-|---|---|
-| Loglar | `18_56_51.ulg`, `19_02_38.ulg`, `19_06_16.ulg` `~/Desktop/AUTO-FOLLOW LOG/`'da özgün adlarıyla (masaüstünde başka bir şeye dokunulmadı). Repoya log, grafik, CSV girmedi |
-| Süreçler | Her oturumdan sonra ve en sonda px4/gz/`sleep infinity` yok (`pgrep -x px4`, `pgrep -f "[g]z sim"`, `pgrep -f "[s]leep infinity"` boş); parametre dosyası (`rootfs/parameters*.bson`) silinmiş |
-| PX4 kodu, `module.yaml` | Değişmedi → derleme ve birim testi tekrarlanmadı |
-| `tez/pin/verify_pin.sh --worktree` | Beklenen kırmızı: yalnızca onay bekleyen 7 yoldaki dosyalar; bu işte yeni yol yok (yalnız spec klasöründe doküman değişti) |
-
-Test yardımcıları (repo dışı, `~/m15-sitl-araclari/`, BENIOKU tablosu güncellendi): `s7_tarama_ortak.py` (ortak oturum: kalkış, her (`AF_K_FF`, `AF_BETA`) için bir S7 bölümü), `S7tarama_kff.py`, `S7tarama_beta.py`, `S7tarama_ek.py` (`./run.sh <ad> 560`), `grup6-tarama/tarama_analiz.py` (bu bölümdeki ölçüler, karşılaştırma grafiği, CSV). SITL tuzakları sorun çıkarmadı.

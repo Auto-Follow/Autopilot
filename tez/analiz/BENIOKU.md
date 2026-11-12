@@ -263,7 +263,7 @@ Parametreler (bölüm başında): AF_K_DIST = 0.5, AF_K_FF = 0, AF_VEL_MAX = 2, 
 
 ## 8. Filtre girdisi ve çıktısı nasıl yorumlanır?
 
-Alpha-beta filtresi iki iş yapar: **(1)** ölçülen hedef yerini yumuşatır, **(2)** hedefin hızını kestirir (bu hız `AF_K_FF` > 0 iken drone'un hız isteğine eklenir). Her yeni ölçümde filtre önce "hedef son hızıyla şuraya gitmiş olmalı" diye tahmin eder, sonra ölçümle tahmin arasındaki farkın `AF_ALPHA` (0,5) katı kadar yeri, `AF_BETA` (0,17) ile orantılı olarak hızı düzeltir.
+Alpha-beta filtresi iki iş yapar: **(1)** ölçülen hedef yerini yumuşatır, **(2)** hedefin hızını kestirir (bu hız `AF_K_FF` > 0 iken drone'un hız isteğine eklenir). Her yeni ölçümde filtre önce "hedef son hızıyla şuraya gitmiş olmalı" diye tahmin eder, sonra ölçümle tahmin arasındaki farkın `AF_ALPHA` (0,5) katı kadar yeri, `AF_BETA` (varsayılan 0,10; Grup 6 S7 taramasından önce 0,17) ile orantılı olarak hızı düzeltir.
 
 `_filtre` grafiğinde ve tablodaki "Filtre" satırlarında şunlara bakın:
 

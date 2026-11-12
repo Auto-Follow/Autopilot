@@ -40,7 +40,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - Not (bu yazımda bulundu): MAVLink tanımında `data` alanı bir **extension** alanıdır (`src/modules/mavlink/mavlink/message_definitions/v1.0/common.xml:7630-7631`); gönderen taraf **MAVLink 2** kullanmalıdır. Vision tarafı pymavlink'in MAVLink 2 kullandığını bildirdi (kullanıcı, 2026-11-10, B1); masa/SITL testinde `los_frd` alanlarının sıfır gelmediği kontrol edilir.
 
 **3. Geometri ve mesafe (Karar 6 "ortak adım", 13-(iii), formül Karar 2026-11-09)**
-- LOS, varış anındaki `vehicle_attitude.q` (FRD → NED, `msg/versioned/VehicleAttitude.msg:10`) ile NED'e çevrilir: `LOS_NED = R(q) · LOS_FRD` (V3; gecikme telafisi yok).
+- LOS, mesajın işlendiği çevrimdeki en son `vehicle_attitude.q` (varıştan en fazla ~20 ms sonra; rapor §5.1 K2.7) (FRD → NED, `msg/versioned/VehicleAttitude.msg:10`) ile NED'e çevrilir: `LOS_NED = R(q) · LOS_FRD` (V3; gecikme telafisi yok).
 - Aşağı bakış açısı `δ = asin(LOS_NED.z)` (z aşağı pozitif).
 - `yükseklik farkı h = −vehicle_local_position.z − AF_GND_OFS − AF_TGT_HGT` (`VehicleLocalPosition.msg:17`; zemin = kalkış düzlemi, V4).
 - `yatay mesafe d = h / tan(δ)`; `hedef_NED_xy = drone_xy + d · (LOS_NED_xy / |LOS_NED_xy|)`. Küresel koordinat dönüşümü yok.
@@ -145,7 +145,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 
 | Parametre | Anlamı | Varsayılan | Birim | Min–max |
 |---|---|---|---|---|
-| `AF_ENABLE` | AUTO FOLLOW'u açılışta başlat (1) / başlatma (0); değişince reboot | 0 | — | 0–1 |
+| `AF_ENABLE` | AUTO FOLLOW'u açılışta başlat (1) / başlatma (0); değişince reboot | **1** (önce 0; kullanıcı kararı 2026-11-12) | — | 0–1 |
 | `AF_TRK_ANG` | Takip açısı (kamera eğimi, m06'dan) | 30 (SITL) | deg | 5–85 |
 | `AF_K_DIST` | Mesafe kazancı K | 0.5 | 1/s | 0–2 |
 | `AF_K_FF` | Hedef hızı katsayısı c (0 = kapalı) | 0 | — | 0–1.5 |
@@ -191,6 +191,7 @@ Raspberry Pi'nin gönderdiği "hedef drone'a göre şu yönde" bilgisinden (body
 - **Grup 4 sonuçları (2026-11-11):** ön kontroller ve S1a–S5 (S4'ün KAYIP_BEKLE kısmı) koşuldu, ULog adları ve sayılar `implementation/grup-4-sitl-acik-cevrim.md`'de; modül kodunda hata çıkmadı. Test göndericisinin bağlantısı `udpin:0.0.0.0:14540` (PX4 SITL onboard kanalı 14580'i dinler, 14540'a gönderir). Not: açık çevrimde LOS gövdeye sabit olduğu için drone eğildikçe ölçülen mesafe değişir; tablodaki beklenen sayılar drone düzken (girişte) birebir görülür, uçarken eğim yüzünden kayar (S1b'de sürekli salınım, S3'te dönme; ayrıntı notun Bölüm 8'inde).
 - **Grup 5 sonuçları (2026-11-11):** S4 tam (Hold dahil, `AF_LOST_T` = 1,0 s): veri kesilince son geçerli mesajdan `nav_state = 4`'e **1,528 s**, "hedef yok"ta ilk bayraktan **1,036 s**, hedefsiz girişte girişten **1,524 s**; 1,0 s'lik kesintide Hold yok, takip sürdü; Hold'dan sonra mod kendiliğinden açılmadı. Hold sonrası yeniden giriş RC anahtarı aç-kapa ve QGC komutuyla oldu, anahtarı yerinde bırakmak yetmedi. Donmuş Pi (`--senaryo sira`) 1,540 s'de Hold'a geçti. S2'de yaw 60°/s. ULog adları ve sayılar `implementation/grup-5-hold-gecisi.md` Bölüm 4'te. Birim testi 12/12.
 - **Grup 6 sonuçları (2026-11-12; ölçüm `tez/analiz/af_log_analiz.py`, rehberi `tez/analiz/BENIOKU.md`):** **S6** (`21_08_57.ulg`; hedef burnun 30° sağında, başlangıç 10/15/20/25/30 m, `AF_K_FF` = 0): beşinde de `range_est → range_desired` (15,48 m), oturma (±0,3 m) 4,78 / 1,64 / 4,40 / 6,76 / 9,22 s, aşma ≤ 0,05 m, salınım yok, son burun hatası 0,0° (burun 30°'lik dönüşte 5–7° aşıp 2,5–2,6 s'de yerleşiyor). **S7** (`21_14_07.ulg`; L yolu 1,4 m/s): `AF_K_FF` = 0'da 2,79 m geride (beklenen 2,8), filtrenin hedef hızı 1,39 ± 0,04 m/s; `AF_K_FF` = 1,0'da geride kalma yok (+0,06 m) ama hedef hızı kestirimi ±0,4 m/s titreşiyor (kullanıcıya soruldu; `AF_ALPHA`/`AF_BETA` değiştirilmedi). **T1** (`21_18_29.ulg`, `21_22_13.ulg`; `COM_LOW_BAT_ACT` = 3): kritikte 5 s Hold + RTL, acilde Land; AUTO FOLLOW ilk çevrimde PASIF. **T2** (`21_24_40.ulg`): `failure gps off` Gazebo Harmonic SITL'de desteklenmiyor (`SimulatorMavlink.cpp:1247-1270` yalnızca eski köprü); ek deneme (`21_26_42.ulg`, `EKF2_GPS_CTRL` = 0): 4,0 s'de yerel ve küresel konum birlikte geçersiz, PX4 Descend, Hold isteği yok. `latency` 54–70 ms (SITL, yaşın 50 ms'si sabit). PX4 kodu değişmedi; S1–S5 yeniden koşulmadı. Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md`.
+- **Grup 6 ek (2026-11-12):** `AF_K_FF` / `AF_BETA` taraması S7 ile (`18_56_51.ulg`, `19_02_38.ulg`, `19_06_16.ulg`): geride kalma (1 − `AF_K_FF`) × 2,8 m; `AF_K_FF` 1,0 + `AF_BETA` 0,10 geride kalmadan sakin. Kullanıcı kararı: `AF_BETA` varsayılanı **0.10**, `AF_K_FF` 0. Yeni değerle S6 tekrarı (`19_26_43.ulg`): sonuçlar eskisiyle aynı. Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 12.
 
 **12. Dokümantasyon (KG "Kullanıcının notu", Karar 14.3, L2)**
 - Her görev grubunun sonunda spec klasörüne kod okumadan anlaşılacak dille: ne yapıldı, neden, nasıl test edildi, hangi sorunlar çıktı ve nasıl çözüldü.
@@ -207,7 +208,7 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 |---|---|---|
 | V1 | Girdi body FRD (x ileri, y sağ, z aşağı) LOS birim vektörüdür; kamera montaj açısı Pi tarafında uygulanmıştır, FC bilmez | 1. tur soru 13, itiraz yok |
 | V2 | Taşıma MAVLink `DEBUG_FLOAT_ARRAY` (`AF_LOS`) → `debug_array`; yerleşim Bölüm 2; kesin biçim, frekans (Pi 10–30 Hz bekleniyor) ve zaman biçimi ICD'de | Karar 2026-11-09 |
-| V3 | LOS → NED dönüşümünde **varış anındaki** tutum kullanılır; gecikme telafisi yok (gerekirse m13/m16, loglardaki gerçek gecikmeye göre) | 1. tur soru 13 |
+| V3 | LOS → NED dönüşümünde **mesajın işlendiği çevrimdeki en son** tutum kullanılır (varıştan en fazla ~20 ms sonra; rapor §5.1 K2.7); gecikme telafisi yok (gerekirse m13/m16, loglardaki gerçek gecikmeye göre) | 1. tur soru 13 |
 | V4 | Drone yüksekliği `−vehicle_local_position.z`; zemin düz ve kalkış düzlemi | Karar 13-(iii) |
 | V5 | Hedefin bakılan noktası `AF_TGT_HGT`, zemin farkı `AF_GND_OFS` | Karar 13-(iii) |
 | V6 | LOS eksen yönleri ve işaretleri Yusuf Ortatepe'nin m10 çalışmasıyla eşlenecek | **Açık** |
@@ -221,7 +222,7 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 
 **`planning/visuals/02-px4-detayli-akis.md`**
 - (A) başlatma, mod kaydı, arming check · (B) çevrim başına veri akışı (`debug_array` → doğrulama → geometri → alpha-beta → guidance → `trajectory_setpoint` → PWM) · (C) mod seçimi, çıkış, hedef kaybı (D) ve failsafe · (D) doğrulama (GoogleTest → SITL S1–S7 → pyulog → gerçek uçuş).
-- Aynı gün kopyada güncellendi. TBD kalanlar: kilit listesi onayı (6 yol), ICD zaman biçimi, hareketli insan modeli/dünyası (m06). Mod kaydı ayrıntıları ve başlatma noktası "(öneri, Açık)" olarak işaretli.
+- Aynı gün kopyada güncellendi. TBD kalanlar: kilit listesi onayı (6 yol; sonradan `rc.mc_apps` satırıyla 7), ICD zaman biçimi, hareketli insan modeli/dünyası (m06). Mod kaydı ayrıntıları ve başlatma noktası "(öneri, Açık)" olarak işaretli.
 - Asıl şemalar eski klasörde (`2026-10-15-m15-target-follow-flight-mode/diagrams/`) değişmeden durur. PNG dönüşümü ertelendi (araç kurulmadan önce kullanıcıya sorulur).
 
 ## Existing Code to Leverage
@@ -274,7 +275,8 @@ Ortak spec'ler (yol haritası 3, 4, 5) yazılmadığı için aşağıdakiler **k
 | Grup 2 düzeltme turu (filtre ve sıra no sıfırlama, EKF reset kaydırma, 2026-11-10; Grup 3–4'te kod değişmedi) | 1 936 260 B | %98,48 | 29 820 B | +160 B |
 | Görev grubu 5 sonu (Hold isteği, `AF_YAWRATE_MAX`, yön sıfırlaması, sıra no kuralı, 2026-11-11) | 1 937 252 B | %98,53 | 28 828 B | +992 B |
 | Grup 5 soru 3-b (yön sıfırlamasında filtre sıfırlama, 2026-11-11); Grup 6'da PX4 kodu değişmedi | 1 937 260 B | %98,53 | 28 820 B | +8 B |
-| **Son:** `AF_BETA` varsayılanı 0.10 (Grup 6 soru 5-b, 2026-11-12) | 1 937 316 B | %98,54 | 28 764 B | +56 B |
+| `AF_BETA` varsayılanı 0.10 (Grup 6 soru 5-b, 2026-11-12) | 1 937 316 B | %98,54 | 28 764 B | +56 B |
+| **Son:** `AF_ENABLE` varsayılanı 1 (2026-11-12) | 1 937 348 B | %98,54 | 28 732 B | +32 B |
 
 ## Out of Scope
 
@@ -308,7 +310,7 @@ Her biri kullanıcıya seçenek + kanıt + öneri olarak sunuldu. 2026-11-10 iti
 | A10 | **Hold reddi, hedefsiz giriş, konum geçersizken setpoint** | **Karar (A3, C2):** Bölüm 7–8. |
 | A11 | **Kalıcı gönderici** | Vision (m12) ve m06 ile konuşulacak; geçiciyi biz yazıyoruz. |
 | A12 | **S1–S7 tanım farkı** | **Karar (A1, A2, 2026-11-10):** konuşulan tablo (`rapor.md` §4.9) esas; S1 → S1a/S1b; eski "kayıt" ve "mod seçimi" başlıkları ön kontrol; RC kaybı ve modül sağlığı m16 adayı (Bölüm 11). |
-| A13 | **`rc.mc_apps` satırının koşulu** | **Karar (b):** `if param compare -s AF_ENABLE 1` → `auto_follow start`. Ad `AF_ENABLE` ve varsayılan **0** kullanıcının seçimi. Değer değişince QGC'den reboot yeterli (açılış dosyaları her reboot'ta yeniden çalışır). SITL'de `PX4_PARAM_AF_ENABLE=1`. Parametre `auto_follow/module.yaml`'da tanımlanır, modül derlenince parametre tablosunda vardır. |
+| A13 | **`rc.mc_apps` satırının koşulu** | **Karar (b):** `if param compare -s AF_ENABLE 1` → `auto_follow start`. Ad `AF_ENABLE` ve varsayılan kullanıcının seçimi: önce **0**, 2026-11-12'de **1** yapıldı (modül her derlemede açık; kapatmak için 0 + reboot). Değer değişince QGC'den reboot yeterli (açılış dosyaları her reboot'ta yeniden çalışır). SITL'de `PX4_PARAM_AF_ENABLE=1`. Parametre `auto_follow/module.yaml`'da tanımlanır, modül derlenince parametre tablosunda vardır. |
 | A14 | **Yerde arm'lıyken moda geçişi engelleme (B4)** | **Karar (a):** arming check cevabında `can_arm_and_run = !(vehicle_land_detected.landed && !mode_active)` (`msg/VehicleLandDetected.msg:8`). PX4 arm'lı araçta geçişi reddeder (`UserModeIntention.cpp:58-59`, `externalChecks.cpp:158-160, 188-190`); QGC'de "Switching to … is currently not available" + uyarı sesi (`Commander.cpp:2620-2638`). Disarm iken geçiş serbest; mod aktifken koşul devreye girmez, RTL riski yok. SITL ön kontrolünde doğrulanır. **Grup 4'te doğrulandı:** commander ACK `TEMPORARILY_REJECTED`, mod değişmedi; PX4'ün metni `Switching to External 1 is currently not available` (mod adı "AUTO FOLLOW" değil "External 1"; QGC'deki görünüşü kullanıcı kontrol edecek). |
 
 ## Kabul kriterleri

@@ -348,7 +348,7 @@ Ayrıntı, kullanıcının sözleri ve kanıtlar: KG "Write-spec turu (2026-11-1
 | B4 | Yerde arm'lıyken moda geçiş | Engellenecek (güvenlik adımı). Yöntem açık (spec A14) |
 | C1 | Arm | Bu modda arm yasak (`mode_req_prevent_arming = true`); disarm iken moda geçiş serbest; mod gereksinimleri ve kontrol bayrakları öneri kabul. RC çubuğu (spec A2) yeniden soruldu |
 | C2 | Davranış ayrıntıları | Öneri kabul: filtre yatayda, ilk ölçümde hız 0, EKF reset'te sıfırlama; `AF_ALPHA` 0.5, `AF_BETA` 0.17; ivme sınırı o anki hızdan başlar; Hold reddinde hover + 1 s arayla en fazla 3 tekrar; konum geçersizken yatay hız 0; parametre birim/min/max; log mesajı PASIF'te de 50 Hz |
-| A13 | `rc.mc_apps` satırının koşulu | `AF_ENABLE` parametresi, varsayılan 0; değişince reboot yeterli |
+| A13 | `rc.mc_apps` satırının koşulu | `AF_ENABLE` parametresi, varsayılan 0 (2026-11-12'de kullanıcı kararıyla **1**); değişince reboot yeterli |
 | A14 | Yerde arm'lıyken geçiş engeli | (a) yerdeyken ve mod aktif değilken `can_arm_and_run = false` |
 | A2 | RC çubuğu | Çubuk oynayınca Position'a geçilir (`flag_control_auto_enabled = true`) |
 | İç düzen | Kod yapısı | Hesaplar `AutoFollowGuidance` kütüphanesinde saf fonksiyonlar (öneri kabul) |
