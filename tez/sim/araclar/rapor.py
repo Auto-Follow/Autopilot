@@ -372,6 +372,7 @@ PERCENT_KEYS = {
     "yanlis_kisi_ayni_kiyafet_orani",
     "tez_los_px4_orani",
     "px4_kestirim_gecerli_orani",
+    "px4_kestirim_hizi_baslangic_1mps_orani",
     "mod_korunma_orani",
 }
 
@@ -488,6 +489,20 @@ METRIC_GROUPS = (
             ("px4_kestirim_hatasi_maks_m", "PX4'ün hedef kestirimi hatası, en çok [m]"),
             ("px4_kestirim_gecerli_orani", "PX4'ün hedef kestiriminin geçerli olduğu süre"),
             ("px4_kestirim_bayat_s", "PX4'ün hedefi 'bayat' saydığı süre (3 s FOLLOW_TARGET yok) [s]"),
+        ),
+    ),
+    (
+        "Takip başı: hedef dururken konum titreşimi ve PX4'ün sahte hızı (stok Follow Me salınımı)",
+        (
+            ("follow_target_hizi_baslangic_hz", "Gönderilen FOLLOW_TARGET sıklığı [mesaj/sim-s]"),
+            ("follow_target_titresim_baslangic_m", "Gönderilen konumun titreşimi: hatanın yatay std'si [m]"),
+            ("follow_target_ardisik_fark_baslangic_p50_m", "Ardışık iki gönderilen konumun farkı, p50 [m]"),
+            ("follow_target_drona_dogru_baslangic_m", "Konum hatasının drona doğru bileşeni, ortalama [m]"),
+            ("px4_kestirim_hizi_baslangic_ort_mps", "PX4'ün hedef hızı kestirimi (sahte hız), ortalama [m/s]"),
+            ("px4_kestirim_hizi_baslangic_p95_mps", "PX4'ün sahte hızı, p95 [m/s]"),
+            ("px4_kestirim_hizi_baslangic_maks_mps", "PX4'ün sahte hızı, en çok [m/s]"),
+            ("px4_kestirim_hizi_baslangic_1mps_orani", "Sahte hızın 1 m/s'yi (rota güncelleme eşiği) aştığı süre"),
+            ("px4_rota_degisimi_baslangic_sayisi", "PX4'ün varsaydığı rotanın değiştiği kez (hedef dururken)"),
         ),
     ),
     (

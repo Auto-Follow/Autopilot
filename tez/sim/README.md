@@ -201,11 +201,17 @@ için öne çıkanlar:
 | `arkada_kalma_hatasi_{ort,p95,maks}_deg`, `arkada_kalma_hatasi_90_ustu_s` | Kişi yürürken dronun "arkasında" olmaktan sapması (0° arkasında, 90° yanında, 180° önünde); 90°'yi aştığı süre (köşede aşma) |
 | `baslangic_yorunge_donusu_deg`, `yuruyus_basi_yorunge_donusu_deg` | Dronun kişi etrafında döndüğü toplam açı: kişi dururken ve yürümeye başladığı ilk 10 s |
 | `px4_rota_kuzey_varsayimi_s`, `px4_rota_hatasi_*`, `px4_yorunge_donusu_*` | `follow_me`: PX4'ün kendi Follow Target görevinin iç durumu (ULog `follow_target_status`): rotayı kuzey varsaydığı süre, rota hatası, yörünge hedefinin dönüşü |
+| `follow_target_titresim_baslangic_m`, `px4_kestirim_hizi_baslangic_*`, `px4_rota_degisimi_baslangic_sayisi` | `follow_me`, takip başı (kişi dururken): PX4'e giden konumun titreşimi; PX4'ün hedef kestiricisinin bundan ürettiği **sahte hız** (ULog `follow_target_estimator.vel_est`) ve 1 m/s'yi (rota güncelleme eşiği) aştığı süre; PX4'ün rotasının kaç kez değiştiği. Stok Follow Me'nin duran kişi etrafında salınmasının sebebi |
 | `mod_korunma_orani` | İstenen modda geçen süre (ULog `vehicle_status`) |
 | `ekf_yaw_hatasi_ulog_*`, `mag_sapma_olculen_deg` | EKF yaw − gerçek yaw (ULog, her örnek) ve manyetometrenin ölçtüğü alanın sapması (PX4 WMM'i +3.41°) |
 
 Stok Follow Me'nin takip başında hedefin etrafında dönmesi ve köşede hedefi aşması **PX4'ün kendi davranışıdır**
 (gerçek dronda da olur; spec "PX4 stok Follow Target davranışı"); ölçütler bunu sayıya döker.
+Stok ayarlarla ne kadar düzeldiği (9.8 ön işi, her ayar 3 koşu): `FLW_TGT_RS 0.3` duran kişideki salınımı gideriyor
+(sahte hız 0.57 → 0.15 m/s), bedeli köşelerde 0.5–0.9 s gecikme ve daha yakın geçiş; 0.5 ve üstünde PX4 köşelere
+yetişemiyor. m06'nın varsayılanları değişmedi; ayrıntı ve öneri
+`agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09-on-followme-ayar.md`. Bir ayarı denemek:
+`$P tez/sim/araclar/toplu.py --senaryo takip_yuruyen --tekrar 3 -- --param FLW_TGT_RS=0.3`.
 
 Aynı senaryoyu birkaç kez koşup dağılımını almak (m06 kararı: her senaryo 3 kez):
 

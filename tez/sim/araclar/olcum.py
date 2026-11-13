@@ -166,6 +166,13 @@ KEY_PATTERNS = (
     "px4_rota_hatasi_{ort,p95}_deg",
     "px4_yorunge_donusu_baslangic_deg",
     "px4_yorunge_donusu_yuruyus_basi_deg",
+    "follow_target_titresim_baslangic_m",
+    "follow_target_ardisik_fark_baslangic_p50_m",
+    "follow_target_drona_dogru_baslangic_m",
+    "follow_target_hizi_baslangic_hz",
+    "px4_kestirim_hizi_baslangic_{ort,p95,maks}_mps",
+    "px4_kestirim_hizi_baslangic_1mps_orani",
+    "px4_rota_degisimi_baslangic_sayisi",
 )
 KEYS = tuple(k for p in KEY_PATTERNS for k in _expand(p))
 
@@ -766,6 +773,70 @@ def follow_status_in_ulog(
     return m
 
 
+def follow_start_metrics(
+    follow_attempts: Sequence[Mapping],
+    referee: Sequence[Mapping],
+    switched: float | None,
+    start: float,
+    estimator: Mapping | None,
+    status: Mapping | None,
+) -> dict:
+    """Why stock Follow Me sways while the person stands (follow start: mode switch -> the person starts walking; the
+    second exception to the window, like the orbit turns). The FOLLOW_TARGET positions that went out then: how much
+    they spread around the person (std of sent - true, horizontal), how far one is from the next (frame to frame),
+    how far they sit towards the drone (the box's error depends on where the drone looks from; it moves as the drone
+    orbits) and how often they went. What PX4's estimator made of them (follow_target_estimator.vel_est, every 200 ms
+    in the ULog): the person stands, so all of that speed is made up; the share at or above PX4_COURSE_SPEED, where the
+    Follow Target task updates the course it assumes, and how often that course (follow_target_status) changed.
+    NaN without a mode switch; the PX4 numbers NaN without the follow_target topics in the ULog."""
+    m: dict = {
+        "follow_target_titresim_baslangic_m": math.nan,
+        "follow_target_ardisik_fark_baslangic_p50_m": math.nan,
+        "follow_target_drona_dogru_baslangic_m": math.nan,
+        "follow_target_hizi_baslangic_hz": math.nan,
+        "px4_kestirim_hizi_baslangic_1mps_orani": math.nan,
+        "px4_rota_degisimi_baslangic_sayisi": math.nan,
+    } | stats("px4_kestirim_hizi_baslangic", (), ("ort", "p95", "maks"), "_mps")
+    if switched is None or not start > switched:
+        return m
+    span = start - switched
+    sent = sorted(
+        (a for a in follow_attempts if a["sonuc"] == "gonderildi" and switched <= a["gonderim_sim"] < start),
+        key=lambda a: a["gonderim_sim"],
+    )
+    m["follow_target_hizi_baslangic_hz"] = len(sent) / span
+    if sent:
+        c = _columns(sent, ("t", "x", "y", "gercek_x", "gercek_y"))
+        ex, ey = c["x"] - c["gercek_x"], c["y"] - c["gercek_y"]
+        m["follow_target_titresim_baslangic_m"] = float(math.hypot(np.nanstd(ex), np.nanstd(ey)))
+        if len(sent) > 1:
+            m["follow_target_ardisik_fark_baslangic_p50_m"] = float(
+                np.nanmedian(np.hypot(np.diff(c["x"]), np.diff(c["y"])))
+            )
+        r = _columns(referee, ("t", "dron_x", "dron_y"))
+        if r["t"].size:
+            dx = np.interp(c["t"], r["t"], r["dron_x"]) - c["gercek_x"]
+            dy = np.interp(c["t"], r["t"], r["dron_y"]) - c["gercek_y"]
+            length = np.hypot(dx, dy)
+            ok = length > ORBIT_MIN_DISTANCE_M
+            if ok.any():
+                toward = (ex[ok] * dx[ok] + ey[ok] * dy[ok]) / length[ok]
+                m["follow_target_drona_dogru_baslangic_m"] = float(np.nanmean(toward))
+    if estimator is not None and len(estimator["timestamp"]):
+        t = np.asarray(estimator["timestamp"], dtype=float) / 1e6
+        inside = (t >= switched) & (t < start) & np.asarray(estimator["valid"]).astype(bool)
+        speed = np.hypot(np.asarray(estimator["vel_est[0]"], float), np.asarray(estimator["vel_est[1]"], float))
+        speed = speed[inside & np.isfinite(speed)]
+        m |= stats("px4_kestirim_hizi_baslangic", speed, ("ort", "p95", "maks"), "_mps")
+        if speed.size:
+            m["px4_kestirim_hizi_baslangic_1mps_orani"] = float(np.mean(speed >= PX4_COURSE_SPEED))
+    if status is not None and len(status["timestamp"]):
+        t = np.asarray(status["timestamp"], dtype=float) / 1e6
+        course = np.asarray(status["tracked_target_course"], dtype=float)[(t >= switched) & (t < start)]
+        m["px4_rota_degisimi_baslangic_sayisi"] = int(np.count_nonzero(np.diff(course) != 0)) if course.size else 0
+    return m
+
+
 def mode_timeline(status: Mapping | None) -> list[dict]:
     """[{baslangic_s, bitis_s, nav_state, ad}] of PX4's navigation state (vehicle_status) over the run's ULogs."""
     if status is None or len(status["timestamp"]) == 0:
@@ -932,6 +1003,14 @@ def measure(d: RunData) -> tuple[dict, dict]:
         topics.get("follow_target"), topics.get("follow_target_estimator"), start, end, d.world, truth_xy
     )
     m |= follow_status_in_ulog(topics.get("follow_target_status"), start, end, d.truth)
+    m |= follow_start_metrics(
+        d.follow_attempts,
+        d.referee,
+        d.mode_switched_s,
+        start,
+        topics.get("follow_target_estimator"),
+        topics.get("follow_target_status"),
+    )
     m |= attitude_in_ulog(
         topics.get("vehicle_attitude"), topics.get("vehicle_attitude_groundtruth"), topics.get("sensor_mag"), start, end
     )

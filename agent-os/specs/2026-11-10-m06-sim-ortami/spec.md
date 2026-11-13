@@ -650,7 +650,7 @@ flowchart LR
 | `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv`. 6. grupta: `konumlama.py` (konum, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `takip.py`'ye konum + FOLLOW_TARGET, `follow_target.csv`; `px4_baglanti.py`'ye `FrameStream`, `FollowTargetSender`, `pose_hook`; `simulasyon.py`'ye `restart_logger` |
 | `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme. 8. grupta: `goruntu_yayini.py` kayıt kısmı (`FrameRecorder`, `FrameSink`, `GridPicker`), `video.py` (çevrimdışı birleştirme, kamera paneli, kuşbakışı, durum satırı, ffmpeg borusu); `yayin.sdp` ve RTP 11. grupta |
-| `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti) |
+| `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti). 9.8 ön işinde: `olcum.follow_start_metrics` (takip başında konum titreşimi ve PX4'ün sahte hızı) |
 | `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html` |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
 | `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler |
@@ -977,8 +977,8 @@ Bu ayarların her biri, dronun kişiyi yalnız kendi kamerasıyla takip ettiği 
 ## Ölçüt Tanımları
 
 Ölçütler yalnız kayıt penceresinde hesaplanır (`zamanlama.baslama_s` → senaryo sonu); iki bilinçli istisna "takip başı"
-ölçütleridir (yörünge dönüşü ve PX4'ün rota varsayımı: mod seçiminden hedefin yürümeye başlamasına ve yürüyüşün ilk
-10 s'sine kadar). Hakem kutusu, segmentasyon kamerasında görünen piksellerin kutusudur: örtülü kısım dahil değildir ve
+ölçütleridir (yörünge dönüşü, PX4'ün rota varsayımı ve 9.8 ön işinin sahte hız ölçütleri: mod seçiminden hedefin
+yürümeye başlamasına ve yürüyüşün ilk 10 s'sine kadar). Hakem kutusu, segmentasyon kamerasında görünen piksellerin kutusudur: örtülü kısım dahil değildir ve
 2 px'e yuvarlanmıştır. Eşleşme eşikleri ölçütün tanımının parçasıdır, başarı eşiği değildir.
 
 Uygulamada (7. grup): bütün anahtarlar `araclar/olcum.py`'de (`olcum.KEYS`; `test_olcum.py` bu tabloyla karşılaştırır),
@@ -1023,6 +1023,8 @@ F1 ölçütleri `rapor.metrics`'te hesaplanır; her koşunun `ozet.json` → `ol
 | | `follow_target_px4_sayisi`, `px4_kestirim_hatasi_{ort,p50,p95,maks}_m`, `px4_kestirim_gecerli_orani`, `px4_kestirim_bayat_s` | ULog'daki `follow_target` (kaydedici 500 ms'de bir yazar) ve `follow_target_estimator`'ın kestirimi − aynı PX4 anındaki gerçek konum; bayat süre (3 s FOLLOW_TARGET yok) |
 | | `px4_rota_kuzey_varsayimi_s`, `px4_rota_hatasi_{ort,p95}_deg` | ULog `follow_target_status` (400 ms): PX4'ün hedef rotasının ilk kaydından itibaren başlangıç değeri 0'da (kuzey) kaldığı süre; PX4'ün rotası − hedefin gerçek rotası, hedef ≥ 1 m/s iken (PX4 rotayı yalnız bu hızın üstünde günceller) |
 | | `px4_yorunge_donusu_baslangic_deg`, `px4_yorunge_donusu_yuruyus_basi_deg` | PX4'ün yörünge açısı hedefinin (`orbit_angle_setpoint`) toplam dönüşü: ilk kaydından hedefin yürümeye başlamasına kadar ve yürüyüşün ilk 10 s'si (dronun gerçek dönüşüyle karşılaştırmak için) |
+| | `follow_target_titresim_baslangic_m`, `follow_target_ardisik_fark_baslangic_p50_m`, `follow_target_drona_dogru_baslangic_m`, `follow_target_hizi_baslangic_hz` | 9.8 ön işinde eklendi. Takip başı (mod seçimi → hedef yürümeye başlar; hedef durur), gönderilen FOLLOW_TARGET'lar: hatanın (gönderilen − gerçek) yatay standart sapması √(σx² + σy²) ("titreşim"), ardışık iki gönderilen konum arasındaki farkın ortancası (kareden kareye titreşim), hatanın hedef→dron yönündeki ortalaması (bakış yönüne bağlı kayma; dron döndükçe kayar) ve gönderim sıklığı |
+| | `px4_kestirim_hizi_baslangic_{ort,p95,maks}_mps`, `px4_kestirim_hizi_baslangic_1mps_orani`, `px4_rota_degisimi_baslangic_sayisi` | 9.8 ön işinde eklendi. Takip başı, ULog: PX4 hedef kestiricisinin yatay hızı (`follow_target_estimator.vel_est`, kaydedici 200 ms'de bir; hedef durduğu için bu hızın hepsi sahtedir), 1 m/s'yi (Follow Target görevinin rotayı güncellediği eşik, `TARGET_SPEED_DEADZONE_FOR_ORIENTATION_TRACKING`) aşan örneklerin oranı ve PX4'ün varsaydığı rotanın (`follow_target_status.tracked_target_course`) kaç kez değiştiği |
 | (e) Video | `kosu.mp4` | 9. gereksinim; her koşuda aynı düzen |
 
 **Çok koşu (karar 4, 12.11; 7. grupta eklendi):** `araclar/toplu.py --senaryo <ad> --tekrar N [-- senaryo.py
@@ -1067,6 +1069,19 @@ Model kutusuyla rota 2 s sonra gürültüyle oynamaya başladı, dron 629–699�
 55–69° (p95 119–157°), üç koşunun ikisinde 3 m'nin altı (en az 1.66 m), birinde kişi kaybedildi. Stok parametrelerin
 (`FLW_TGT_RS`, `FLW_TGT_MAX_VEL`, `FLW_TGT_FA`) bu davranışa etkisi 9. grupta karşılaştırılır (`tasks.md` 9.8).
 
+**9.8 ön işi (13.11, `implementation/gorev-grubu-09-on-followme-ayar.md`):** salınımın mekanizması ölçüldü. Kişi dururken
+modelin kutusundan bulunan konum kareden kareye 7 cm oynuyor ama ortalama 0.5 m drona doğru kayık ve dron döndükçe bu
+kayma da dönüyor (std 0.7 m); PX4'ün `TargetEstimator`'ı bunu ort. 0.57 m/s'lik sahte hıza çeviriyor (zamanın %17'si
+≥ 1 m/s), rota 14.5 kez değişiyor, dron duran kişinin etrafında 530° dönüyor (6 koşu; hakemde sahte hız 0, 194°).
+Ayarlar (her biri 3 koşu): `FLW_TGT_RS` PX4'te 0.1–1.0'a kısılır (küçük = tepkisel, az gürültü bastırma; 0.1 varsayılan
+ve en tepkisel uç). RS 0.3 salınımı gideriyor (183–189°, sahte hız 0.15 m/s), yürüyüşte rota hatası aynı; bedeli
+köşelerde 0.5–0.9 s gecikme ve daha yakın geçiş (en az 0.66–1.56 m; hakemle 3.2 → 2.2 m). RS 0.5 / 0.8 salınımı
+kaldırıyor ama PX4 köşelere yetişemiyor (rota hatası 83° / 120°). `FLW_TGT_MAX_VEL` kestiriciye girmez (3: salınım
+sürüyor, kadraj %90; 8: duran kişide sakin ama bir koşuda kişinin üstünden geçti). Varsayılanlar değişmedi; öneri
+(stok mod için RS 0.3, bedeliyle) ve karar kullanıcıda. PX4 kodu, Pi'nin süzülmüş bir hız göndermesi hâlinde (PX4 onu
+her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hızın RS'den bağımsız kalkacağını gösteriyor
+(denenmedi; m11).
+
 ## Test Planı
 
 **Birim testleri** (pytest, donanımsız ve simsiz; mevcut 76 test geçmeye devam eder; `ultralytics`/`torch` gerekmez)
@@ -1080,7 +1095,7 @@ Model kutusuyla rota 2 s sonra gürültüyle oynamaya başladı, dron 629–699�
 | `test_mesajlar.py` | `DEBUG_VECT` paketleme/çözme (ad, birim norm, NaN = hedef yok); `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities`); doğrulamanın geçersiz vektörü durdurması. 5. grupta ayrıca: akış kuralları (aynı / eski kare, hız sınırı, bağlantı yok), tek gönderim kilidi, `AVAILABLE_MODES` adları ve stok mod listesinin PX4 kaynağıyla aynılığı |
 | `test_gecikme.py` | Sıra korunması, ek gecikme, tohumlu titreşim, saat ofseti/kayması (5. grupta: sıra korunması ve `serbest`; geri kalanı 12. grupta) |
 | `test_kusurlar.py` | Boş ayarda karenin bit bit aynı kalması; Faz B alanının ve bilinmeyen alanın reddi |
-| `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw |
+| `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw. 9.8 ön işinde: takip başında gönderilen konumun titreşimi, drona doğru kayma, PX4'ün sahte hızı ve rota değişimi |
 | `test_toplu.py` (7. grup) | Çok koşunun dağılımı (ort / en az / en çok, NaN'lı koşu), yalnız başlayamayan koşunun yeniden denenmesi, `senaryo.py` komutu, özet dosyaları |
 | `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü |
 | `test_goruntu_yayini.py` (8. grup) | Kare seçimi (sim zamanında 15 fps ızgarası, pencere, kaybolan kare), 1280×720 JPEG, dolu kuyrukta kare düşürme ve sayma |
@@ -1211,6 +1226,10 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - **PX4 stok Follow Target'ın takip başı ve köşe davranışı (7. grupta kaynaktan doğrulandı ve ölçüldü):** "Ölçüt
   Tanımları" altındaki "PX4 stok Follow Target davranışı". Stok parametrelerle iyileşip iyileşmediği 9. grupta ölçülür
   (`tasks.md` 9.8); asıl takip algoritması m15'tir (Kurt).
+  **9.8 ön işi (13.11) ölçüldü:** `FLW_TGT_RS 0.3` duran kişideki salınımı gideriyor, bedeli köşelerde gecikme ve daha
+  yakın geçiş; m06'nın varsayılanı değişmedi. **Karar bekliyor (kullanıcı):** stok mod RS 0.3 ile mi kullanılsın
+  (`gercek_dron.params` / senaryo), `FLW_TGT_MAX_VEL` için daha çok koşuyla ayrı karşılaştırma gerekiyor mu, Pi'nin hız
+  göndermesi m11'e önerilsin mi (`implementation/gorev-grubu-09-on-followme-ayar.md`).
 - **Seyrek açılış hatası (7. grupta görüldü):** bir koşuda PX4 açıldığı hâlde bağlantımıza 60 s heartbeat gelmedi (PX4
   tarafında "partner IP" yok); nedeni bulunamadı. `toplu.py` böyle bir koşuyu altyapı hatası sayıp yeniden dener ve
   listeler. Ayrıca bu durumda rapor yazılmadan çıkan bir hata vardı (ULog'da `debug_vect` yokken); düzeltildi, testli.

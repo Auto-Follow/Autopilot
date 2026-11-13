@@ -413,3 +413,46 @@ def test_run_log_lines_of_every_tracking_source(capsys: pytest.CaptureFixture[st
     senaryo._geometry_log_lines(empty, "tez_los", None)
     out = capsys.readouterr().out
     assert "Takip (yok)" in out and "FLW_TGT_DST 8" in out and "arkada kalma" in out
+
+
+def test_jitter_of_the_standing_target_and_the_speed_px4_makes_of_it() -> None:
+    """Follow start (mode switch -> the person starts walking): the person stands at (10, 0), the drone is west of it.
+    The FOLLOW_TARGET positions sit 0.5 m towards the drone and jump +-0.1 m east-west: spread 0.1 m, frame to frame
+    0.2 m, 0.5 m towards the drone, 5 per second. PX4's estimator turns that into speeds of 0.5 / 1.5 / 0.2 / 1.2 m/s
+    (all of it made up: the person stands), half of them at or above the 1 m/s that updates its course, and its
+    course changed twice. Samples outside the follow start do not count; without a mode switch everything is NaN."""
+    sent = []
+    for k in range(10):  # 30.0 .. 31.8 s, every 0.2 s
+        t = 30.0 + 0.2 * k
+        x = 9.5 + (0.1 if k % 2 == 0 else -0.1)
+        sent.append({"t": t, "gonderim_sim": t + 0.1, "x": x, "y": 0.0, "gercek_x": 10.0, "gercek_y": 0.0})
+        sent[-1]["sonuc"] = "gonderildi"
+    sent.append({"t": 70.0, "gonderim_sim": 70.1, "x": 30.0, "y": 0.0, "gercek_x": 10.0, "gercek_y": 0.0})
+    sent[-1]["sonuc"] = "gonderildi"  # walking: not the follow start
+    sent.append(dict(sent[0], t=31.9, gonderim_sim=31.95, x=50.0, sonuc="hiz_siniri"))  # refused: never reached PX4
+    referee = [{"t": t, "dron_x": 2.0, "dron_y": 0.0} for t in np.arange(25.0, 80.0, 0.5)]
+    speeds = [(0.3, 0.4), (1.2, 0.9), (0.0, 0.2), (0.0, -1.2)]  # NE: 0.5, 1.5, 0.2, 1.2 m/s
+    est = {
+        "timestamp": np.array([26.0, 40.0, 41.0, 42.0, 43.0, 65.0]) * 1e6,
+        "valid": np.array([1, 1, 1, 1, 1, 1]),
+        "vel_est[0]": np.array([9.0] + [n for n, _ in speeds] + [9.0]),
+        "vel_est[1]": np.array([9.0] + [e for _, e in speeds] + [9.0]),
+    }
+    status = {
+        "timestamp": np.array([26.0, 30.0, 35.0, 40.0, 45.0, 66.0]) * 1e6,
+        "tracked_target_course": np.array([2.0, 0.0, 1.0, 1.0, -2.0, 0.5]),
+    }
+    m = olcum.follow_start_metrics(sent, referee, 27.0, 60.0, est, status)
+    assert m["follow_target_titresim_baslangic_m"] == pytest.approx(0.1)
+    assert m["follow_target_ardisik_fark_baslangic_p50_m"] == pytest.approx(0.2)
+    assert m["follow_target_drona_dogru_baslangic_m"] == pytest.approx(0.5)
+    assert m["follow_target_hizi_baslangic_hz"] == pytest.approx(10 / 33.0)
+    assert m["px4_kestirim_hizi_baslangic_ort_mps"] == pytest.approx(0.85)
+    assert m["px4_kestirim_hizi_baslangic_maks_mps"] == pytest.approx(1.5)
+    assert m["px4_kestirim_hizi_baslangic_p95_mps"] == pytest.approx(np.percentile([0.5, 1.5, 0.2, 1.2], 95))
+    assert m["px4_kestirim_hizi_baslangic_1mps_orani"] == pytest.approx(0.5)
+    assert m["px4_rota_degisimi_baslangic_sayisi"] == 2  # 26 s is before the mode switch, 66 s after the start
+    none = olcum.follow_start_metrics(sent, referee, None, 60.0, est, status)
+    assert set(none) == set(m) and all(math.isnan(v) for v in none.values())
+    quiet = olcum.follow_start_metrics(sent, referee, 27.0, 60.0, None, None)  # no follow_target topics in the ULog
+    assert math.isnan(quiet["px4_kestirim_hizi_baslangic_ort_mps"]) and quiet["follow_target_titresim_baslangic_m"] > 0
