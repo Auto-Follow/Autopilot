@@ -425,6 +425,16 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     hedef.check_wired(hedef.load("takip_yuruyen", hedef.CommandLine(los="hakem", no_model=True)))
 
 
+def test_follow_me_scenario_uses_the_chosen_flw_tgt_rs() -> None:
+    """Decision 1 (13.11): the Follow Me scenario sets FLW_TGT_RS 0.3, the sim's choice; the real vehicle's 22.08
+    parameters have 0.1 and gercek_dron.params is not changed for it. PX4 clamps the parameter to 0.1..1.0
+    (TargetEstimator::update_filter_gains): a value outside would silently be another one (the 0.05 of task 9.8)."""
+    assert "FLW_TGT_RS" not in {p.name for p in hedef.load("yuruyen_insan").tracking.px4_params}
+    rs = {p.name: p for p in hedef.load("takip_yuruyen").tracking.px4_params}["FLW_TGT_RS"]
+    assert rs.value == 0.3 and 0.1 <= rs.value <= 1.0 and rs.source == "takip.px4_parametreleri"
+    assert "FLW_TGT_RS" not in (hedef.SIM_DIR / "parametreler" / "gercek_dron.params").read_text(encoding="utf-8")
+
+
 def test_follow_me_flies_at_the_scenario_height_unless_flw_tgt_ht_is_given(tmp_path: Path) -> None:
     """Follow Me keeps FLW_TGT_HT above home: without the parameter in the scenario or on the command line it is
     drone.yukseklik_m (the take-off height), loaded after the .params files like a scenario parameter; given, it
@@ -433,6 +443,7 @@ def test_follow_me_flies_at_the_scenario_height_unless_flw_tgt_ht_is_given(tmp_p
     assert [(p.name, p.value, p.source) for p in follow.tracking.px4_params] == [
         ("FLW_TGT_HT", 8.0, "drone.yukseklik_m (follow_me)"),
         ("FLW_TGT_DST", 8, "takip.px4_parametreleri"),
+        ("FLW_TGT_RS", 0.3, "takip.px4_parametreleri"),
     ]
     high = write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: follow_me"))  # GOOD flies at 10 m
     params = hedef.settings(hedef.load(high))["px4_parametreleri"]

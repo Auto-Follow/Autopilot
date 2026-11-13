@@ -23,6 +23,14 @@ takip:
   los: model                # TEZ_LOS'un kaynağı: model (model kutusu) | hakem (doğru cevap, "mükemmel algılayıcı")
   px4_parametreleri:        # parametre dosyalarından sonra, --param'dan önce yüklenir; koşuda PX4'ten geri okunur
     FLW_TGT_DST: 8          # Follow Me: hedefin 8 m gerisinde dur (kamera raporu, stad 8/8)
+    FLW_TGT_RS: 0.3         # sim seçimi, kullanıcı kararı 13.11 ("0.2 veya 0.3"); gerçek dronda 0.1 (aşağıda)
+  # FLW_TGT_RS: PX4'ün hedef kestiricisinin gürültü bastırması (PX4 0.1–1.0'a kısar; küçük = tepkisel, gürültüyü az
+  # bastırır). Varsayılan 0.1'de model kutusundan bulunan konumun bakış yönüne bağlı kayması (≈ 0.5 m) PX4'te duran
+  # kişiye ≈ 0.6 m/s'lik sahte hız yaptırıyor, PX4 kişinin rotasını değiştiriyor ve dron duran kişinin etrafında
+  # dönüyor (salınım). 0.3 bunu ölçülen her koşuda gideriyor; 0.2 üç koşunun ikisinde gidermedi. Bedeli köşelerde: PX4
+  # yeni yöne 0.5–1 s geç yetişiyor ve dron köşede kişiye daha yakın geçiyor (en az mesafe ölçülür, raporda uyarı).
+  # Gerçek dronun parametre dosyasında (22.08) 0.1; gercek_dron.params değişmedi. Ölçüm ve karar:
+  # agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09.md (ve -09-on-followme-ayar.md).
   # FLW_TGT_HT verilmezse drone.yukseklik_m kullanılır (Follow Me yüksekliği = kalkış yüksekliği)
 
 # Diğer bloklar varsayılanlarıyla (spec "Senaryo alanları"; komut satırı bayrakları bunları ezer):
