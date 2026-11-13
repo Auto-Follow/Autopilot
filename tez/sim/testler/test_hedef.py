@@ -397,19 +397,19 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     good = write(tmp_path, GOOD)
     sc = hedef.load(good)
     hedef.check_wired(sc)  # defaults only: the run may start
-    assert hedef.settings(sc)["henuz_bagli_degil"] == {"video.mp4": 8}  # TEZ_LOS (LOS model) is sent since group 5
+    assert hedef.settings(sc)["henuz_bagli_degil"] == {}  # kosu.mp4 is made since group 8
     later = [
         (hedef.CommandLine(px4_start=("x start",)), "takip.px4_baslat / --px4-baslat: Görev grubu 10'da"),
         (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
         (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
-        (hedef.CommandLine(keep_frames=True), "--kareleri-sakla: Görev grubu 8'de"),
     ]
     for cli, message in later:
         with pytest.raises(ValueError, match=re.escape(message)):
             hedef.check_wired(hedef.load(good, cli))
-    # wired already: start parameters, no model, no video (nothing makes one yet), the model's settings (group 4),
-    # TEZ_LOS with an external mode chosen by name and the referee's LOS (group 5)
+    # wired already: start parameters, no model, no video, the model's settings (group 4), TEZ_LOS with an external
+    # mode chosen by name and the referee's LOS (group 5), kept video frames (group 8)
     hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
+    hedef.check_wired(hedef.load(good, hedef.CommandLine(keep_frames=True)))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Hold", los="hakem")))
     hedef.check_wired(
         hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Yok", no_model=True, los="hakem"))

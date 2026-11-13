@@ -15,7 +15,8 @@ is tried again, at most --yeniden-dene times per run, and every attempt is liste
 
 Outputs in tez/sim/sonuclar/<date>_<scenario>_x<N>/ (or --cikti): kosu_<i>/ and kosu_<i>.log per run (a retried one
 keeps its first folder as kosu_<i>_deneme<k>/), toplu.json (per metric: every run's value, ort, en_az, en_cok, n = runs
-that have a value; the attempts), toplu.csv (one row per metric) and toplu.html (the main metrics, every run as a dot).
+that have a value; the attempts), toplu.csv (one row per metric) and toplu.html (the main metrics, every run as a dot,
+and links to every run's rapor.html and kosu.mp4: each senaryo.py run makes its own video, --videosuz does not).
 """
 
 import argparse
@@ -41,6 +42,7 @@ import rapor  # noqa: E402
 from simulasyon import SIM_DIR, running  # noqa: E402
 
 SCENARIO_TOOL = Path(__file__).resolve().parent / "senaryo.py"
+VIDEO = "kosu.mp4"  # every run's video (senaryo.py, video.py), linked from toplu.html
 WAIT_FOR_EXIT_S = 120.0  # [s] for the previous run's PX4 and Gazebo to be gone
 READY_EVENT = ("Dron ", "hazır")  # senaryo.py's event once the drone is in the scenario's mode
 OWN_FLAGS = ("--cikti", "--ekransiz", "--senaryo")  # toplu.py sets these for every run
@@ -289,7 +291,13 @@ def _html(scenario: str, s: dict, agg: dict, dots: str) -> str:
     table = f"<tr><th>Ölçüt</th>{head}<th>ort.</th><th>en az</th><th>en çok</th></tr>"
     runs = "".join(
         f"<li>{e(Path(r['klasor']).name)}: {e(r['sonuc'])} <span class=muted>({e(str(r.get('commit')))})</span> · "
-        f'<a href="{e(Path(r["klasor"]).name)}/rapor.html">rapor.html</a></li>'
+        f'<a href="{e(Path(r["klasor"]).name)}/rapor.html">rapor.html</a>'
+        + (
+            f' · <a href="{e(Path(r["klasor"]).name)}/{VIDEO}">{VIDEO}</a>'
+            if (Path(r["klasor"]) / VIDEO).is_file()
+            else ""
+        )
+        + "</li>"
         for r in s["kosular"]
     )
     tries = "".join(

@@ -15,7 +15,7 @@ import io
 import json
 import math
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import matplotlib
@@ -673,12 +673,14 @@ def write(
     settings: dict | None = None,
     more_metrics: dict | None = None,
     sections: dict | None = None,
+    video: Callable[[Path], dict] | None = None,
 ) -> dict:
     """Write dogru_cevap.csv, ozet.json and rapor.html; `settings` is the run's "ayarlar" (senaryo.settings),
     `more_metrics` go into "olcutler" (olcum.measure and the RTF), `sections` are more top level parts of ozet.json
     (e.g. "kare_defteri", "mod", "yakin_mesafe"). checks_: the overhead verification (dogrulama.py). Every key of
     olcum.KEYS is written (NaN = null where it does not apply); the checks go to "kontroller", failed ones and the
-    3 m warning to "olaylar" too."""
+    3 m warning to "olaylar" too. `video` (video.make of the run): called once ozet.json and the CSV files are there
+    (it reads them), its answer becomes ozet.json "video"; a failed video is an event, not a failed run."""
     sections = dict(sections or {})
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -720,6 +722,16 @@ def write(
     }
     summary = _json_safe(summary)
     (out / "ozet.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False, default=float), encoding="utf-8")
+    if video is not None:
+        try:
+            info = video(out)
+        except Exception as e:  # noqa: BLE001 - the report must still be written
+            info = {"hata": f"{type(e).__name__}: {e}"}
+        if "hata" in info:
+            summary["olaylar"].append(f"Video yapılamadı: {info['hata']}")
+        summary["video"] = _json_safe(info)
+        text = json.dumps(summary, indent=2, ensure_ascii=False, default=float)
+        (out / "ozet.json").write_text(text, encoding="utf-8")
 
     figures = []
     if not df.empty:
@@ -905,6 +917,17 @@ altında kalan anlar sayılmaz; hedef kontrol anlarının en az yarısında gör
         for t, b in figures
     )
     files = ", ".join(f"<code>{p.name}</code>" for p in sorted(out.iterdir()) if p.is_file())
+    v = s.get("video") or {}
+    if v.get("dosya"):
+        video_html = (
+            f'<p>Video: <a href="{e(v["dosya"])}">{e(v["dosya"])}</a> ({v["kare_sayisi"]} kare, {v["sure_s"]:.1f} s, '
+            f"{v['baslangic_s']:.1f} → {v['bitis_s']:.1f} s; kamera karesi olmayan an {v['eksik_kare']}). VLC ile "
+            f"açın: <code>vlc {e(str(out / v['dosya']))}</code></p>"
+        )
+    elif v.get("hata"):
+        video_html = f"<p class=muted>Video yapılamadı: {e(str(v['hata']))}</p>"
+    else:
+        video_html = "<p class=muted>Video yok (--videosuz).</p>"
     return f"""<!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{e(sc.name)} — senaryo raporu</title>
@@ -931,6 +954,7 @@ code {{ font-size:13px; }}
 <p><span class=badge style="background:{badge[1]}">{badge[0]} {e(s["sonuc"])}</span>
 <span class=muted>&nbsp;{e(s["tarih"])} · commit {e(s["commit"])} · takip kaynağı <code>{e(sc.tracking_source)}</code>,
 {sc.altitude:.0f} m</span></p>
+{video_html}
 <h2>Kontroller ve uyarılar</h2>{checks_html}
 <p class=muted>Bunlar ölçümdür, başarı eşiği değildir (eşikleri m01 belirler).</p>
 <h2>Başarı ölçütleri</h2>{success_html}

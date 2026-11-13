@@ -28,6 +28,8 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | PlotJuggler | **3.17.2** (x86_64 AppImage, sha256 `6d427ca15f2d937699587eec668d1583e2468bc27bab8aaaee81276ad85941df`) — 4.0 kullanılmıyor | Sürüm adıyla indirilir |
 | Laptop analiz/araç Python | `analiz-requirements.txt` (pyulog 1.2.4, MAVProxy 1.8.75, pandas, matplotlib, SciPy…) | venv: `~/Desktop/Projects/Auto-Follow/.venv-tez` |
 | Git | 2.43.0 | Ubuntu paketi |
+| ffmpeg (sim videosu `kosu.mp4`) | **ffmpeg 7:6.1.1-3ubuntu5** (libavcodec60 7:6.1.1-3ubuntu5, libx264-164 2:0.164.3108+git31e19f9-1) | Ubuntu 24.04 paketi (`sudo apt install ffmpeg`, aşağıdaki "Geliştirme araçları"nda); `tez/sim/araclar/video.py` ham BGR kareleri boruyla verir: `libx264`, `yuv420p`, `veryfast`, `crf 23`, `+faststart`. OpenCV'nin `VideoWriter`'ı kullanılmaz (pip OpenCV'de H.264 yok). Kontrol: `dpkg-query -W ffmpeg libx264-164` |
+| VLC (videoyu izlemek için) | 3.0.20-3build6 | Ubuntu paketi; `kosu.mp4` bununla denendi. Uçbirimdeki "Timestamp conversion failed" satırları VLC'nin kendisinden gelir |
 
 ## 3. Kişiden kişiye farklı olabilir (proje sonucunu etkilemez)
 

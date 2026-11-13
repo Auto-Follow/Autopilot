@@ -59,12 +59,14 @@ def test_senaryo_command_runs_without_a_window_into_the_run_folder(tmp_path: Pat
 
 def test_summary_files_of_the_runs(tmp_path: Path) -> None:
     """toplu.json (every metric's spread and the attempts), toplu.csv (one row per metric) and toplu.html with the
-    main table; the run folders' ozet.json are read back (--ozet)."""
+    main table and a link to every run's kosu.mp4 (task group 8); the run folders' ozet.json are read back (--ozet)."""
     for i, value in enumerate((7.6, 8.2, 7.0), start=1):
         folder = tmp_path / f"kosu_{i}"
         folder.mkdir()
         s = summary("GEÇTİ", [READY], yatay_mesafe_ort_m=value, en_az_yatay_mesafe_m=value - 5, rtf_ort=0.9)
         (folder / "ozet.json").write_text(json.dumps(s), encoding="utf-8")
+        if i < 3:  # the third run made no video (--videosuz)
+            (folder / "kosu.mp4").write_bytes(b"mp4")
     runs = toplu.read_runs([tmp_path / f"kosu_{i}" for i in (1, 2, 3)])
     attempts = [{"kosu": i, "deneme": 1, "klasor": f"kosu_{i}", "sonuc": "GEÇTİ"} for i in (1, 2, 3)]
     toplu.write(tmp_path, "takip_yuruyen", runs, attempts, [])
@@ -75,3 +77,4 @@ def test_summary_files_of_the_runs(tmp_path: Path) -> None:
     assert csv_text[0].startswith("anahtar,") and any(line.startswith("yatay_mesafe_ort_m,") for line in csv_text)
     page = (tmp_path / "toplu.html").read_text(encoding="utf-8")
     assert "Dron–hedef yatay mesafe, ortalama [m]" in page and "8.20" in page and "data:image/png;base64" in page
+    assert 'href="kosu_1/kosu.mp4"' in page and 'href="kosu_2/kosu.mp4"' in page and "kosu_3/kosu.mp4" not in page

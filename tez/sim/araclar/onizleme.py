@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Look at a world (or a scenario) through a camera like the drone's, without PX4: photos or a WebM video.
+"""Look at a world (or a scenario) through a camera like the drone's, without PX4: photos or an MP4 video.
 
     P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
     $P tez/sim/araclar/onizleme.py --dunya cayir                         # photo from the hover point (0, 0, 10 m)
@@ -10,40 +10,41 @@
     ... --etiket                  draw the referee's boxes (segmentation): target blue, other people orange
 
 The camera has the drone camera's lens and resolution (Camera Module 3: 66 deg, 2304x1296) but does not move;
-the drone itself stands on the ground at (0, 0). Output: tez/sim/sonuclar/<date>_onizleme_<name>/.
+the drone itself stands on the ground at (0, 0). Output: tez/sim/sonuclar/<date>_onizleme_<name>/. The video is
+H.264 MP4 (VLC) at half the camera's resolution, through the same ffmpeg pipe and box drawing as kosu.mp4 (video.py).
 """
 
 import argparse
 import datetime as dt
 import math
 import os
-import shutil
 import signal
 import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
 os.environ.setdefault("GZ_IP", "127.0.0.1")
 
+import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 from gz.msgs10.image_pb2 import Image  # noqa: E402
 from gz.transport13 import Node  # noqa: E402
 from PIL import Image as PilImage  # noqa: E402
-from PIL import ImageDraw, ImageFont  # noqa: E402
 
 import hedef  # noqa: E402
+import video  # noqa: E402
 from kayit import SEG_SCALE, visible_parts  # noqa: E402
 from simulasyon import REPO, SIM_DIR, running  # noqa: E402
 
 TOPIC = "/onizleme/image"
 SEG_TOPIC = "/onizleme_seg"
-TARGET_BOX = (42, 120, 214)  # report palette: target blue, drone/others orange
-OTHER_BOX = (235, 104, 52)
 HFOV = 1.151917  # [rad] Camera Module 3 Standard, as models/x500_tez
 SIZE = (2304, 1296)
+VIDEO_SIZE = (SIZE[0] // 2, SIZE[1] // 2)  # [px] of the MP4
 VIDEO_FPS = 10
 
 
@@ -125,25 +126,22 @@ class Frames:
         with self.lock:
             self.boxes[round(t * 1e6)] = parts
 
-    def annotate(self, t: float, img: np.ndarray) -> np.ndarray:
-        """Draw the people's boxes of the segmentation frame taken at the same time."""
+    def annotate(self, t: float, bgr: np.ndarray) -> np.ndarray:
+        """Draw the people's boxes of the segmentation frame taken at the same time on a BGR frame of any size
+        (video.draw_referee: target blue, other people orange, as in kosu.mp4)."""
         parts = self.boxes.get(round(t * 1e6))
         if parts is None:
-            return img
-        pil = PilImage.fromarray(img)
-        draw = ImageDraw.Draw(pil)
-        font = ImageFont.load_default(size=36)
-        for prefix in self.people.values():
-            if parts[f"{prefix}_piksel"] == 0:
-                continue
-            box = [parts[f"{prefix}_kutu_{k}"] for k in ("u0", "v0", "u1", "v1")]
-            colour = TARGET_BOX if prefix == "hedef" else OTHER_BOX
-            draw.rectangle(box, outline=colour, width=5)
-            draw.text((box[0], box[1] - 42), "HEDEF" if prefix == "hedef" else prefix, fill=colour, font=font)
+            return bgr
+        scale = bgr.shape[1] / SIZE[0]
+        img = np.ascontiguousarray(bgr)
+        labels: list[video.Label] = []
+        video.draw_referee(img, video.referee_boxes(parts, list(self.people.values())), labels, scale)
+        size = max(14, round(36 * scale))
         if parts["hedef_piksel"] == 0:
-            draw.text((40, 30), "Hedef görünmüyor (örtülü veya kadraj dışı)", fill=TARGET_BOX, font=font)
-        draw.text((40, SIZE[1] - 70), f"t = {t:.1f} s", fill=(255, 255, 255), font=font)
-        return np.asarray(pil)
+            text = "Hedef görünmüyor (örtülü veya kadraj dışı)"
+            labels.append(video.Label(20, 15, text, video.TARGET_BGR, size, True, "la", 2, video.WHITE))
+        labels.append(video.Label(20, img.shape[0] - 15, f"t = {t:.1f} s", video.WHITE, size, True, "lb", 2))
+        return video.render_labels(img, labels)
 
     def on_image(self, msg: Image) -> None:
         t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
@@ -199,6 +197,21 @@ def capture(world: Path, frames: Frames, out: Path) -> bool:
     return True
 
 
+def write_video(
+    clip: list[tuple[float, np.ndarray]],
+    stem: Path,
+    annotate: Callable[[float, np.ndarray], np.ndarray] | None = None,
+) -> Path:
+    """The clip's RGB frames, in time order, as <stem>.mp4 at VIDEO_SIZE and VIDEO_FPS (video.Encoder: H.264,
+    yuv420p, +faststart); annotate(t, bgr) draws on each frame."""
+    path = stem.with_suffix(".mp4")
+    with video.Encoder(path, size=VIDEO_SIZE, fps=VIDEO_FPS) as enc:
+        for t, img in sorted(clip, key=lambda c: c[0]):
+            bgr = cv2.cvtColor(cv2.resize(img, VIDEO_SIZE, interpolation=cv2.INTER_AREA), cv2.COLOR_RGB2BGR)
+            enc.write(annotate(t, bgr) if annotate is not None else bgr)
+    return path
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
@@ -207,7 +220,7 @@ def main() -> int:
     ap.add_argument("--kamera", default="0,0,10,45,0", help="x,y,z,eğim_derece,yön_derece (varsayılan 0,0,10,45,0)")
     ap.add_argument("--tepe", action="store_true", help="sahnenin ortasının üstünden dik aşağı bak")
     ap.add_argument("--zaman", default="3", help="fotoğraf zamanları [s], virgülle")
-    ap.add_argument("--video", help="başlangıç:bitiş [s] arası WebM video (10 kare/s)")
+    ap.add_argument("--video", help="başlangıç:bitiş [s] arası MP4 video (10 kare/s, VLC)")
     ap.add_argument("--etiket", action="store_true", help="hakemin kutularını çiz: hedef mavi, diğer insanlar turuncu")
     ap.add_argument("--cikti", type=Path)
     args = ap.parse_args()
@@ -243,39 +256,12 @@ def main() -> int:
 
     for t, img in sorted(frames.photos.items()):
         path = out / f"kare_{t:07.2f}.png"
-        PilImage.fromarray(frames.annotate(t, img) if people else img).save(path)
+        if people:
+            img = cv2.cvtColor(frames.annotate(t, cv2.cvtColor(img, cv2.COLOR_RGB2BGR)), cv2.COLOR_BGR2RGB)
+        PilImage.fromarray(img).save(path)
         print(f"Fotoğraf: {path}")
     if frames.clip:
-        tmp = out / "kareler"
-        tmp.mkdir(exist_ok=True)
-        for i, (t, img) in enumerate(sorted(frames.clip, key=lambda c: c[0])):
-            if people:
-                img = frames.annotate(t, img)
-            PilImage.fromarray(img).resize((SIZE[0] // 2, SIZE[1] // 2)).save(tmp / f"{i:05d}.png")
-        video_path = out / f"{name}.webm"
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-loglevel",
-                "error",
-                "-y",
-                "-framerate",
-                str(VIDEO_FPS),
-                "-i",
-                str(tmp / "%05d.png"),
-                "-c:v",
-                "libvpx-vp9",
-                "-b:v",
-                "0",
-                "-crf",
-                "32",
-                "-row-mt",
-                "1",
-                str(video_path),
-            ],
-            check=True,
-        )
-        shutil.rmtree(tmp)
+        video_path = write_video(frames.clip, out / name, frames.annotate if people else None)
         print(f"Video: {video_path}")
     return 0
 

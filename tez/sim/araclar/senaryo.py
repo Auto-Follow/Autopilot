@@ -35,6 +35,11 @@ The numbers (ozet.json "olcutler"): olcum.measure, every key of spec "Ölçüt T
 model's frames, the TEZ_LOS / FOLLOW_TARGET attempts, the mode the heartbeat reported and PX4's ULog files; the report
 (rapor.py) adds the checks and warnings (model on the image, 3 m, the camera's near limit, mode, RTF). Several runs
 of one scenario and their spread: toplu.py.
+
+kosu.mp4 (unless --videosuz): a recorder process (goruntu_yayini.py) writes the camera frames of the referee's
+recording (15 fps of sim time, 1280x720 JPEG) into kareler/ while the run goes on; after the run video.py puts the
+video together from the run's files (camera with the referee's and the model's boxes | top view), then kareler/ goes
+(--kareleri-sakla keeps it).
 """
 
 import argparse
@@ -54,12 +59,14 @@ import pandas as pd
 import algilama
 import dogrulama
 import goruntu
+import goruntu_yayini
 import hedef
 import konumlama
 import olcum
 import parametreler
 import rapor
 import takip
+import video
 from kayit import Recorder
 from px4_baglanti import FOLLOW_TARGET_MODE_NAME, HOLD_MODE_NAME, STOCK_MODE_NAMES, Vehicle, check_mode_name
 from simulasyon import BUILD, SIM_DIR, Simulation, running
@@ -172,18 +179,43 @@ def fly(
     tracker: takip.Tracker | None = None,
     restart_logger: Callable[[], tuple[bool, str]] | None = None,
     modes: ModeLog | None = None,
+    frames: goruntu_yayini.FrameRecorder | None = None,
 ) -> bool:
     """restart_logger: Simulation.restart_logger, called once in follow_me (the follow_target topics into the ULog);
-    modes: filled with the mode the heartbeat reported."""
+    modes: filled with the mode the heartbeat reported; frames: the video's camera frames, kept while recording."""
     v = Vehicle()
     if tracker is not None:  # TEZ_LOS goes out from the moment the link to PX4 exists
         tracker.attach(v)
+    recording = _Recording(rec, frames)
     try:
-        return _fly(v, sc, rec, events, run_settings, model, detections, tracker, restart_logger, modes or ModeLog())
+        return _fly(
+            v, sc, recording, events, run_settings, model, detections, tracker, restart_logger, modes or ModeLog()
+        )
     finally:
         if tracker is not None:
             tracker.detach()
         v.close()
+
+
+class _Recording:
+    """The referee's recording and the video's camera frames start and stop together (one window in sim time)."""
+
+    def __init__(self, rec: Recorder, frames: goruntu_yayini.FrameRecorder | None) -> None:
+        self.rec, self.frames = rec, frames
+
+    @property
+    def sim_time(self) -> float:
+        return self.rec.sim_time
+
+    def start(self) -> None:
+        if self.frames is not None:
+            self.frames.begin(self.rec.sim_time)
+        self.rec.start()
+
+    def stop(self) -> None:
+        self.rec.stop()
+        if self.frames is not None:
+            self.frames.end(self.rec.sim_time)
 
 
 def _model_ok(model: algilama.ModelProcess | None, events: list[str]) -> bool:
@@ -222,7 +254,7 @@ def _progress(
 def _fly(
     v: Vehicle,
     sc: hedef.Scenario,
-    rec: Recorder,
+    rec: "_Recording",
     events: list[str],
     run_settings: dict,
     model: algilama.ModelProcess | None,
@@ -536,6 +568,7 @@ def run(
             truth=lambda s: sc.truth(s)[:2],
         )
     model = None
+    frames = None
     try:
         if model_file is not None:  # loaded before anything is written or started: a refused setting stops here
             known = (
@@ -549,6 +582,13 @@ def run(
         else:
             log("Model yok (--modelsiz / algilama.etkin: false): model süreci açılmaz")
         out.mkdir(parents=True, exist_ok=True)
+        if sc.video.mp4:  # like the model: listening to the camera before Gazebo starts
+            frames = goruntu_yayini.FrameRecorder(out / goruntu_yayini.FRAMES_DIR)
+            frames.start()
+            log(
+                f"Video kare kaydedicisi hazır: kayıt boyunca {goruntu_yayini.FPS} kare/sim-s, "
+                f"{goruntu_yayini.FRAME_SIZE[0]}x{goruntu_yayini.FRAME_SIZE[1]} JPEG -> {goruntu_yayini.FRAMES_DIR}/"
+            )
         shutil.copy(sc.source, out / "senaryo.yaml")
         check_pos = dogrulama.camera_pose(sc) if verify else None
         world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "")
@@ -557,6 +597,8 @@ def run(
     except BaseException:
         if model is not None:  # never leave the model process behind
             model.stop()
+        if frames is not None:
+            frames.stop()
         if tracker is not None:
             tracker.close()
         if detections is not None:
@@ -572,7 +614,9 @@ def run(
                 events.append("Simülasyon açılmadı (sim.log'a bakın)")
             else:
                 log("PX4 ve Gazebo hazır")
-                completed = fly(sc, rec, events, run_settings, model, detections, tracker, sim.restart_logger, modes)
+                completed = fly(
+                    sc, rec, events, run_settings, model, detections, tracker, sim.restart_logger, modes, frames
+                )
             log("Simülasyon kapatılıyor")
     except KeyboardInterrupt:
         events.append("Kullanıcı durdurdu (Ctrl+C)")
@@ -585,7 +629,10 @@ def run(
             tracker.close()
         if detections is not None:
             detections.close()
+        video_books = frames.stop() if frames is not None else None
     events += sim.problems()
+    if video_books is not None:
+        _frame_log_line(video_books, events)
 
     ulogs = sim.ulogs()
     ulog = ulogs[-1] if ulogs else None
@@ -667,7 +714,40 @@ def run(
         run_settings,
         more,
         sections,
+        video=_video_maker(video_books, sc.video.keep_frames) if frames is not None else None,
     )
+
+
+def _frame_log_line(books: dict, events: list[str]) -> None:
+    """What the video's recorder kept; a dropped frame is shown as the one before in kosu.mp4."""
+    if "hata" in books:
+        events.append(f"Video kare kaydedicisi: {books['hata']}")
+        log(f"UYARI: video kare kaydedicisi: {books['hata']}")
+        return
+    log(
+        f"Video kareleri: {books['yazilan']} yazıldı ({books['secilen']} seçildi, {books['dusen']} kuyruk dolu "
+        f"olduğu için düştü, {books['hatali']} hatalı; kameradan {books['kamera_karesi']} kare geldi), kare başına "
+        f"ort. {books['yazma_ms_ort']:.1f} ms (en çok {books['yazma_ms_maks']:.0f})"
+    )
+    if books["dusen"] or books["hatali"]:
+        events.append(
+            f"Video kareleri: {books['dusen']} kare düştü, {books['hatali']} hatalı (videoda önceki kare gösterilir)"
+        )
+    events += [f"Video kare kaydedicisi: {e}" for e in books.get("hatalar", [])]
+
+
+def _video_maker(books: dict | None, keep_frames: bool) -> Callable[[Path], dict]:
+    def make(folder: Path) -> dict:
+        log("Video birleştiriliyor (kosu.mp4, çevrimdışı)...")
+        info = video.make(folder, books, keep_frames)
+        if "hata" not in info:
+            log(
+                f"Video: {folder / info['dosya']} ({info['kare_sayisi']} kare, {info['sure_s']:.1f} s; kamera karesi "
+                f"olmayan an {info['eksik_kare']}; {info['uretim_s']:.0f} s'de; kareler {info['kareler']})"
+            )
+        return info
+
+    return make
 
 
 def parser() -> argparse.ArgumentParser:

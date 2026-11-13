@@ -328,18 +328,23 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 #### Görev Grubu 8: Kare kaydı ve MP4 video (VLC)
 **Bağımlılık:** Görev Grubu 7 · **Emek:** ~0.6 gün
 
-- [ ] 8.0 Her koşunun VLC'de açılan aynı düzende bir `kosu.mp4` üretmesi
-  - [ ] 8.1 Testleri yaz (3–5 test)
+- [x] 8.0 Her koşunun VLC'de açılan aynı düzende bir `kosu.mp4` üretmesi
+  - [x] 8.1 Testleri yaz (3–5 test)
     - `test_video.py`: tek karelik birleşim 2000×720, boyutlar çift; kutuların sol panelde doğru yerde (2304×1296 → 1280×720 ölçek); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`, `rawvideo`/`bgr24`
     - Kare seçimi: sim zamanında 15 fps ızgarasına denk gelen kareler (her 2. kare)
-  - [ ] 8.2 `VERSIONS.md`'ye `ffmpeg` apt sürümünü `dpkg-query -W ffmpeg` ile yaz (kullanılmadan önce)
-  - [ ] 8.3 `araclar/goruntu_yayini.py`, kayıt kısmı: ayrı süreç; `/x500_tez/kamera/image`'dan `subscribe_raw`; kayıt penceresindeki kareleri 1280×720 JPEG (kalite 90) olarak `kareler/`'e yazar (QGC RTP kısmı 11. grupta)
-  - [ ] 8.4 `araclar/video.py`: `onizleme.py`'deki `Frames.annotate` ve ffmpeg çağrısı buraya taşınıp ortaklaştırılır
+    - (Uygulamada: `test_video.py` 10 test (birleşim, kutuların yeri, PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı ve kırmızı durumlar, ffmpeg borusu ve komutu, küçük bir koşu klasöründen bütün video ve `kareler/`'in silinmesi, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü); `test_goruntu_yayini.py` 3 test (15 fps ızgarası ve pencere, JPEG, dolu kuyrukta kare düşürme ve sayma); `test_hedef.py` (`--kareleri-sakla` bağlandı, `henuz_bagli_degil` boş), `test_toplu.py` (`toplu.html`'den `kosu.mp4` bağlantısı). Hepsi taklit ffmpeg'le; ffmpeg, Gazebo, `torch` gerekmez)
+  - [x] 8.2 `VERSIONS.md`'ye `ffmpeg` apt sürümünü `dpkg-query -W ffmpeg` ile yaz (kullanılmadan önce)
+    (Uygulamada: ffmpeg 7:6.1.1-3ubuntu5, libavcodec60 7:6.1.1-3ubuntu5, libx264-164 2:0.164.3108+git31e19f9-1; izlemek için VLC 3.0.20-3build6.)
+  - [x] 8.3 `araclar/goruntu_yayini.py`, kayıt kısmı: ayrı süreç; `/x500_tez/kamera/image`'dan `subscribe_raw`; kayıt penceresindeki kareleri 1280×720 JPEG (kalite 90) olarak `kareler/`'e yazar (QGC RTP kısmı 11. grupta)
+    (Uygulamada: `FrameRecorder` ("spawn" süreç, model süreci gibi simden önce açılır); geri çağırma yalnız başlığı okur, `GridPicker` her 1/15 s'lik ızgara anına en çok 20 ms uzaklıktaki kareyi seçer (her 2. kare; kaybolan karenin yeri boş kalır, sonrakiler kaymaz); yazıcı iş parçacığı çözer, iki adımda küçültür (tam yarıya kutu süzgeci + 1280×720'ye çift doğrusal), JPEG yazar (`kareler/<t_us>.jpg`). Kuyruk 6 kare; dolarsa yeni kare düşer ve sayılır. Süreç OpenCV'yi tek iş parçacığında çalıştırır ve `nice 5` ile Gazebo, PX4 ve modelin arkasında kalır. Pencere hakemin kaydıyla aynıdır: `senaryo._Recording` ikisini birlikte açıp kapatır.)
+  - [x] 8.4 `araclar/video.py`: `onizleme.py`'deki `Frames.annotate` ve ffmpeg çağrısı buraya taşınıp ortaklaştırılır
     - Sol 1280×720: hakem kutuları (hedef mavi, diğerleri turuncu); o anda PX4'ün elindeki son model sonucu (`gonderim` zamanına göre; seçilen kutu kalın kırmızı + güven, diğerleri ince); "HEDEF YOK"; sim zamanı, mod, uçtan uca gecikme
     - Sağ 720×720 üstten görünüm (`plot_map` renkleri): dron, hedef, diğer insanlar, ağaçlar, kameranın zemin izdüşümü, son 10 s iz, `follow_me`'de `FOLLOW_TARGET` noktası, ölçek çubuğu, yatay mesafe
     - Ham BGR → `ffmpeg` boru: `libx264 -pix_fmt yuv420p -preset veryfast -crf 23 -movflags +faststart`, 15 fps. OpenCV `VideoWriter` kullanılmaz.
-  - [ ] 8.5 `senaryo.py`: koşu bittikten sonra çevrimdışı birleştirme; `kareler/` sonra silinir (`--kareleri-sakla` ile kalır); `--videosuz` bağlanır. `onizleme.py` WebM yerine MP4 üretir. `ruff.toml`'a `goruntu_yayini`, `video`, `olcum`, `takip`, `konumlama`, `gecikme` eklenmiş olmalıdır.
-  - [ ] 8.6 Doğrulama
+    - (Uygulamada: video yalnız koşu klasörünün dosyalarından yapılır (`video.make`; `video.py <klasör>` ile yeniden de yapılabilir): `kareler/`, `dogru_cevap.csv`, `algilama.csv` + `kutular.csv`, `tez_los.csv`, `follow_target.csv`, `ozet.json`, ULog. Kuşbakışına kullanıcının 13.11 isteğiyle 7. gruptaki açıklayıcı animasyonun öğeleri eklendi: olması gereken "arka" noktası, 3 m halkası, kameranın yakın görüş sınırı halkası, son 3 s'nin FOLLOW_TARGET noktaları, `follow_me`'de PX4'ün kestirimi, varsaydığı rota (ok), gönderdiği yer (yörünge açısı hedefi) ve hedeflediği yer; altta durum satırı (kilit kaybı, hedef yok, yakın sınır / 3 m içinde, kadraj dışı → kırmızı; köşede aşma → turuncu; PX4'ün sahte hız kestirimi ve rotası). Model sonucu "PX4'ün elinde" sayıldığı an: gönderim, yoksa gecikme hattından çıkış, yoksa hazır olma (hakem kaynağı). Yazılar PIL + matplotlib'in DejaVu Sans'ıyla (Türkçe harfler), şekiller OpenCV ile.)
+  - [x] 8.5 `senaryo.py`: koşu bittikten sonra çevrimdışı birleştirme; `kareler/` sonra silinir (`--kareleri-sakla` ile kalır); `--videosuz` bağlanır. `onizleme.py` WebM yerine MP4 üretir. `ruff.toml`'a `goruntu_yayini`, `video`, `olcum`, `takip`, `konumlama`, `gecikme` eklenmiş olmalıdır.
+    (Uygulamada: video `rapor.write`'ın `video` kancasıyla, `ozet.json` ve CSV'ler yazıldıktan sonra yapılır; sonucu `ozet.json` → `video` (kare sayısı, süre, eksik kare, üretim süresi, kaydedicinin defteri) ve raporun başındaki "Video" satırı. Video yapılamazsa koşu kalmaz, olaylara yazılır. `toplu.py` her koşunun `kosu.mp4`'ünü `toplu.html`'den bağlar. `hedef.unwired`'daki `--kareleri-sakla` ara hatası ve `not_in_effect`'teki `video.mp4` satırı silindi.)
+  - [x] 8.6 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler/test_video.py -q
@@ -353,6 +358,8 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
     ```
 
     **Görsel kontrol (Ahmet, VLC):** model kutusu hedefin üstünde, gecikmesi gözle görülebiliyor; hakem kutusu hedefle çakışıyor; üstten görünüm kamera görüntüsüyle tutarlı; dron hedefi 8 m geriden izliyor.
+
+    (Uygulamada 13.11: hepsi geçti. `takip_yuruyen` ve `kalabalik_park` videoları h264 / yuv420p / 2000×720, süreleri hakemin kaydına (`kayit_suresi_s`) 0.03 / 0.01 s yakın; `toplu.py` 3'lü grupta her koşunun videosu ve `toplu.html` bağlantıları; oturumun 32 videolu koşusunda eksik ya da düşen kare yok; VLC 3.0.20 açtı; F0 ve F1 geçti. Kare kaydı RTF'i ≈ 0.05 düşürüyor (dönüşümlü 3 + 3: 0.788 / 0.836). Video, spec'in "kayıt penceresi"nden farklı olarak hakemin kaydını (takip başı dahil) kapsar; gerekçe ve sayılar `implementation/gorev-grubu-08.md`. Görsel kontrol Ahmet'te.)
 
 **Kabul Ölçütleri:**
 - 8.1'deki testler geçer; `ffprobe` h264 / yuv420p / 2000×720 verir

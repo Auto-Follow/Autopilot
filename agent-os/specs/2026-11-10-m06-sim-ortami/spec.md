@@ -354,7 +354,7 @@
   - Ara durum (m06 sürerken, tasks.md 2.5): sonraki bir görev grubunda bağlanacak ayar varsayılan dışında verilirse
     `senaryo.py` simülasyonu açmadan "`<alan>`: Görev grubu N'de bağlanacak" hatasıyla durur (`hedef.check_wired`;
     `senaryo.run` de aynı kontrolü yapar). Varsayılanı henüz etkin olmayan ayarlar `ayarlar.henuz_bagli_degil`'de
-    grup numarasıyla listelenir (5. gruptan sonra yalnız `{"video.mp4": 8}`; 4. grup `algilama.etkin` satırını ve
+    grup numarasıyla listelenir (5. gruptan sonra yalnız `{"video.mp4": 8}`, 8. gruptan sonra boş; 4. grup `algilama.etkin` satırını ve
     `algilama.*` / `kusurlar` ara hatalarını, 5. grup `takip.kaynak: tez_los`, `takip.los: hakem` ara hatalarını ve
     `henuz_bagli_degil["takip.los"]`'u, 6. grup `takip.kaynak: follow_me` ara hatasını sildi). Her grup kendi
     satırlarını `hedef.unwired` / `hedef.not_in_effect`'ten siler.
@@ -392,7 +392,22 @@
   - Kayıt penceresinde, sim zamanında 15 fps ızgarasına denk gelen kareler (her 2. kare) alınır.
   - Kareler 1280×720 JPEG (kalite 90) olarak `kareler/` klasörüne yazılır.
   - MP4 üretildikten sonra bu klasör silinir; `--kareleri-sakla` verilirse kalır.
+  - Uygulamada (8. grup): "kayıt penceresi" burada hakemin kaydıdır (dron modundayken: mod seçimi → senaryo sonu);
+    yani video ölçüt penceresinin (`zamanlama.baslama_s` → son) yanında "takip başı"nı da kapsar (kişi dururken stok
+    Follow Me'nin salınımı, kullanıcının videoda görmek istediği şey). Video süresi `ozet.json` → `olcutler.kayit_suresi_s`
+    ile ±1 s içinde karşılaştırılır (`takip_yuruyen`: ≈ 66 s). Kaydedici ayrı bir "spawn" süreçtir (`FrameRecorder`):
+    simden önce açılır, geri çağırma yalnız mesajın başlığını okur (`goruntu.stamp`), ızgara anına en çok 20 ms
+    uzaklıktaki kareyi seçer (`GridPicker`; kaybolan karenin yeri boş kalır, videoda önceki kare gösterilir), yazıcı
+    iş parçacığı çözer, iki adımda küçültür (tam yarıya kutu süzgeci + çift doğrusal), JPEG yazar (`kareler/<t_us>.jpg`).
+    Kuyruk 6 kare; dolarsa kare düşer ve sayılır (`ozet.json` → `video.kayit`). OpenCV tek iş parçacığında, süreç
+    `nice 5` ile (OpenCV varsayılanda her küçültmeyi 16 çekirdeğe yayıyordu; tek adımlı kutu süzgeci tek çekirdekte
+    16 ms, iki adımlı 3.4 ms). Kayıt koşu sırasında yalnız diske yazar; RTF'e etkisi `implementation/gorev-grubu-08.md`.
 - Koşu bitince `araclar/video.py` videoyu birleştirir: 2000×720, 15 fps.
+  - Uygulamada: yalnız koşu klasörünün dosyalarından (`kareler/`, `dogru_cevap.csv`, `algilama.csv` + `kutular.csv`,
+    `tez_los.csv`, `follow_target.csv`, `ozet.json`, ULog); `rapor.write`'ın `video` kancası `ozet.json` ve CSV'ler
+    yazıldıktan sonra çağırır, sonuç `ozet.json` → `video`. Saklanan karelerle `video.py <klasör>` aynı videoyu yeniden
+    yapar. "PX4'ün elindeki son model sonucu": gönderim anı, yoksa gecikme hattından çıkış (reddedilen), yoksa hazır olma
+    (hakem kaynağı) zamanı ≤ o an olan en yeni sonuç.
   - **Sol (1280×720), dron kamerası:**
     - Hakemin kutuları: hedef mavi, diğer insanlar turuncu.
     - O anda PX4'ün elindeki son model sonucu: seçilen kutu kalın kırmızı ve güven değeriyle, diğerleri ince çizgiyle.
@@ -402,6 +417,13 @@
     - Kameranın zemindeki izdüşümü ve son 10 s'lik iz.
     - `follow_me`'de gönderilen `FOLLOW_TARGET` noktası.
     - Ölçek çubuğu ve yatay mesafe.
+    - Uygulamada (8. grup, kullanıcı isteği 13.11: 7. gruptaki açıklayıcı animasyonun öğeleri): kuzey yukarı, ölçek
+      video boyunca sabit (dron ile kişiyi sığdıracak kadar), merkez ikisinin ortasını yumuşak izler; kişinin bütün yolu
+      soluk; 3 m halkası ve kameranın yakın görüş sınırı halkası (kişinin çevresinde); olması gereken "arka" noktası
+      (kişi yürürken `FLW_TGT_DST` gerisi); son 3 s'nin `FOLLOW_TARGET` noktaları (konum titreşimi görünür); `follow_me`'de
+      ULog'dan PX4'ün hedef kestirimi, varsaydığı rota (ok), gönderdiği yer (yörünge açısı hedefi) ve hedeflediği yer
+      (rota + `FLW_TGT_FA`); altta durum satırı: kilit kaybı, hedef yok, yakın sınır ya da 3 m içinde, kadraj dışı →
+      kırmızı; köşede aşma → turuncu; yoksa PX4'ün kişinin hızı kestirimi (≥ 1 m/s ise "rota güncellenir") ve rotası.
 - Kodlama:
   - Kareler ham BGR olarak `ffmpeg`'e borudan verilir (`rawvideo`, `bgr24`).
   - `ffmpeg` ayarları: `libx264`, `-pix_fmt yuv420p`, `-preset veryfast`, `-crf 23`, `-movflags +faststart`. Video VLC 3.0.20'de açılır.
@@ -627,7 +649,7 @@ flowchart LR
 | `araclar/goruntu.py`, `kusurlar.py`, `algilama.py` | yeni | Kare okuyucu, kusur aşaması (Faz A kapalı), algılayıcı arayüzü + YOLO + model süreci |
 | `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv`. 6. grupta: `konumlama.py` (konum, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `takip.py`'ye konum + FOLLOW_TARGET, `follow_target.csv`; `px4_baglanti.py`'ye `FrameStream`, `FollowTargetSender`, `pose_hook`; `simulasyon.py`'ye `restart_logger` |
-| `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme |
+| `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme. 8. grupta: `goruntu_yayini.py` kayıt kısmı (`FrameRecorder`, `FrameSink`, `GridPicker`), `video.py` (çevrimdışı birleştirme, kamera paneli, kuşbakışı, durum satırı, ffmpeg borusu); `yayin.sdp` ve RTP 11. grupta |
 | `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti) |
 | `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html` |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
@@ -683,7 +705,7 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 | `algilama.model`, `imgsz`, `conf`, `sinif`, `cekirdek` | yol (`~` açılır); `.pt`'deki (tam sayı ≥ 32); 0.25 ((0, 1]); adı `person` olan (ad ya da numara ≥ 0); 4 (≥ 1) | Komut satırı ezer (`--model`, `--imgsz`, `--conf`, `--sinif`) | 4 |
 | `gecikme.ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm` | hepsi 0 (ilk ikisi ≥ 0) | Yakalama → PX4 yolu; `--gecikme-ms` = `ek_ms` | 12 |
 | `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış (yazılırsa senaryo yüklenirken "Faz B'de uygulanacak"); alanları `kusurlar.check` denetler | 4 |
-| `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc`; `--kareleri-sakla` yalnız komut satırında | `mp4: false`: 2 (video zaten yok) · `mp4`, `--kareleri-sakla`: 8 · `qgc`: 11 |
+| `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc`; `--kareleri-sakla` yalnız komut satırında | `mp4: false`: 2 (video zaten yok) · `mp4`, `--kareleri-sakla`: 8 (bağlandı) · `qgc`: 11 |
 | `drone.mod` | kaldırılır | Yerine `takip.kaynak` | 1 |
 
 ### Teslim sırası ve 15.11'deki en az demo
@@ -1060,7 +1082,8 @@ Model kutusuyla rota 2 s sonra gürültüyle oynamaya başladı, dron 629–699�
 | `test_kusurlar.py` | Boş ayarda karenin bit bit aynı kalması; Faz B alanının ve bilinmeyen alanın reddi |
 | `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw |
 | `test_toplu.py` (7. grup) | Çok koşunun dağılımı (ort / en az / en çok, NaN'lı koşu), yalnız başlayamayan koşunun yeniden denenmesi, `senaryo.py` komutu, özet dosyaları |
-| `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart` |
+| `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü |
+| `test_goruntu_yayini.py` (8. grup) | Kare seçimi (sim zamanında 15 fps ızgarası, pencere, kaybolan kare), 1280×720 JPEG, dolu kuyrukta kare düşürme ve sayma |
 | `test_hedef.py` (eklenir) | Yeni senaryo alanları; hatanın alan adıyla verilmesi; `tez_los`'ta `mod_adi` zorunluluğu |
 
 **SITL kabul testleri** (pencere yok)
@@ -1078,6 +1101,8 @@ Model kutusuyla rota 2 s sonra gürültüyle oynamaya başladı, dron 629–699�
      (Uygulamada: `follow_target` ULog'a kaydedicinin yeniden başlatılmasıyla girer, 6. madde "Kaydedici bulgusu";
      ULog'daki sayı ≈ 2/s'dir, gönderilen sayı değildir; mod `vehicle_status.nav_state` 19 ile `ucus.ulg`'den okunur.)
   5. `kosu.mp4`'ü `ffprobe` okur: h264, yuv420p, 2000×720; süre kayıt penceresinin ±1 s içindedir.
+     (Uygulamada: video hakemin kaydını, yani takip başını da kapsar; karşılaştırma `ozet.json` → `olcutler.kayit_suresi_s`
+     ile yapılır, 9. madde.)
   6. `ozet.json`'da "Ölçüt Tanımları"ndaki bütün anahtarlar bulunur (değer NaN olabilir); `rapor.html` yazılır.
   7. Temiz kapanış; harici modlu koşuda "unresponsive" görülmez.
 
@@ -1191,7 +1216,7 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
   listeler. Ayrıca bu durumda rapor yazılmadan çıkan bir hata vardı (ULog'da `debug_vect` yokken); düzeltildi, testli.
 - **Model bu açıdan kişiyi sık kaçırıyor (6. grupta ölçüldü, m08 / Ortatepe):** `takip_yuruyen`'de (8 m / 45°) hedef
   açıkça görünürken işlenen karelerin %26–34'ünde hiç kutu yok (dört koşu).
-- **Uygulamada sabitlenecek sürümler (TBD):** GStreamer, `python3-gi` ve `ffmpeg` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta sabitlendi.)
+- **Uygulamada sabitlenecek sürümler (TBD):** GStreamer ve `python3-gi` apt paketleri; COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta, `ffmpeg` 7:6.1.1-3ubuntu5 (libx264-164 2:0.164.3108+git31e19f9-1) 8. grupta sabitlendi.)
 - **Yeniden kilidin zamanı (5. grupta, karar m11 / kullanıcı ile):** kilit düşünce hakem bir sonraki işlenen karede
   yeniden kilitler; operatörün tepki süresi 0'dır (iyimser). `kalabalik_park`'ın ilk denemelerinde kısmi örtülmede kilit
   kaybından 70–200 ms sonra yeniden kilit görüldü. Gerçekte operatör ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi devreye girer.

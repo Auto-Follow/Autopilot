@@ -520,17 +520,13 @@ def unwired(sc: Scenario) -> list[str]:
     found += [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
     if v.qgc:
         found.append(("video.qgc: true (--qgc)", 11))
-    if v.keep_frames:
-        found.append(("--kareleri-sakla", 8))
     return [f"{what}: {in_group(group)} bağlanacak" for what, group in found]
 
 
-def not_in_effect(sc: Scenario) -> dict[str, int]:
-    """Settings left at a default that a later task group wires in -> that group; they do not act in this run."""
-    found = {}
-    if sc.video.mp4:
-        found["video.mp4"] = 8  # no kosu.mp4 yet
-    return found
+def not_in_effect(_sc: Scenario) -> dict[str, int]:
+    """Settings left at a default that a later task group wires in -> that group; they do not act in this run. None
+    since task group 8 (kosu.mp4); the dict stays in ozet.json "ayarlar" for the groups that add settings."""
+    return {}
 
 
 def check_wired(sc: Scenario) -> None:
