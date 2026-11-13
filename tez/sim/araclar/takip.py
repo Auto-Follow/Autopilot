@@ -11,9 +11,9 @@ Selection (Selection.step, once per processed model frame):
     next processed frame tries the referee again (re-lock, counted).
 
 Line of sight, from the camera to the target in body FRD (x nose, y right, z down), unit vectors:
-  (i)  model: the chosen box's centre -> Camera.pixel_to_los (camera_info, distortion) -> camera_to_body(45 deg).
-       The nominal mount, like the Pi would use its measured one, not the mount Gazebo reports: a mount error can be
-       put in on purpose later.
+  (i)  model: the chosen box's centre -> Camera.pixel_to_los (camera_info, distortion) -> camera_to_body(tilt), the
+       scenario's kamera.egim_deg (nominal 45 deg). The nominal mount, like the Pi would use its measured one, not
+       the mount Gazebo reports: a mount error can be put in on purpose later.
   (ii) hakem: the referee's los_govde of the frame while the target is visible, NaN while it is not; every camera
        frame (30 Hz), once the referee's row and segmentation frame are both in (that delay is measured too).
 
@@ -296,13 +296,14 @@ class Tracker:
         locator: konumlama.Locator | None = None,
         world: konumlama.WorldGeo | None = None,
         truth: Callable[[float], tuple[float, float]] | None = None,
+        mount: np.ndarray = NOMINAL_MOUNT,
     ) -> None:
         """clock: sim <-> wall; out: run folder (tez_los.csv, follow_target.csv); detections: algilama.csv (None
         without a model); camera: the drone camera's camera_info once known (Recorder.camera); extra_ms [ms]:
         artificial delay (0 until task group 12); now: monotonic clock [s]; follow: send FOLLOW_TARGET (follow_me);
         locator: flat-ground positions of the model's boxes (None: none); world: the Gazebo world's geodetic origin
         (evaluation columns; the referee's FOLLOW_TARGET); truth: the target's true (x, y) [m] at a sim time
-        (evaluation only)."""
+        (evaluation only); mount: C_cb (optical -> body FRD) of LOS (i), kamera.camera_to_body(the scenario's tilt)."""
         if source not in SOURCES:
             raise ValueError(f"takip.los: {list(SOURCES)} olmalı, gelen: {source!r}")
         if follow and source == "hakem" and world is None:
@@ -317,6 +318,7 @@ class Tracker:
         self._locator = locator
         self._world = world
         self._truth = truth
+        self.mount = np.asarray(mount, dtype=float)
         self._poses: konumlama.PoseHistory | None = None
         self.poses: konumlama.PoseHistory | None = None  # the last link's history, kept after detach (metrics)
         self.selection = Selection()
@@ -371,7 +373,7 @@ class Tracker:
             referee = self._referees.get(key)
         choice = self.selection.step(r.kutular, referee)
         camera = self._camera()
-        los = los_of_box(camera, choice.box) if choice.box is not None and camera is not None else None
+        los = los_of_box(camera, choice.box, self.mount) if choice.box is not None and camera is not None else None
         self._note(choice, r.t)
         extra = _choice_columns(choice, los)
         fix = None

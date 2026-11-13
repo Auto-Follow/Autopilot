@@ -4,8 +4,9 @@ Spec 2026-11-10-m06-sim-ortami, 6 and "Varsayımlar" 5-6 (temporary: m10 brings 
 
 Locator.locate, once per processed frame with a chosen box:
   1. foot point: the bottom middle of the box ((u0 + u1) / 2, v1), pixel edges like the detector's boxes;
-  2. the pixel's ray through camera_info (kamera.Camera.pixel_to_los, distortion included) and the nominal mount
-     (45 deg below the nose, camera FRD offset (0.151, 0, 0.035) m; the Pi uses its measured one), rotated into NED
+  2. the pixel's ray through camera_info (kamera.Camera.pixel_to_los, distortion included) and the mount (the
+     scenario's tilt below the nose, nominal 45 deg; camera FRD offset (0.151, 0, 0.035) m; the Pi uses its measured
+     one), rotated into NED
      with the EKF attitude of the frame's capture time, from the camera's EKF position;
   3. intersected with the ground: the horizontal plane GROUND_BELOW_HOME_M under the home position (flat ground at
      the take-off point's height; base_link is that high above the landing gear's feet);
@@ -46,8 +47,9 @@ import numpy as np
 import kamera
 
 # Nominal mount of the drone camera (spec "Kamera parametreleri"; models/x500_tez): the tracking side uses these, not
-# what Gazebo reports, like the Pi uses its measured mount; a mount error can be put in on purpose later.
-MOUNT_PITCH_DOWN = math.radians(45.0)  # [rad] below the nose
+# what Gazebo reports, like the Pi uses its measured mount; a mount error can be put in on purpose later. A run with
+# another scenario tilt (kamera.egim_deg) gives Locator / takip.Tracker kamera.camera_to_body(that tilt) instead.
+MOUNT_PITCH_DOWN = math.radians(kamera.NOMINAL_TILT_DEG)  # [rad] below the nose
 NOMINAL_MOUNT = kamera.camera_to_body(MOUNT_PITCH_DOWN)  # C_cb, optical -> body FRD
 NOMINAL_OFFSET_FRD = np.array([0.151, 0.0, 0.035])  # [m] camera optical centre from base_link, body FRD
 # [m] base_link above the ground when the drone stands on it: bottom of the x500 skids (base_link_collision_3/4 at

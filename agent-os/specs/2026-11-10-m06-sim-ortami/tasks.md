@@ -585,16 +585,32 @@ Faz B aynı spec'e bağlıdır, ilk PR merge edildikten sonra yeni bir dalda (`o
 
 **Kabul Ölçütleri:** `TEZ_LOS` yolu etkilenmez; video yolundaki gecikme ve kayıp ayarlanabilir ve ölçülür.
 
-#### Görev Grubu 17: Yaklaşma mesafelerinin gerçek modelle yeniden ölçülmesi
-**Bağımlılık:** Görev Grubu 15 (isteğe bağlı), m15 hazırsa o da · **Emek:** ~1 gün (koşu süresi ağırlıklı)
+#### Görev Grubu 17: Yaklaşma mesafelerinin gerçek modelle yeniden ölçülmesi — kamera eğimi (30–45°) × yükseklik × mesafe taraması (öne alındı, 14.11)
+**Bağımlılık:** — (öne alındı; Görev Grubu 15'in kamera kusurları olmadan, m15 yok: stok Follow Me) · **Emek:** ~1.5 gün (koşu süresi ağırlıklı) · Ayrıntı: `implementation/gorev-grubu-17-on-kamera-acisi.md`
 
-- [ ] 17.0 45° raporundaki sayıların yeni simde doğrulanması
-  - [ ] 17.1 Testleri yaz (2–3 test): raporun "zor yolu" senaryosunun (yürü, dön, dur, birden koş, geri dön) doğrulaması; çoklu koşu özet tablosu
-  - [ ] 17.2 3'er koşu: 8/8, 10/10, 15/12; aralık sınırları (8 m'de 6.5 ve 10 m; 10 m'de 8 ve 12 m); olumsuz kontrol 6/8; `duz_alan` ve `cayir`; `follow_me` (m15 hazırsa o da)
-  - [ ] 17.3 Sonuçlar (kadrajda kalma, gerçekten görünür kalma, en uzun kayıp, konum hatası) spec "Yaklaşma mesafesi" bölümüyle karşılaştırılır ve bölüm güncellenir
-  - [ ] 17.4 Doğrulama: pytest + ruff + `verify_pin.sh --worktree`; koşu klasörleri `karsilastir.py` ile tek tabloda; seçilmiş birkaç `kosu.mp4` Ahmet'in VLC kontrolünden geçer
+Kullanıcının isteği (14.11): kamera raporundaki modelsiz 30–45° × mesafe taramasını bu modelle (v0.2, CPU, kapalı döngü,
+stok Follow Me) yeniden yapmak ve "hangi seçenek benim için daha iyi" sorusuna gerekçeli bir öneri vermek; ek istekler:
+düşük yükseklik bandı 4–7 m (30° / 4 m / 8 m dahil), modelin hangi koşullarda iyi algıladığı, düşük yüksekliğin gerçek
+bedeli, "30°'de yaklaşınca kişiyi kaçırma artıya döner mi?" sorusu. Varsayılan 45° montaj ve senaryo varsayılanları
+değişmez; karar kullanıcının ve ekibin. (Faz B'deki asıl tanım: aşağıdaki 17.2'nin ayarları; ızgara bunları kapsıyor,
+`cayir` dünyası ve olumsuz kontrol 6/8 aşama 1'de `duz_alan`'da.)
 
-**Kabul Ölçütleri:** Spec'teki yaklaşma mesafesi tablosu yeni ölçümlerle güncellenmiştir.
+- [ ] 17.0 Kamera eğimi ayarı, tarama ve öneri (13.11: 17.8'deki Ahmet'in VLC kontrolü dışında tamam)
+  - [x] 17.1 Testleri yaz: 30–45°'de bilinen poz → piksel → zemin gidiş-dönüşü, LOS (i), yakın/uzak sınır, Tracker'ın montajı, Gazebo eğiminin geri okunması, senaryo alanı / `--kamera-egim`, modelin eğimli kopyası (asıl model değişmez), videonun yakın sınırı (`test_kamera_egimi.py`); tarama: merkez mesafesi ve kadraj kontrolü, plan, başka bir yolun aynı ayarları, kaydırılmış yol, kaldığı yerden sürme, koşu başına kayıp / piksel boyu / yaklaşma / kadrajdan çıkış kenarı, geometrik paylar (kullanıcının sayılarıyla), kapılar ve puanlar, aşama 2 adayları (`test_tarama.py`)
+  - [x] 17.2 Kamera eğimi senaryo ve komut satırı ayarı (`kamera.egim_deg`, `--kamera-egim`; 0–60°, varsayılan 45°): Gazebo modelinin koşu kopyası, LOS (i), düz zemin konum, yakın sınır, video ve rapor tek kaynaktan; `ozet.json` → `ayarlar.kamera`, `kamera_montaji.egim_deg`
+    (Uygulamada: aşama 1'in 81 koşusunda Gazebo'nun eğimi senaryoyla ≤ 1.7·10⁻⁵° aynı; LOS (i)–(ii) açı farkı 0.27–0.40°, 45°'deki gibi; kutunun konum payı 0.23–0.26 m, eğimden bağımsız.)
+  - [x] 17.3 Tarama sürücüsü `araclar/tarama.py` (plan / kos / ozet; `durum.json` ile kaldığı yerden sürer) ve karar kuralı koşulardan önce belgeye yazıldı (kapılar, 7 grup, eşit ağırlık, aşama 2 adayları)
+  - [x] 17.4 Aşama 1: 81 bileşim × 1 koşu, videosuz (ana bant 30/35/40/45° × 8/10/12/15 m × 0.8/1/1.25 merkez mesafesi + 8 m; düşük bant 4/5/6/7 m × merkez + 8 m, yalnız `duz_alan`); `FLW_TGT_HT` < 8'in uygulandığı geri okuma ve ULog yüksekliğiyle doğrulandı
+    (Uygulamada: 81/81 koşu, 23 bileşim kapıdan geçti; 12 m ve üstünde model kişiyi bulamıyor, 4–7 m'de köşede dron kişinin üstüne geliyor; düşük bantta 26/26 koşuda `FLW_TGT_HT` PX4'te istenen değerde, ULog yüksekliği ±0.15 m. Önceki ajan 62/81'de durduruldu, aynı komut kaldığı yerden sürdü.)
+  - [x] 17.5 Aşama 2: adaylar + 45° 8/8 ve 10/10 başvuruları 3'er koşu (videolu); en iyi 1–2 aday ve 45° 10/10 için `--los hakem` 3'er koşu ve `kivrimli_yuruyus` yolu 3'er koşu
+    (Uygulamada: 8 bileşim × 3 = 24 koşu; kapıyı 3/3 geçen 35° 7/10, 30° 6/10.4, 35° 8/11.4, 40° 12/11.4, hiçbir 45° ayarı. Mükemmel algılayıcı ve kıvrımlı yol kuralın ilk ikisi, 35° 8/11.4 ve 45° 10/10 için 3'er koşu (24): hakemle dördü de geçti; kıvrımlı yolda yalnız 35° 8/11.4 3/3. Toplam 129 tarama koşusu.)
+  - [x] 17.6 Ölçütler ve sonuç: sonuç tablosu (artı/eksi), ısı haritaları, aday karşılaştırması, kamera raporunun modelsiz sonuçlarıyla yan yana (ne değişti, neden), "yaklaşınca kaçırma" sorusunun cevabı (yaklaşma payı, genişlik, piksel boyu, ölçülen yaklaşma), modelin hangi koşullarda iyi algıladığı (lojistik regresyon, ölçülemeyenler, Ortatepe'ye öneriler); öneri (açı, yükseklik, mesafe, gerekçe, bedeli, ikinci seçenek)
+    (Uygulamada: öneri 35° · 8 m / 11.4 m, kuralın birincisi 35° · 7 m / 10 m, ikinci seçenek 30° · 6 m / 10.4 m, 45°'de kalınacaksa 10 m / 10 m; köşe yaklaşması ≈ 6.2 m mutlak, mesafeyle ölçeklenmiyor; algılamayı piksel boyu belirliyor. Belge bölüm 4–9.)
+  - [x] 17.7 Belgeler: spec "Yaklaşma mesafesi", "Kamera parametreleri", senaryo alanları, Dosya / Test Planı, README, `kabul-kosulari.md`; gerçeklik farkları (montaj parçası, CM3 FOV, Hailo, rüzgâr, SHGM, alan) ve düşük yüksekliğin bedeli; repo dışında görseller, iki video, özet PDF
+  - [ ] 17.8 Doğrulama: pytest + ruff + `verify_pin.sh --worktree`; F0 / F1; videoların `ffprobe`'u; Ahmet'in VLC kontrolü (önerilen ayar ve 45° 10/10)
+    (13.11: 270 test geçti, ruff temiz, KILIT SAGLAM, F0 ve F1 GEÇTİ; videolar h264 / yuv420p / 2000×720. Ahmet'in VLC kontrolü bekleniyor: "Kendin dene" 4.)
+
+**Kabul Ölçütleri:** Spec'teki yaklaşma mesafesi bölümü yeni ölçümlerle güncellenmiştir; öneri ölçütlere dayanır ve bedeliyle birlikte yazılıdır; varsayılanlar değişmemiştir.
 
 ---
 
@@ -611,7 +627,7 @@ Faz B aynı spec'e bağlıdır, ilk PR merge edildikten sonra yeni bir dalda (`o
 9. Görev Grubu 9 — **15.11 en az demo**
 10. Görev Grupları 10, 11, 12 (birbirinden bağımsız, her sırayla) → 13 — Faz A'nın kalanı, aynı PR, merge'den önce
 11. Görev Grubu 14 — çatı repo, ayrı PR (sürümler belli olunca, paralel)
-12. Görev Grupları 15 → 16 → 17 — Faz B, ikinci PR
+12. Görev Grupları 15 → 16 → 17 — Faz B, ikinci PR (17, kullanıcının isteğiyle 14.11'de öne alındı ve bu dalda genişletilerek yapıldı: kamera eğimi × yükseklik × mesafe taraması; ayrı commit, `implementation/gorev-grubu-17-on-kamera-acisi.md`)
 
 <details>
 <summary>Ek: Claude'un çalışma sırası tahmini (ekip takvimi değildir)</summary>

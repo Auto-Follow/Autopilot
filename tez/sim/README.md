@@ -260,6 +260,11 @@ dosyasında 8/8). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
 - `algilama` (varsayılan açık): `etkin`, `model` (yol), `imgsz` (varsayılanı `.pt`'deki), `conf` (0.25), `sinif`
   (ad ya da numara; varsayılan adı `person` olan), `cekirdek` (4)
 - `gecikme` (hepsi 0): `ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm`
+- `kamera` (varsayılan `{egim_deg: 45}`): `egim_deg` kameranın burnun altındaki eğimi, 0–60° (komut satırında
+  `--kamera-egim`). Gerçek montaj ve `models/x500_tez` 45°'dir; başka bir eğimde koşu klasörüne modelin eğimli bir
+  kopyası yazılır (`x500_tez_egim<eğim>/`, git dışında), LOS (i), düz zemin konum hesabı, kameranın yakın görüş
+  sınırı ve video aynı eğimi kullanır; Gazebo'nun bildirdiği eğim koşu sonunda senaryonunkiyle karşılaştırılır
+  (`ozet.json` → `ayarlar.kamera`, `kamera_montaji.egim_deg`). Gerçek araçta eğim bir montaj parçasıdır.
 - `kusurlar` (varsayılan `{}`, kapalı): Faz A'da kamera kusurları kapalıdır, kare modele değişmeden gider. Ayrılmış
   alanlar (`gurultu`, `bulaniklik`, `rolling_shutter`, `pozlama`) yazılırsa "Faz B'de uygulanacak" hatası verilir
 - `video`: `mp4` (true), `qgc` (false)
@@ -313,6 +318,30 @@ de "kadrajda" sayılır. Dronda, kameranın yanında aynı açıda yarım çöz�
 | `kadrajdaki_diger_insan` | o karede kadrajdaki diğer insan sayısı |
 
 Rapor bunlardan "gerçekten göründüğü süre" ve "kadrajda ama örtülü" oranlarını verir.
+
+### Kamera eğimi × yükseklik × mesafe taraması (`tarama.py`)
+
+Bir takip senaryosunu kamera eğimi, yükseklik ve geride durma mesafesinin bir ızgarasında koşar (Görev Grubu 17'nin
+öne alınmış hâli; sonuçlar ve karar kuralı
+`agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-17-on-kamera-acisi.md`). Her bileşimin
+senaryosu temel senaryonun yolunun doğuya kaydırılmış hâlidir (kişi dronun tam `d` önünde başlar); mesafe
+`d = h / tan(eğim)` × çarpanlar ve ek mesafeler; kişinin düz uçuşta kadraja sığmadığı bileşim koşulmaz.
+
+```bash
+$P tez/sim/araclar/tarama.py plan --cikti tez/sim/sonuclar/T --egim 30 35 40 45 --yukseklik 8 10 12 15 --carpan 0.8 1 1.25 --ek-mesafe 8
+$P tez/sim/araclar/tarama.py plan --cikti tez/sim/sonuclar/T --egim 30 35 40 45 --yukseklik 4 5 6 7 --ek-mesafe 8 --ekle
+$P tez/sim/araclar/tarama.py kos --cikti tez/sim/sonuclar/T --asama asama1 --tekrar 1 -- --videosuz   # yarıda kalırsa aynı komut kaldığı yerden sürer
+$P tez/sim/araclar/tarama.py ozet --cikti tez/sim/sonuclar/T --asama asama1                          # kapılar, puanlar, aşama 2 adayları
+$P tez/sim/araclar/tarama.py kos --cikti tez/sim/sonuclar/T --asama asama2 --tekrar 3 --sadece e45_h10_d10.0 e30_h8_d13.9
+$P tez/sim/araclar/tarama.py kos --cikti tez/sim/sonuclar/T --asama asama2_hakem --tekrar 3 --sadece e45_h10_d10.0 -- --los hakem
+$P tez/sim/araclar/tarama.py plan --cikti tez/sim/sonuclar/T --temel kivrimli_yuruyus --egim 45 --yukseklik 10 --ekle   # aynı ayar başka yolda
+$P tez/sim/araclar/tarama.py kos --cikti tez/sim/sonuclar/T --asama asama2_kivrimli --tekrar 3 --sadece kivrimli_yuruyus_e45_h10_d10.0
+```
+
+Çıktı: `T/plan.json` ve `T/senaryolar/` (bileşimlerin senaryoları), `T/<aşama>/<bileşim>/` (`toplu.py` klasörü),
+`T/<aşama>/durum.json` (biten bileşimler), `T/<aşama>/ozet.csv` ve `ozet.json` (her bileşimin ölçütleri, kapıları,
+grup puanları, sırası; geometrik paylar: kameranın yakın/uzak sınırı, yaklaşma payı, kişinin mesafesinde görüş
+genişliği; ölçülen köşe ve duruş yaklaşması, kişinin kadrajdan hangi kenardan çıktığı).
 
 ### Video (`kosu.mp4`)
 
@@ -421,7 +450,7 @@ okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modü
 | `tez/sim/derle.sh` | Stok PX4 SITL + Gazebo eklentileri → `build/px4_sitl_tez` |
 | `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır (stok 4001, başlangıç parametreleri) |
 | `tez/sim/parametreler/gercek_dron.params`, `sim.params` | Başlangıç parametreleri (`AD DEĞER  # kaynak`); `araclar/parametreler.py` okur |
-| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası |
+| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası; başka bir eğim (`kamera.egim_deg`) koşu klasörüne kopyalanır, bu dosya değişmez |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/worlds/cayir.sdf`, `cayir.yaml` | Dokulu çayır: zemin ve ağaçlar `cayir.yaml`'dan üretilir (`araclar/dunya.py`) |
 | `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız ve manyetometresiz hali) |
@@ -431,7 +460,7 @@ okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modü
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
 | `tez/sim/modeller.yaml` | Bilinen model dosyaları (ad, sha256, boyut, kaynak); dosyalar repo dışında, `~/auto-follow-modeller/` |
 | `tez/env/model-requirements.txt` | Model paketleri (ultralytics, CPU torch/torchvision) ve bağımlılıkları, sabit sürümle |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, konum, takip iş parçacığı, `tez_los.csv`, `follow_target.csv`), `konumlama.py` (düz zemin konum hesabı, EKF poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `gecikme.py` (sıra koruyan gecikme hattı), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor: kontroller, gruplu ölçümler, grafikler), `olcum.py` (bütün ölçütler, ULog özeti), `toplu.py` (aynı senaryonun N koşusu ve dağılımı), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, `FOLLOW_TARGET`, poz kancası, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/MP4), `goruntu_yayini.py` (videonun kamera karelerini koşu sırasında ayrı süreçte kaydeder), `video.py` (`kosu.mp4`: kamera + kuşbakışı, çevrimdışı), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, konum, takip iş parçacığı, `tez_los.csv`, `follow_target.csv`), `konumlama.py` (düz zemin konum hesabı, EKF poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `gecikme.py` (sıra koruyan gecikme hattı), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor: kontroller, gruplu ölçümler, grafikler), `olcum.py` (bütün ölçütler, ULog özeti), `toplu.py` (aynı senaryonun N koşusu ve dağılımı), `tarama.py` (kamera eğimi × yükseklik × mesafe taraması, karar kuralı), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, `FOLLOW_TARGET`, poz kancası, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/MP4), `goruntu_yayini.py` (videonun kamera karelerini koşu sırasında ayrı süreçte kaydeder), `video.py` (`kosu.mp4`: kamera + kuşbakışı, çevrimdışı), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 

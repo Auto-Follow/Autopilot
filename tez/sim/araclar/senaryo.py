@@ -5,6 +5,7 @@
     ... --ekransiz          no Gazebo window
     ... --dogrula           overhead camera checks that the rendered target is where the ground truth says
     ... --param AD=DEĞER    one more PX4 start parameter after the scenario's takip.px4_parametreleri (repeatable)
+    ... --kamera-egim 30    camera tilt below the nose for this run (kamera.egim_deg; the real mount: 45)
     ... --help              every option: model (--model, --imgsz, --conf, --sinif, --modelsiz), tracking (--takip,
                             --mod-adi, --los, --px4-baslat), delay and video (--gecikme-ms, --qgc, --videosuz,
                             --kareleri-sakla); each replaces the scenario's value
@@ -15,8 +16,12 @@ from PX4, take off, switch by name to the mode of the scenario's tracking source
 "follow_me" = "Follow Target", "tez_los" = takip.mod_adi / --mod-adi), record ground truth while the target walks,
 stop the model process and the TEZ_LOS / FOLLOW_TARGET streams, land, shut down, collect the ULog, write the report
 to tez/sim/sonuclar/<date>_<scenario>/.
-ozet.json "ayarlar" holds every setting of the run (scenario + command line). A setting that a later task group of
-spec 2026-11-10-m06-sim-ortami wires in, or a mode name PX4 does not offer, stops the run before anything starts.
+ozet.json "ayarlar" holds every setting of the run (scenario + command line).
+The camera tilt (kamera.egim_deg / --kamera-egim, nominal 45 deg) is one setting for everything: a tilt other than
+models/x500_tez's own gives the run a tilted copy of the model (hedef.camera_model), LOS (i), the flat-ground position,
+the camera's near limit and the video use it, and the tilt Gazebo reports is compared with it after the run.
+A setting that a later task group of spec 2026-11-10-m06-sim-ortami wires in, or a mode name PX4 does not offer,
+stops the run before anything starts.
 
 The model (algilama.py) runs in its own process on the newest camera frame only, from the moment Gazebo publishes
 until the recording ends; frames that arrive while it is busy are skipped and counted. The tracking side (takip.py)
@@ -61,6 +66,7 @@ import dogrulama
 import goruntu
 import goruntu_yayini
 import hedef
+import kamera
 import konumlama
 import olcum
 import parametreler
@@ -81,6 +87,7 @@ LOCK_EVENTS_LISTED = 12  # lock events written into the report's events one by o
 # follow_me: FOLLOW_TARGETs sent before PX4's logger is restarted, so that the follow_target topic exists (see
 # simulasyon.restart_logger); ~0.3 s after the first one. The restart must be done before the window starts.
 LOGGER_RESTART_AFTER = 3
+TILT_TOLERANCE_DEG = 0.05  # [deg] the tilt Gazebo reports must be the scenario's (the copy writes 6 decimals of rad)
 # PX4 mode (AVAILABLE_MODES name) of each tracking source; chosen by name, never by number (tez_los: takip.mod_adi)
 TRACKING_MODES = {"yok": HOLD_MODE_NAME, "follow_me": FOLLOW_TARGET_MODE_NAME}
 
@@ -580,6 +587,8 @@ def run(
     detections = algilama.DetectionLog(out, clock, takip.ROW_COLUMNS) if model_file is not None else None
     tracker = None
     world = konumlama.world_geo(hedef.SIM_DIR / "worlds" / f"{sc.world}.sdf")  # the drone's GPS comes from it
+    mount = kamera.camera_to_body(math.radians(sc.camera.tilt_deg))  # C_cb of LOS (i) and the flat-ground position
+    log(f"Kamera eğimi {sc.camera.tilt_deg:g}° (kamera.egim_deg; gerçek montaj {kamera.NOMINAL_TILT_DEG:g}°)")
     if t.los is not None:  # the tracking threads: selection, LOS, position, delay line, TEZ_LOS (+ FOLLOW_TARGET)
         tracker = takip.Tracker(
             t.los,
@@ -589,9 +598,10 @@ def run(
             lambda: rec.camera if rec is not None else None,
             sc.delay.extra_ms,
             follow=t.source == "follow_me",
-            locator=konumlama.Locator() if model_file is not None else None,
+            locator=konumlama.Locator(mount=mount) if model_file is not None else None,
             world=world,
             truth=lambda s: sc.truth(s)[:2],
+            mount=mount,
         )
     model = None
     frames = None
@@ -618,6 +628,8 @@ def run(
         shutil.copy(sc.source, out / "senaryo.yaml")
         check_pos = dogrulama.camera_pose(sc) if verify else None
         world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "")
+        tilted = hedef.camera_model(sc, out)
+        run_settings["kamera"]["gazebo_modeli"] = str(tilted / "model.sdf") if tilted else "models/x500_tez/model.sdf"
         rec = Recorder(sc, sc.world, tracker.on_referee if tracker is not None else None)
         check = dogrulama.OverheadCheck(sc, check_pos) if verify else None
     except BaseException:
@@ -680,6 +692,13 @@ def run(
             "Gazebo'dan alıyor olabilir"
         )
     log(f"RTF (kayıt penceresi): ort. {more['rtf_ort']:.3f}, en düşük {more['rtf_min_5s']:.3f} ({RTF_SPAN:.0f} s'lik)")
+    gazebo_tilt = kamera.tilt_of_mount(rec.camera_dcm) if rec.camera_dcm is not None else math.nan
+    if not abs(gazebo_tilt - sc.camera.tilt_deg) <= TILT_TOLERANCE_DEG:
+        events.append(
+            f"Kamera eğimi: Gazebo'daki model {gazebo_tilt:.2f}°, senaryo {sc.camera.tilt_deg:g}° (en çok "
+            f"{TILT_TOLERANCE_DEG}° fark olabilir); ölçütler senaryonun eğimiyle hesaplandı"
+        )
+        completed = False
     distance = run_settings["px4_parametreleri"].get("FLW_TGT_DST", {}).get("px4") if t.source == "follow_me" else None
     data = olcum.RunData(
         start=sc.start_time,
@@ -704,6 +723,7 @@ def run(
         mode_switched_s=modes.switched_s,
         mode_changes=tuple(modes.changes),
         follow_distance=distance,
+        camera_tilt_deg=sc.camera.tilt_deg,
     )
     measured, sections = olcum.measure(data)
     more |= measured
@@ -736,6 +756,7 @@ def run(
         {
             "ofset_m": rec.camera_offset,
             "dcm_optik_govde": rec.camera_dcm.tolist() if rec.camera_dcm is not None else None,
+            "egim_deg": gazebo_tilt if math.isfinite(gazebo_tilt) else None,
         },
         (out / "ucus.ulg") if ulog else None,
         run_settings,
@@ -807,6 +828,13 @@ def parser() -> argparse.ArgumentParser:
         metavar="KOMUT",
         help="PX4 açıldıktan sonra çalışacak komut, takip.px4_baslat'tan sonra (birden çok)",
     )
+    g = ap.add_argument_group("kamera (senaryodaki kamera bloğunu ezer)")
+    g.add_argument(
+        "--kamera-egim",
+        type=float,
+        metavar="DERECE",
+        help=f"kameranın burnun altındaki eğimi (kamera.egim_deg); varsayılan montaj {kamera.NOMINAL_TILT_DEG:g}",
+    )
     g = ap.add_argument_group("gecikme ve video")
     g.add_argument("--gecikme-ms", type=float, metavar="MS", help="yakalama -> PX4 yoluna ek gecikme (gecikme.ek_ms)")
     g.add_argument("--qgc", action="store_true", help="QGroundControl'e canlı video (video.qgc: true)")
@@ -828,6 +856,7 @@ def command_line(args: argparse.Namespace) -> hedef.CommandLine:
         params=tuple(args.param),
         px4_start=tuple(args.px4_baslat),
         delay_ms=args.gecikme_ms,
+        camera_tilt_deg=args.kamera_egim,
         qgc=args.qgc,
         no_video=args.videosuz,
         keep_frames=args.kareleri_sakla,

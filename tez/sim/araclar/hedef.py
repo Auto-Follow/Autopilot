@@ -16,6 +16,7 @@ import dunya
 import numpy as np
 import yaml
 
+import kamera
 import kusurlar
 import parametreler
 import yuruyus
@@ -44,7 +45,17 @@ DETECTION_FIELDS |= {"cekirdek": "cores"}
 DELAY_FIELDS = {"ek_ms": "extra_ms", "titresim_ms": "jitter_ms", "saat_ofset_ms": "clock_offset_ms"}
 DELAY_FIELDS |= {"saat_kayma_ppm": "clock_drift_ppm"}
 FLAGS = {"algilama.model": "--model", "algilama.imgsz": "--imgsz", "algilama.conf": "--conf"}
-FLAGS |= {"algilama.sinif": "--sinif", "gecikme.ek_ms": "--gecikme-ms"}
+FLAGS |= {"algilama.sinif": "--sinif", "gecikme.ek_ms": "--gecikme-ms", "kamera.egim_deg": "--kamera-egim"}
+# kamera.egim_deg [deg]: the camera's tilt below the nose for this run (nominal: the real mount, kamera.py). The range
+# is the camera report's scan (0-60 deg): above it the bottom edge of the image nears the nadir (60 + 20.1 deg), below
+# 0 the camera would look up; frame_limits and the flat-ground position assume a camera that looks ahead and down.
+TILT_RANGE_DEG = (0.0, 60.0)
+DRONE_MODEL_DIR = SIM_DIR / "models" / "x500_tez"  # the real mount (45 deg); a run with another tilt gets a copy
+# camera_link pose of models/x500_tez relative to base_link: x y z [m] roll pitch yaw [rad]; only the pitch changes
+CAMERA_POSE = re.compile(
+    r'(<link name="camera_link">\s*<pose relative_to="base_link">)(\S+ \S+ \S+ \S+) (\S+) (\S+)(</pose>)'
+)
+DRONE_INCLUDE = "<uri>model://x500_tez</uri>"  # how worlds/*.sdf include the drone
 TAKEOFF_PARAM = "MIS_TAKEOFF_ALT"  # px4_baglanti.takeoff sets it from drone.yukseklik_m
 # Follow Me's height above home (spec 6): drone.yukseklik_m unless the scenario or --param gives it; the 45 deg camera
 # keeps the person in view only if height and distance change together (camera report, 6/8 failed every time)
@@ -128,6 +139,13 @@ class Detection:
 
 
 @dataclass(frozen=True)
+class CameraMount:
+    """kamera: the drone camera's mount for this run."""
+
+    tilt_deg: float = kamera.NOMINAL_TILT_DEG  # [deg] below the nose; TILT_RANGE_DEG
+
+
+@dataclass(frozen=True)
 class Delay:
     """gecikme: artificial delay on the capture -> PX4 path and the clock model of the sent time stamps."""
 
@@ -159,6 +177,7 @@ class CommandLine:
     params: tuple[str, ...] = ()  # --param NAME=VALUE, loaded after takip.px4_parametreleri
     px4_start: tuple[str, ...] = ()  # --px4-baslat, run after takip.px4_baslat
     delay_ms: float | None = None  # --gecikme-ms (gecikme.ek_ms)
+    camera_tilt_deg: float | None = None  # --kamera-egim (kamera.egim_deg)
     qgc: bool = False  # --qgc
     no_video: bool = False  # --videosuz
     keep_frames: bool = False  # --kareleri-sakla
@@ -185,6 +204,7 @@ class Scenario:
     delay: Delay = field(default_factory=Delay)
     defects: dict = field(default_factory=dict)  # kusurlar (kusurlar.py; all off in Faz A)
     video: Video = field(default_factory=Video)
+    camera: CameraMount = field(default_factory=CameraMount)
 
     @property
     def tracking_source(self) -> str:
@@ -279,7 +299,7 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
     if not isinstance(d, dict):
         raise ValueError(f"{path.name}: YAML sözlük (alan: değer) olmalı")
     top_keys = {"ad", "aciklama", "dunya", "drone", "takip", "hedef", "diger_insanlar", "zamanlama", "basari"}
-    top_keys |= {"algilama", "gecikme", "kusurlar", "video"}
+    top_keys |= {"algilama", "gecikme", "kusurlar", "video", "kamera"}
     _check_keys(d, top_keys, path.name)
     cli = command_line or CommandLine()
     d = _with_command_line(d, cli)
@@ -327,6 +347,7 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
         delay=_delay(_block(d, "gecikme", "{ek_ms: 0}")),
         defects=_defects(_block(d, "kusurlar", "{}")),
         video=_video(_block(d, "video", "{mp4: true, qgc: false}"), cli.keep_frames),
+        camera=_camera(_block(d, "kamera", "{egim_deg: 45}")),
     )
     sc.track, sc.walk_end = yuruyus.plan(
         sc.start, sc.start_time, _steps(sc.start, target.get("yol"), "hedef.yol"), sc.behaviour
@@ -353,6 +374,7 @@ def _with_command_line(d: dict, cli: CommandLine) -> dict:
         ("algilama", "conf"): cli.conf,
         ("algilama", "sinif"): cli.class_name,
         ("gecikme", "ek_ms"): cli.delay_ms,
+        ("kamera", "egim_deg"): cli.camera_tilt_deg,
         ("video", "mp4"): False if cli.no_video else None,
         ("video", "qgc"): True if cli.qgc else None,
     }
@@ -486,6 +508,18 @@ def _video(d: dict, keep_frames: bool) -> Video:
     return Video(_flag(d, "mp4", "video", default.mp4), _flag(d, "qgc", "video", default.qgc), keep_frames)
 
 
+def _camera(d: dict) -> CameraMount:
+    _check_keys(d, {"egim_deg"}, "kamera")
+    tilt = _number(d, "egim_deg", "kamera", CameraMount().tilt_deg, minimum=-math.inf)
+    lo, hi = TILT_RANGE_DEG
+    if not lo <= tilt <= hi:
+        raise ValueError(
+            f"kamera.egim_deg: {lo:g}–{hi:g}° arasında olmalı (--kamera-egim), gelen: {tilt:g} (kameranın burnun "
+            f"altındaki eğimi; gerçek montaj {kamera.NOMINAL_TILT_DEG:g}°)"
+        )
+    return CameraMount(tilt)
+
+
 def start_params(sc: Scenario, files: tuple[Path, ...] = parametreler.FILES) -> dict[str, parametreler.Param]:
     """Every PX4 start parameter of the run in load order (files -> takip.px4_parametreleri -> --param)."""
     return parametreler.merge(*(parametreler.read_file(f) for f in files), sc.tracking.px4_params)
@@ -503,6 +537,7 @@ def settings(sc: Scenario) -> dict:
         "gecikme": {key: getattr(sc.delay, attr) for key, attr in DELAY_FIELDS.items()},
         "kusurlar": copy.deepcopy(sc.defects),
         "video": {"mp4": v.mp4, "qgc": v.qgc, "kareleri_sakla": v.keep_frames},
+        "kamera": {"egim_deg": sc.camera.tilt_deg},
         "px4_parametreleri": {n: {"deger": p.value, "kaynak": p.source} for n, p in start_params(sc).items()},
         "henuz_bagli_degil": not_in_effect(sc),
     }
@@ -743,11 +778,49 @@ def make_skin(clothes: Clothes) -> None:
     tmp.replace(out)
 
 
+def model_tilt_deg(model_sdf: Path = DRONE_MODEL_DIR / "model.sdf") -> float:
+    """[deg] tilt of the camera_link of the drone model (models/x500_tez: the real mount)."""
+    found = CAMERA_POSE.search(model_sdf.read_text(encoding="utf-8"))
+    if found is None:
+        raise ValueError(f"{model_sdf}: camera_link pozu bulunamadı")
+    return math.degrees(float(found.group(3)))
+
+
+def tilted_model_sdf(text: str, tilt_deg: float) -> str:
+    """The drone model's SDF with camera_link pitched `tilt_deg` below the nose; everything else as it is. Both the
+    camera and the referee's segmentation camera ride on camera_link, so they turn together (as on the vehicle, where
+    another tilt means another mount part)."""
+    found = CAMERA_POSE.search(text)
+    if found is None:
+        raise ValueError("model.sdf: camera_link'in base_link'e göre pozu bulunamadı; eğimli kopya yapılamaz")
+    pitch = f"{math.radians(tilt_deg):.6f}"
+    return text[: found.start(3)] + pitch + text[found.end(3) :]
+
+
+def camera_model(sc: Scenario, out: Path) -> Path | None:
+    """The drone model of the run: None at the model's own tilt (the world includes models/x500_tez as it is), else
+    a tilted copy written into the run folder (<out>/x500_tez_egim<tilt>/, not in git) -> its folder."""
+    if math.isclose(sc.camera.tilt_deg, model_tilt_deg(), abs_tol=1e-4):
+        return None
+    folder = out / f"x500_tez_egim{sc.camera.tilt_deg:g}"
+    folder.mkdir(parents=True, exist_ok=True)
+    text = (DRONE_MODEL_DIR / "model.sdf").read_text(encoding="utf-8")
+    (folder / "model.sdf").write_text(tilted_model_sdf(text, sc.camera.tilt_deg), encoding="utf-8")
+    (folder / "model.config").write_text((DRONE_MODEL_DIR / "model.config").read_text(encoding="utf-8"))
+    return folder.resolve()
+
+
 def write_world(sc: Scenario, out: Path, extra_sdf: str = "", shadows: bool = True) -> Path:
-    """Scenario world = base world + target (+ extra models, e.g. the overhead check camera)."""
+    """Scenario world = base world + target (+ extra models, e.g. the overhead check camera); the drone with the
+    scenario's camera tilt (camera_model: a tilted copy by its absolute path, which SDFormat resolves)."""
     world = (SIM_DIR / "worlds" / f"{sc.world}.sdf").read_text(encoding="utf-8")
     if "</world>" not in world:
         raise ValueError(f"{sc.world}.sdf: </world> bulunamadı")
+    tilted = camera_model(sc, out)
+    if tilted is not None:
+        if world.count(DRONE_INCLUDE) != 1:
+            raise ValueError(f"{sc.world}.sdf: dron tek bir {DRONE_INCLUDE} ile eklenmeli (eğimli kopya için)")
+        world = world.replace(DRONE_INCLUDE, f"<uri>{tilted}</uri>")
     if not shadows:
         world = world.replace("<shadows>true</shadows>", "<shadows>false</shadows>")
         world = world.replace("<cast_shadows>true</cast_shadows>", "<cast_shadows>false</cast_shadows>")

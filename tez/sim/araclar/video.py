@@ -820,6 +820,7 @@ class Run:
     follow: dict[str, np.ndarray] | None
     px4: Px4Timeline | None
     trees: list[tuple[float, float, float]] = field(default_factory=list)
+    tilt_deg: float = kamera.NOMINAL_TILT_DEG  # [deg] the run's camera tilt (ozet.json "ayarlar" "kamera")
     path: list[tuple[float, float]] | None = None
     has_model: bool = False
     near_passes: list[dict] = field(default_factory=list)  # ozet.json "yakin_gecis" "olaylar"
@@ -839,6 +840,7 @@ def load(folder: Path) -> Run:
     mount = np.asarray(mount_info.get("dcm_optik_govde") or konumlama.NOMINAL_MOUNT, dtype=float)
     settings = summary.get("ayarlar") or {}
     source = (settings.get("takip") or {}).get("kaynak", sc.tracking_source)
+    tilt = float((settings.get("kamera") or {}).get("egim_deg", sc.camera.tilt_deg))  # --kamera-egim is in ayarlar
     mode = summary.get("mod") or {}
     if mode.get("ulog"):
         modes = [(float(s["baslangic_s"]), str(s["ad"])) for s in mode["ulog"]]
@@ -881,6 +883,7 @@ def load(folder: Path) -> Run:
         follow=_sent(_read_csv(folder / "follow_target.csv"), ("x", "y")),
         px4=px4,
         trees=trees,
+        tilt_deg=tilt,
         path=path,
         has_model=detections is not None,
         near_passes=list((summary.get("yakin_gecis") or {}).get("olaylar") or []),
@@ -940,7 +943,7 @@ def moment(run: Run, t: float, frame_t: float | None, repeated: bool) -> Moment:
     others = [(float(row[f"insan{k}_x"]), float(row[f"insan{k}_y"])) for k in range(1, run.others + 1)]
     other_trails = [trail(f"insan{k}_x", f"insan{k}_y") for k in range(1, run.others + 1)]
     cam_z = float(row["kamera_z"])
-    near = float(olcum.frame_limits(run.camera, np.array([cam_z]))[0][0])
+    near = float(olcum.frame_limits(run.camera, np.array([cam_z]), run.tilt_deg)[0][0])
     footprint = None
     if all(f"dron_q{c}" in row for c in "wxyz"):
         q = [float(row[f"dron_q{c}"]) for c in "wxyz"]

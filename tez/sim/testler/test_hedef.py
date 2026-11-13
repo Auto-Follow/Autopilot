@@ -362,7 +362,19 @@ def test_command_line_overrides_the_scenario_into_the_settings(tmp_path: Path) -
     args = senaryo.parser().parse_args(argv)
     s = senaryo.settings(hedef.load(args.senaryo, senaryo.command_line(args)))
 
-    assert set(s) == {"takip", "algilama", "gecikme", "kusurlar", "video", "px4_parametreleri", "henuz_bagli_degil"}
+    assert set(s) == {
+        "takip",
+        "algilama",
+        "gecikme",
+        "kusurlar",
+        "video",
+        "kamera",
+        "px4_parametreleri",
+        "henuz_bagli_degil",
+    }
+    assert s["kamera"] == {
+        "egim_deg": 45.0
+    }  # the real mount unless kamera.egim_deg / --kamera-egim (test_kamera_egimi)
     assert s["takip"] == {
         "kaynak": "tez_los",
         "mod": "Tez Auto Follow",

@@ -42,7 +42,6 @@ ORBIT_STEP_S = 0.5  # [s] orbit angle sampled this often for the turn sums (hove
 ORBIT_MIN_DISTANCE_M = 1.0  # [m] closer than this the angle around the target is not defined
 YURUYUS_BASI_S = 10.0  # [s] "start of the walk": the second turn of the stock mode happens here
 PX4_COURSE_SPEED = 1.0  # [m/s] PX4 updates the target course only above this (TARGET_SPEED_DEADZONE_...)
-MOUNT_PITCH_DOWN = konumlama.MOUNT_PITCH_DOWN  # [rad] nominal camera tilt below the nose
 CAMERA_AHEAD_M = float(konumlama.NOMINAL_OFFSET_FRD[0])  # [m] camera ahead of base_link
 PX4_MATCH_S = 0.06  # [s] a logged TEZ_LOS belongs to a sent one with the same values at most this far in time
 PX4_MATCH_VALUE = 2e-6  # tez_los.csv keeps 6 decimals, PX4 float32
@@ -501,18 +500,22 @@ def _columns(rows: Sequence[Mapping], names: Sequence[str]) -> dict[str, np.ndar
     return {n: np.array([float(r.get(n, math.nan)) for r in rows], dtype=float) for n in names}
 
 
-def frame_limits(camera: kamera.Camera | None, camera_height: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def frame_limits(
+    camera: kamera.Camera | None, camera_height: np.ndarray, tilt_deg: float = kamera.NOMINAL_TILT_DEG
+) -> tuple[np.ndarray, np.ndarray]:
     """[m] horizontal distance from base_link to the nearest and farthest ground point the camera sees straight ahead
-    (bottom and top edge of the image), level flight, nominal 45 deg mount: h / tan(mount +- vfov / 2) + the camera's
-    0.151 m ahead of base_link. A person's feet nearer than the first one are below the image."""
+    (bottom and top edge of the image), level flight, the camera `tilt_deg` below the nose (the scenario's
+    kamera.egim_deg; nominal 45 deg): h / tan(tilt +- vfov / 2) + the camera's 0.151 m ahead of base_link. A person's
+    feet nearer than the first one are below the image."""
     if camera is None:
         nan = np.full(camera_height.shape, math.nan)
         return nan, nan
     half = math.atan2(camera.height / 2.0, camera.fy)
-    near = camera_height / math.tan(MOUNT_PITCH_DOWN + half) + CAMERA_AHEAD_M
-    if MOUNT_PITCH_DOWN <= half:  # the top edge looks at or above the horizon: no far limit on the ground
+    tilt = math.radians(tilt_deg)
+    near = camera_height / math.tan(tilt + half) + CAMERA_AHEAD_M
+    if tilt <= half:  # the top edge looks at or above the horizon: no far limit on the ground
         return near, np.full(camera_height.shape, math.inf)
-    return near, camera_height / math.tan(MOUNT_PITCH_DOWN - half) + CAMERA_AHEAD_M
+    return near, camera_height / math.tan(tilt - half) + CAMERA_AHEAD_M
 
 
 def orbit_turn(t: np.ndarray, angle_deg_: np.ndarray, start: float, end: float, step: float = ORBIT_STEP_S) -> float:
@@ -538,11 +541,13 @@ def tracking_metrics(
     following: bool = True,
     follow_distance: float | None = None,
     near_m: float = NEAR_DISTANCE_M,
+    tilt_deg: float = kamera.NOMINAL_TILT_DEG,
 ) -> tuple[dict, list[dict]]:
     """Distance, frame and behind angle of the window from the referee (Gazebo truth, every camera frame), and the
     orbit turns from the first referee row (the mode was just chosen) on. following: the tracking source follows the
     target (follow_me, tez_los); "yok" hovers, so its behind angle and orbit turns are NaN. follow_distance:
-    FLW_TGT_DST [m] in follow_me (yatay_mesafe_hatasi_ort_m), None otherwise.
+    FLW_TGT_DST [m] in follow_me (yatay_mesafe_hatasi_ort_m), None otherwise. tilt_deg: the camera's tilt below the
+    nose (the scenario's kamera.egim_deg) for its near and far ground limit.
 
     -> (metrics, the near-distance events: [{baslangic_s, bitis_s, en_az_m, en_az_t_s}])."""
     names = ("t", "dron_x", "dron_y", "kamera_z", "hedef_x", "hedef_y", "hedef_yaw", "hedef_hiz", "yatay_mesafe")
@@ -594,7 +599,7 @@ def tracking_metrics(
         j = int(np.argmin(np.where(span, d, np.inf)))
         events.append({"baslangic_s": a, "bitis_s": b, "en_az_m": float(d[j]), "en_az_t_s": float(tw[j])})
     m["yakin_mesafe_3m_olay_sayisi"] = len(events)
-    near_limit, far_limit = frame_limits(camera, w["kamera_z"])
+    near_limit, far_limit = frame_limits(camera, w["kamera_z"], tilt_deg)
     if camera is not None:
         m["kadraj_yakin_sinir_m"] = float(np.nanmean(near_limit))
         m["kadraj_uzak_sinir_m"] = float(np.nanmean(far_limit))
@@ -1457,6 +1462,7 @@ class RunData:
     mode_switched_s: float | None = None  # [s sim] when PX4's heartbeat reported it
     mode_changes: Sequence[tuple[float, str]] = ()  # [(s sim, mode name)] from the heartbeat while recording
     follow_distance: float | None = None  # FLW_TGT_DST [m] as PX4 holds it (follow_me)
+    camera_tilt_deg: float = kamera.NOMINAL_TILT_DEG  # [deg] below the nose: the scenario's kamera.egim_deg
 
 
 ULOG_TOPICS = (
@@ -1485,7 +1491,9 @@ def measure(d: RunData) -> tuple[dict, dict]:
     m |= stream_metrics(d.attempts, d.lock_events, start, end)
     m |= follow_metrics(d.follow_attempts, d.detections, start, end)
     m |= position_metrics(d.detections, d.referee, start, end, d.camera, d.mount, d.world, d.origin)
-    track, near = tracking_metrics(d.referee, start, end, d.camera, following, d.follow_distance)
+    track, near = tracking_metrics(
+        d.referee, start, end, d.camera, following, d.follow_distance, tilt_deg=d.camera_tilt_deg
+    )
     m |= track
     topics = Topics.read(d.ulogs, ULOG_TOPICS) if d.ulogs else Topics()
     sent = [a for a in d.attempts if a["sonuc"] == "gonderildi"]

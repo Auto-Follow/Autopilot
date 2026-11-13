@@ -308,7 +308,7 @@ def plot_tracking(
     ax.plot(t, df.yatay_mesafe, color=TARGET_COLOR, linewidth=1.8, label="yatay mesafe")
     ax.axhline(olcum.NEAR_DISTANCE_M, color=WARNING_COLOR, linewidth=1.0, linestyle="--", label="3 m (uyarı)")
     if camera is not None and "kamera_z" in df:
-        near, far = olcum.frame_limits(camera, df.kamera_z.to_numpy(dtype=float))
+        near, far = olcum.frame_limits(camera, df.kamera_z.to_numpy(dtype=float), sc.camera.tilt_deg)
         ax.plot(t, near, color=TEXT_2, linewidth=1.0, linestyle=(0, (4, 2)), label="kameranın yakın görüş sınırı")
         ax.plot(t, far, color=TEXT_2, linewidth=1.0, linestyle=":", label="uzak sınır")
     if follow_distance is not None:

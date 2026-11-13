@@ -666,6 +666,7 @@ flowchart LR
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv`. 6. grupta: `konumlama.py` (konum, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `takip.py`'ye konum + FOLLOW_TARGET, `follow_target.csv`; `px4_baglanti.py`'ye `FrameStream`, `FollowTargetSender`, `pose_hook`; `simulasyon.py`'ye `restart_logger` |
 | `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme. 8. grupta: `goruntu_yayini.py` kayıt kısmı (`FrameRecorder`, `FrameSink`, `GridPicker`), `video.py` (çevrimdışı birleştirme, kamera paneli, kuşbakışı, durum satırı, ffmpeg borusu); `yayin.sdp` ve RTP 11. grupta. 9. grupta `video.py`: kuşbakışında PX4'ün süzülmüş hedefi ve dronu gönderdiği yer PX4'ün kendi ayar noktasından (`px4_marks`; 8. grupta kestirimden hesaplanıyordu, köşede metrelerce kayıktı), durum satırında 6 m altı geçişin sebebi |
 | `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti). 9.8 ön işinde: `olcum.follow_start_metrics` (takip başında konum titreşimi ve PX4'ün sahte hızı). 9. grupta: köşeler (`legs`, `corner_metrics`; 9.8'in repo dışı betiğinden taşındı), 6 m altı geçişler ve sebepleri (`near_passes`, `decompose`), PX4'ün Follow Target iç durumu dünyada (`Px4Follow`: kestirim, görevin süzülmüş hedefi, ayar noktası) |
+| `araclar/tarama.py` | yeni (Görev Grubu 17 öne alındı, 14.11) | Kamera eğimi × yükseklik × mesafe taraması: ızgara ve her bileşimin senaryosu (kaydırılmış yol), `toplu.py` ile koşma ve kaldığı yerden sürme (`durum.json`), kapılar, grup puanları, aşama 2 adayları, geometrik paylar ve ölçülen yaklaşma; `hedef.py`'ye `kamera.egim_deg` ve modelin eğimli kopyası, `kamera.py`'ye `NOMINAL_TILT_DEG` ve `tilt_of_mount`, `takip.py` / `konumlama.py` / `olcum.py` / `rapor.py` / `video.py` / `senaryo.py`'ye eğim |
 | `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html`. 9. grupta: köşelerin koşu koşu tablosu, her koşunun 6 m altı geçişleri ve sebepleri |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
 | `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler |
@@ -722,6 +723,7 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 | `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış (yazılırsa senaryo yüklenirken "Faz B'de uygulanacak"); alanları `kusurlar.check` denetler | 4 |
 | `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc`; `--kareleri-sakla` yalnız komut satırında | `mp4: false`: 2 (video zaten yok) · `mp4`, `--kareleri-sakla`: 8 (bağlandı) · `qgc`: 11 |
 | `drone.mod` | kaldırılır | Yerine `takip.kaynak` | 1 |
+| `kamera.egim_deg` (Görev Grubu 17 öne alındı, 14.11) | sayı, 0–60; 45 (gerçek montaj) | `--kamera-egim`; Gazebo modelinin koşu kopyası, LOS (i), konum, yakın sınır, video tek kaynaktan; `ayarlar.kamera` | 17 (bağlandı) |
 
 ### Teslim sırası ve 15.11'deki en az demo
 
@@ -746,7 +748,7 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 
 ### Yaklaşma mesafesi: kamera neden 45° aşağı bakar? (`planning/kaynaklar/Kamera_ve_Takip_Ayarlari_Raporu.pdf`, 23–24.10)
 
-> **Kaynak notu:** Geniş taramadaki sayılar eski (WSL dönemi) simülasyondan gelir. O taramada hedef bir insan modeli değil kırmızı bir kutuydu, kamera gövde hizasındaydı ve takip PX4'ün hazır Follow Me moduyla yapıldı. Eğim aynı olduğu için görüş geometrisi değişmez; yalnız birkaç santimlik yer farkı vardır. Gerçek modelle, yeni simde ve kapalı döngüde yeniden ölçüm **Faz B**'dedir.
+> **Kaynak notu:** Geniş taramadaki sayılar eski (WSL dönemi) simülasyondan gelir. O taramada hedef bir insan modeli değil kırmızı bir kutuydu, kamera gövde hizasındaydı ve takip PX4'ün hazır Follow Me moduyla yapıldı. Eğim aynı olduğu için görüş geometrisi değişmez; yalnız birkaç santimlik yer farkı vardır. Gerçek modelle, yeni simde ve kapalı döngüde yeniden ölçüm **Faz B**'dedir; Görev Grubu 17 kullanıcının isteğiyle öne alındı (13–14.11), sonucu aşağıda "Modelle 30–45° taraması".
 
 **Kural:** Kamera gövdenin altına sabit 45° aşağı bakacak şekilde takılır. Dron kaç metre yüksekte uçuyorsa takip ettiği kişinin yaklaşık o kadar gerisinde durur.
 
@@ -862,6 +864,35 @@ Faz B'nin geniş taramasının yerini tutmaz; iki ayarın stok modla ilk karşı
 - **Karar (14.11, kullanıcı):** m06'nın Follow Me senaryosu `takip_yuruyen` 10 m / 10 m; 8 m / 8 m `takip_yuruyen_8m`
   olarak kalır. Gerçek uçuşta hangi ayarın kullanılacağı ekip kararıdır (gerçek dronun 22.08 dosyasında 8/8).
 
+**Modelle 30–45° taraması (Görev Grubu 17 öne alındı, 13–14.11; `implementation/gorev-grubu-17-on-kamera-acisi.md`):**
+kamera eğimi senaryo ayarı oldu (`kamera.egim_deg`, `--kamera-egim`; varsayılan ve gerçek montaj 45°). `takip_yuruyen`
+yolunda, stok Follow Me ve v0.2 (CPU) ile 30/35/40/45° × 4–15 m × 4 mesafe kuralı = 81 bileşim (1'er koşu), sonra 8
+bileşim 3'er koşu (+ mükemmel algılayıcı ve kıvrımlı yol). Kapı: her koşuda köşede ≥ 3 m ve kişi sonuna kadar izlendi.
+
+| | Kamera raporu (modelsiz, kırmızı kutu) | Modelle (bu tarama) |
+|---|---|---|
+| 12–15 m | 15 m'de kişi ≈ 100 px, "tespit için rahat" | Model kişiyi 15 m'de %0–1, 12 m'de %0–35 buluyor (kişi ≈ 95 / 124 px, 640'lık girişte ≈ 26–34 px) |
+| Her eğimin en alçak başarılı ayarı | 8 m geride: 30° 4/8, 35–40° 6/8, 45° 8/8 | 8 m geride yalnız 1/19 bileşim tek koşuda geçti, aşama 2'de 0/3; 30° 4/8 kişiyi kaybetti |
+| 45° 8/8 | 3/3 | 7 koşuda 1/7 izlendi, hiçbirinde ≥ 3 m (köşede 0.45–2.19 m) |
+| 45° 10/10 | 3/3 | 8 koşuda 7/8 izlendi, 5/8'de ≥ 3 m (2.17–6.39 m); model %46–62 |
+| Kapıyı 3/3 geçen | — | 35° 7/10, 30° 6/10.4, **35° 8/11.4**, 40° 12/11.4 (model %30); **hiçbir 45° ayarı** |
+| Kıvrımlı yol (164° sert geri dönüş), 3'er koşu | — | **Yalnız 35° 8/11.4 3/3** (en az 6.0–8.1 m); 35° 7/10 ve 30° 6/10.4 1/3 (birer kaybı simin canlı hakem sorunuyla belirsiz), 45° 10/10 0/3 |
+| Mükemmel algılayıcıyla (`--los hakem`) | — | Dördü de 3/3, 45° 10/10 dahil: 45°'deki kayıp modelin köşede kişiyi geç bulmasından; köşe yaklaşması hakemle de aynı (PX4'ün davranışı) |
+
+- Köşede (kişi 3 m/s koşudan sonra 90° dönüyor) stok Follow Me dronu `FLW_TGT_DST`'ye göre **ort. 6.2 m yaklaştırıyor**;
+  bu mesafe geride durma mesafesiyle ölçeklenmiyor (70 koşu, eğim −0.10 ± 0.06 m/m). Kişinin kadrajdan kaçması, bu
+  yaklaşmanın yaklaşma payını (kişi ile kameranın yakın sınırı arası) aşmasından; pay kişi ortadayken ≈ 0.52 × geride
+  durma, eğimden neredeyse bağımsız. 30–40°'de 9 m ve daha uzakta duran 32 koşunun hepsi kişiyi köşeden sonra da izledi.
+- Düşük eğimin artısı açının kendisi değil: aynı yükseklikte dronu daha uzağa koyması (30°'de 1.73 h). 45°'de aynı
+  mesafe için 9–12 m'ye çıkmak gerekiyor ve orada model kişiyi zayıf buluyor.
+- **Öneri (karar kullanıcının ve ekibin; varsayılanlar değişmedi):** kamera **35°**, **8 m yükseklik / 11.4 m geride**
+  (geride durma ≈ 1.43 × yükseklik). Kuralın birincisi aynı montajda 7 m / 10 m (köşede 1.4 m daha yakın, PX4'ün 8 m
+  alt sınırının altında). İkinci seçenek 30° · 6 m / 10.4 m (en iyi algılama; 6 m, ufuk payı 9.9°, konum 1.73 kat duyarlı).
+  45°'de kalınacaksa 10 m / 10 m; kalıcı çözüm m15'in en az mesafe koruması. 35° 8/11.4 iki yolda da 3/3 geçen tek
+  ayar; kuralın puanıyla birinci olan 35° 7/10'dan ayrılma gerekçesi (min–maks ölçeklemenin zayıflığı, 8 m alt sınır,
+  kıvrımlı yol) belgede. Bedeli: yeni montaj parçası, konum
+  hesabının zemin / GPS yüksekliğine 1.43 kat duyarlılığı, ufuk payının 24.9°'den 14.9°'ye inmesi, daha geniş boş alan.
+
 **Dron ayarları ve ilk gerçek uçuş**
 - Follow Me'de `FLW_TGT_HT` = yükseklik, `FLW_TGT_DST` = geride durma. Ekibin kendi modunda da aynı çift kullanılacak. Raporda kontrol tarafının önerdiği adlar `TEZ_FOL_ALT` / `TEZ_FOL_DIST`'tir; adları m15'i yapan kişi belirler.
 - İlk uçuş önerisi:
@@ -894,6 +925,7 @@ Faz B'nin geniş taramasının yerini tutmaz; iki ayarın stok modla ilk karşı
 | Kırpma | near 0.1 m, far 500 m |
 | Gürültü | SDF Gaussian stddev 0.007. Ölçülen: 0.007 → 0 DN (etkisiz); 0.1 → 4.6 DN (beklenen 25.5). Gazebo tanımlananın ≈ 1/5'ini uygular; düzeltmesi Faz B'de |
 | Montaj | Gövde altı ön, X500 V2 "Depth Camera Mount" yeri. `camera_link` base_link'e göre (0.151, 0, −0.035) m FLU (= FRD (0.151, 0, +0.035)); sabit 45° aşağı (pitch 0.785398). solvePnP montaj hatası 1.9 mm / 0.03°; kadrajda dron parçası yok |
+| Eğim ayarı (14.11, Görev Grubu 17 öne alındı) | `kamera.egim_deg` / `--kamera-egim`, 0–60°, varsayılan `kamera.NOMINAL_TILT_DEG` = 45° (`models/x500_tez`'in kendi eğimi; testle karşılaştırılır). 45° dışında koşu klasörüne `camera_link` pitch'i değiştirilmiş model kopyası yazılır (`hedef.camera_model`; kamera ve segmentasyon kamerası birlikte döner), dünya onu mutlak yoluyla ekler. LOS (i) (`takip.Tracker(mount=...)`), düz zemin konum (`konumlama.Locator(mount=...)`), yakın/uzak sınır (`olcum.frame_limits(..., tilt_deg)`), video ve rapor aynı değeri kullanır; hakem montajı Gazebo'dan okur. Koşu sonunda Gazebo'nun bildirdiği eğim ile senaryonunki karşılaştırılır (≤ 0.05°, değilse TAMAMLANMADI). Gerçek araçta eğim bir montaj parçasıdır; varsayılan 45° kalır |
 | Konular | `/x500_tez/kamera/image`, `/x500_tez/kamera/camera_info`. Hakem: `/x500_tez/kamera_seg/labels_map` (instance, 1152×648, aynı açı, etiket 3. kanalda) |
 | Saatler | PX4–Gazebo farkı ±4 ms (lockstep); 30.3 kare/sim-s; kare aralığı 32/36 ms; kare model sürecine ≈ 31 ms'de ulaşır (4. grup; ilk ölçümde ≈ 20 ms). RTF: modelsiz ≈ 1.00 (F0, F1); model (CPU, 4 çekirdek) + video kaydı 0.76–0.85 (13.11), kare kaydı ≈ 0.05 düşürür (8. grup); RTF < 1 iken model sim saatine göre hızlı görünür, sim zamanıyla ölçülen her şey etkilenmez |
 | Veri sayfası tutarsızlığı | 4.74 mm / 2.8 µm (2×2 birleştirilmiş piksel) → fx 1693 (HFOV 68.5°); oysa 66° → fx 1774. Simde 66° kullanılır; gerçek değer m09'da ölçülür |
@@ -1155,6 +1187,7 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
 | `test_kusurlar.py` | Boş ayarda karenin bit bit aynı kalması; Faz B alanının ve bilinmeyen alanın reddi |
 | `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw. 9.8 ön işinde: takip başında gönderilen konumun titreşimi, drona doğru kayma, PX4'ün sahte hızı ve rota değişimi |
 | `test_yakin_gecis.py` (9. grup) | Kişinin yolunun bacakları ve köşeleri (dönüş, duruş, hafif kıvrımın köşe sayılmaması); PX4'ün köşeye yetişmesi (yetişmeme dahil) ve aşma; 6 m altı geçişlerin sebebi (takip başı, diğer, durma, köşe, kilit kaybı; `yok`'ta "takip etmiyor") ve mesafe payları; en az mesafe anında ayrıştırmanın beş payı (elle hesaplanan vektörlerle, konum kayması sınıfı); ULog'dan dünyaya dönüşüm (`Px4Follow`: kestirim enlem/boylamdan, süzülmüş hedef ve ayar noktası EKF kökeninden, < 1 cm). Ayrıca `test_rapor.py`, `test_toplu.py`, `test_video.py` (ayar noktası halkası, durum satırında sebep), `test_olcum.py` (`measure` bölümleri, günlük satırı) |
+| `test_kamera_egimi.py`, `test_tarama.py` (Görev Grubu 17 öne alındı) | Eğim: 30–45°'de bilinen poz → piksel → zemin gidiş-dönüşü (< 1 cm; 45° varsayılırsa metrelerce hata), LOS (i), yakın/uzak sınır, Tracker'ın montajı, Gazebo'nun bildirdiği eğimin geri okunması, senaryo alanı ve `--kamera-egim`, modelin eğimli kopyası ve dünyanın onu eklemesi (asıl model değişmez), pozu bulunamayan modelin reddi, videonun yakın sınırı. Tarama: merkez mesafesi ve kadraj kontrolü, plan (yineleme yok, atlananın nedeni, ikinci bant), kaydırılmış yol ve takip bloğu, yarıda kalan taramanın sürmesi, koşu başına kayıp ve piksel boyu, geometrik paylar (kullanıcının hesabıyla), yaklaşma ve kadrajdan çıkış kenarı, kapılar / puanlar / sıra, aşama 2 adayları |
 | `test_toplu.py` (7. grup) | Çok koşunun dağılımı (ort / en az / en çok, NaN'lı koşu), yalnız başlayamayan koşunun yeniden denenmesi, `senaryo.py` komutu, özet dosyaları |
 | `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü. 14.11'de: durum satırında "YANLIŞ KİŞİ" (aynı kıyafetli kişi dahil) ve bir koşu klasöründe anların ölçütün kuralıyla bulunması (`test_olcum.py`: kuralın kendisi) |
 | `test_goruntu_yayini.py` (8. grup) | Kare seçimi (sim zamanında 15 fps ızgarası, pencere, kaybolan kare), 1280×720 JPEG, dolu kuyrukta kare düşürme ve sayma |
@@ -1240,7 +1273,8 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 - Senaryo alanları: `video.wifi.{gecikme_ms, kayip, patlama}`.
 - Ölçüm: QGC'de görüntü gecikmesi ve donma süreleri.
 
-**Yaklaşma mesafelerinin yeniden ölçülmesi**
+**Yaklaşma mesafelerinin yeniden ölçülmesi** (14.11'de öne alındı ve genişletildi: model ile 30–45° × 4–15 m ×
+mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Yaklaşma mesafesi" bölümünde)
 - Ayarlar 3'er koşu: 8/8, 10/10, 15/12; aralık sınırları (8 m'de 6.5 ve 10 m, 10 m'de 8 ve 12 m); olumsuz kontrol 6/8.
 - Koşullar: gerçek model (v0.2 ya da m08'in modeli), kapalı döngü (`follow_me`; m15 hazırsa o da), raporun zor yolu (yürü, dön, dur, birden koş, geri dön), `duz_alan` ve `cayir`.
 - Ölçütler: kadrajda kalma, gerçekten görünür kalma, en uzun kayıp, konum hatası.
@@ -1303,6 +1337,12 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
   arkadaşlarına öneri (m06 yapmadı):** m15 kendi modunda en az mesafe koruması, kişi durunca/dönünce hız ileri
   beslemesini sınırlamak ve kişi kadrajdan çıkınca tanımlı bir davranış; m11 süzülmüş hız göndermek ve durma/dönme anını
   hızlı yakalamak; m01'e "en az yatay mesafe" ve "6 m altı süre payı" ölçütleri.
+- **Kamera eğimi ve uçuş ayarı (Görev Grubu 17'de ölçüldü, karar kullanıcıda / ekipte):** modelle yapılan taramada
+  stok Follow Me ile hiçbir 45° ayarı 3/3 koşuda kapıyı (köşede ≥ 3 m, kişi sonuna kadar izlendi) geçmedi; öneri 35°
+  montaj ve 8 m / 11.4 m, ikinci seçenek 30° · 6 m / 10.4 m, 45°'de kalınacaksa 10 m / 10 m ("Yaklaşma mesafesi",
+  `implementation/gorev-grubu-17-on-kamera-acisi.md` 6). Montaj değişirse açı araçta ölçülüp yazılıma girilir; m15 en az
+  mesafe koruması getirirse 45° 10/10 yeniden ölçülmeli. Varsayılanlar (45°, `takip_yuruyen` 10/10, gerçek dronun
+  parametreleri) değişmedi.
 - **Seyrek açılış hatası (7. grupta görüldü):** bir koşuda PX4 açıldığı hâlde bağlantımıza 60 s heartbeat gelmedi (PX4
   tarafında "partner IP" yok); nedeni bulunamadı. `toplu.py` böyle bir koşuyu altyapı hatası sayıp yeniden dener ve
   listeler. Ayrıca bu durumda rapor yazılmadan çıkan bir hata vardı (ULog'da `debug_vect` yokken); düzeltildi, testli.

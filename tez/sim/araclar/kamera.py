@@ -17,6 +17,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# [deg] camera below the nose on the real mount (X500 V2 Depth Camera Mount position) and in models/x500_tez
+# (camera_link pitch 0.785398; test_kamera_egimi checks the SDF). A scenario may fly another tilt (hedef.py
+# kamera.egim_deg, --kamera-egim): its run then gets a tilted copy of the model and every computation uses that tilt.
+NOMINAL_TILT_DEG = 45.0
+
 # Fixed axis changes (rows: new axes in old coordinates)
 GZ_CAMERA_TO_OPTICAL = np.array([[0.0, -1.0, 0.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0]])
 FLU_TO_FRD = np.diag([1.0, -1.0, -1.0])
@@ -60,6 +65,12 @@ def body_to_ned(roll: float, pitch: float, yaw: float) -> np.ndarray:
 def camera_to_body(pitch_down: float) -> np.ndarray:
     """C_cb for a camera fixed on the body, tilted `pitch_down` [rad] below the nose (no roll/yaw mount offset)."""
     return rot_y(-pitch_down) @ OPTICAL_TO_BODY_P
+
+
+def tilt_of_mount(c_cb: np.ndarray) -> float:
+    """[deg] how far below the nose the optical axis of a mount C_cb (optical -> body FRD) points (FRD z is down)."""
+    axis = np.asarray(c_cb, dtype=float)[:, 2]
+    return math.degrees(math.atan2(axis[2], math.hypot(axis[0], axis[1])))
 
 
 def angle_deg(a: np.ndarray, b: np.ndarray) -> float:
