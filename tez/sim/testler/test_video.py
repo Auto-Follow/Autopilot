@@ -142,6 +142,34 @@ def test_status_line_says_what_happens_and_turns_red() -> None:
         assert level == "alarm" and words in line2, change
     _, line2, level = video.status(video.Situation(**{**walking.__dict__, "behind_error": 120.0}))
     assert level == "uyari" and "önünde" in line2
+    # a near pass of ozet.json (task group 9): its cause, orange at 5 m, with the red 3 m alarm at 2.4 m
+    _, line2, level = video.status(video.Situation(**{**walking.__dict__, "distance": 5.0, "near_pass": "kose"}))
+    assert level == "uyari" and "6 m" in line2 and "köşe" in line2
+    _, line2, level = video.status(video.Situation(**{**walking.__dict__, "distance": 2.4, "near_pass": "kose"}))
+    assert level == "alarm" and "3 m" in line2 and "köşe" in line2
+
+
+def test_where_px4_sends_the_drone_comes_from_its_own_setpoint() -> None:
+    """The ring (where PX4 sends the drone now) is trajectory_setpoint and the cross (its final aim) is
+    desired_position_raw, both around F, the task's filtered target: at a corner F is metres ahead of the
+    estimator's E, so E + FLW_TGT_DST along the orbit angle (the drawing of task group 8) was off by as much. Without
+    those topics (older ULogs) the marks fall back to E."""
+    view = video.Px4View(
+        estimate=(20.0, 12.0),
+        speed=2.0,
+        stale=False,
+        course=0.0,
+        orbit=math.pi,
+        follow_angle=math.pi,
+        filtered=(20.5, 15.0),
+        setpoint=(20.4, 7.6),
+        aim=(20.5, 7.0),
+    )
+    marks = video.px4_marks(view, 8.0)
+    assert marks["ring"] == (20.4, 7.6) and marks["cross"] == (20.5, 7.0) and marks["base"] == (20.5, 15.0)
+    old = video.px4_marks(video.Px4View((20.0, 12.0), 2.0, False, 0.0, math.pi, math.pi), 8.0)
+    assert old["base"] == (20.0, 12.0) and old["ring"] == pytest.approx((20.0, 4.0))
+    assert old["cross"] == pytest.approx((20.0, 4.0)) and old["filtered"] is None
 
 
 def test_frames_go_raw_bgr_through_a_pipe_to_ffmpeg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

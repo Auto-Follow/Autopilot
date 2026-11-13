@@ -19,9 +19,10 @@ time, PX4 mode and end-to-end delay.
 Right, 720x720, the top view (north up, the report's colours): trees, people and their last 10 s, the drone and its
 nose, the camera's footprint on the ground, the 3 m warning ring and the camera's near limit around the person, where
 the drone should be (FLW_TGT_DST behind the walking person), the FOLLOW_TARGET points of the last 3 s and, in
-follow_me, PX4's own target estimate, the course it assumes and the place around the target it sends the drone to;
-a scale bar, the horizontal distance and a short status line at the bottom (red: lock lost, no target, closer than
-the camera's near limit or 3 m, target out of view).
+follow_me, PX4's own target estimate and its filtered target (the one the drone is placed around), the course it
+assumes, the place it sends the drone to now (its position setpoint) and its final aim; a scale bar, the horizontal
+distance and a short status line at the bottom (red: lock lost, no target, closer than the camera's near limit or
+3 m, target out of view; the cause of a < 6 m pass of ozet.json "yakin_gecis").
 
 Frames go raw (bgr24) through a pipe to ffmpeg: libx264, yuv420p, veryfast, crf 23, +faststart, 15 fps; VLC 3.0.20
 plays it. OpenCV's VideoWriter is not used: the pip OpenCV has no H.264 encoder.
@@ -62,6 +63,8 @@ VIDEO_NAME = "kosu.mp4"
 CAMERA_WIDTH = 2304  # [px] of the drone camera; boxes are in its pixels
 TRAIL_S = 10.0  # [s] of the drone's and the people's path shown behind them
 FOLLOW_POINTS_S = 3.0  # [s] of FOLLOW_TARGET points shown (the jitter of the position PX4 gets)
+# what the video reads of PX4's ULog (olcum.Px4Follow: the estimator, the task's status, its setpoint, the EKF origin)
+PX4_TOPICS = ("follow_target_estimator", "follow_target_status", "trajectory_setpoint", "vehicle_local_position")
 FOOTPRINT_MAX_M = 60.0  # [m] a camera ray that misses the ground (or meets it farther) is cut here
 FOOTPRINT_STEPS = 8  # pieces per image edge of the footprint polygon
 VIEW_MARGIN_M = 7.0  # [m] around half the drone-target distance
@@ -420,7 +423,7 @@ def _triangle(c: tuple[int, int], heading_enu: float, size: float) -> np.ndarray
 
 @dataclass(frozen=True)
 class Px4View:
-    """What PX4's Follow Target had at a moment (ULog; NED angles, 0 = north)."""
+    """What PX4's Follow Target had at a moment (ULog, olcum.Px4Follow; NED angles, 0 = north)."""
 
     estimate: tuple[float, float] | None  # [m] world x, y of follow_target_estimator (lat_est, lon_est)
     speed: float  # [m/s] |vel_est| horizontal
@@ -428,6 +431,27 @@ class Px4View:
     course: float  # [rad] tracked_target_course
     orbit: float  # [rad] orbit_angle_setpoint
     follow_angle: float  # [rad]
+    filtered: tuple[float, float] | None = None  # [m] F: the task's filtered target the drone is placed around
+    setpoint: tuple[float, float] | None = None  # [m] P: trajectory_setpoint, where PX4 sends the drone now
+    aim: tuple[float, float] | None = None  # [m] desired_position_raw: FLW_TGT_DST behind the assumed course
+
+
+def px4_marks(view: Px4View, distance: float) -> dict:
+    """World x, y of the PX4 marks of the top view: base (F, else E: the course arrow starts there), ring (where PX4
+    sends the drone now: its position setpoint, else base + FLW_TGT_DST along the orbit angle), cross (its final aim:
+    desired_position_raw, else base + FLW_TGT_DST along course + follow angle). The task places the drone around F,
+    not E; at a corner the two are metres apart (task group 9), so E + FLW_TGT_DST (task group 8) was off as much."""
+    base = view.filtered or view.estimate
+    out = {"base": base, "estimate": view.estimate, "filtered": view.filtered, "ring": None, "cross": None}
+    if base is None:
+        return out
+    aim = view.course + view.follow_angle
+    out["ring"] = view.setpoint or (
+        base[0] + distance * math.sin(view.orbit),
+        base[1] + distance * math.cos(view.orbit),
+    )
+    out["cross"] = view.aim or (base[0] + distance * math.sin(aim), base[1] + distance * math.cos(aim))
+    return out
 
 
 @dataclass(frozen=True)
@@ -448,6 +472,7 @@ class Situation:
     px4_speed: float = math.nan  # [m/s] PX4's speed estimate of the person
     px4_course_deg: float = math.nan  # [deg] PX4's assumed course
     px4_stale: bool = False
+    near_pass: str = ""  # cause of the < 6 m pass this moment is in (ozet.json "yakin_gecis"), "" if none
 
 
 def status(s: Situation) -> tuple[str, str, str]:
@@ -478,9 +503,14 @@ def status(s: Situation) -> tuple[str, str, str]:
         alarms.append("PX4'e 'hedef yok' gidiyor")
     if s.px4_stale:
         alarms.append("PX4 kestirimi bayat (3 s'dir FOLLOW_TARGET yok)")
+    near_pass = (
+        f"{olcum.CLOSE_PASS_M:g} m'den yakın geçiş: {rapor.NEAR_PASS_TEXT.get(s.near_pass, s.near_pass)}"
+        if s.near_pass
+        else ""
+    )
     if alarms:
-        return line1, " · ".join(alarms[:2]), "alarm"
-    warnings = []
+        return line1, " · ".join((alarms[:1] + [near_pass] + alarms[1:2]) if near_pass else alarms[:2]), "alarm"
+    warnings = [near_pass] if near_pass else []
     if s.following and math.isfinite(s.behind_error) and s.behind_error > olcum.OVERSHOOT_DEG:
         warnings.append("dron hedefin yanında/önünde (köşede aşma)")
     if s.lock == "eslesmedi":
@@ -546,24 +576,29 @@ def draw_map(m: "Moment", view: TopView, run: "Run", labels: list[Label]) -> np.
         light = tuple(int(c + (255 - c) * min(0.6, age / FOLLOW_POINTS_S)) for c in PX4_BGR)
         cv2.circle(img, view.fixed(x, y), (4 if newest else 3) << SUB, light, -1, cv2.LINE_AA, SUB)
     px4 = m.px4
-    if px4 is not None and px4.estimate is not None:
-        ex, ey = px4.estimate
-        ec = view.fixed(ex, ey)
-        dst = run.follow_distance or 0.0
-        if dst > 0:  # where PX4 sends the drone now (orbit angle setpoint) and its final aim (course + follow angle)
-            ox, oy = ex + dst * math.sin(px4.orbit), ey + dst * math.cos(px4.orbit)
-            cv2.circle(img, view.fixed(ox, oy), 8 << SUB, PX4_BGR, 2, cv2.LINE_AA, SUB)
-            aim = px4.course + px4.follow_angle
-            gx, gy = view.fixed(ex + dst * math.sin(aim), ey + dst * math.cos(aim))
+    marks = px4_marks(px4, run.follow_distance or 0.0) if px4 is not None else None
+    if marks is not None and marks["base"] is not None:
+        bx, by = marks["base"]
+        bc = view.fixed(bx, by)
+        if (run.follow_distance or 0.0) > 0:  # where PX4 sends the drone now and its final aim
+            cv2.circle(img, view.fixed(*marks["ring"]), 8 << SUB, PX4_BGR, 2, cv2.LINE_AA, SUB)
+            gx, gy = view.fixed(*marks["cross"])
             d = 6 << SUB
             cv2.line(img, (gx - d, gy - d), (gx + d, gy + d), PX4_BGR, 2, cv2.LINE_AA, SUB)
             cv2.line(img, (gx - d, gy + d), (gx + d, gy - d), PX4_BGR, 2, cv2.LINE_AA, SUB)
         head = view.fixed(
-            ex + PX4_COURSE_ARROW_M * math.sin(px4.course), ey + PX4_COURSE_ARROW_M * math.cos(px4.course)
+            bx + PX4_COURSE_ARROW_M * math.sin(px4.course), by + PX4_COURSE_ARROW_M * math.cos(px4.course)
         )
-        cv2.arrowedLine(img, ec, head, PX4_BGR, 3, cv2.LINE_AA, SUB, 0.3)
+        cv2.arrowedLine(img, bc, head, PX4_BGR, 3, cv2.LINE_AA, SUB, 0.3)
         s = 6 << SUB
-        cv2.rectangle(img, (ec[0] - s, ec[1] - s), (ec[0] + s, ec[1] + s), PX4_BGR, -1, cv2.LINE_AA, SUB)
+        if marks["filtered"] is not None:  # F, outlined, and how far it is from the estimate
+            if marks["estimate"] is not None:
+                _dashed_line(img, view.fixed(*marks["estimate"]), bc, PX4_BGR, 1)
+            cv2.rectangle(img, (bc[0] - s, bc[1] - s), (bc[0] + s, bc[1] + s), WHITE, -1, cv2.LINE_AA, SUB)
+            cv2.rectangle(img, (bc[0] - s, bc[1] - s), (bc[0] + s, bc[1] + s), PX4_BGR, 2, cv2.LINE_AA, SUB)
+        if marks["estimate"] is not None:
+            ec = view.fixed(*marks["estimate"])
+            cv2.rectangle(img, (ec[0] - s, ec[1] - s), (ec[0] + s, ec[1] + s), PX4_BGR, -1, cv2.LINE_AA, SUB)
     if m.behind is not None:
         star = _star(view.fixed(*m.behind), 11 << SUB)
         cv2.fillPoly(img, [star], BEHIND_BGR, cv2.LINE_AA, SUB)
@@ -606,11 +641,12 @@ def _legend_items(run: "Run") -> list[list[tuple[str, tuple, str]]]:
             ("line", DRONE_BGR, f"son {TRAIL_S:.0f} s"),
         ]
     )
-    if run.source == "follow_me":
+    if run.source == "follow_me":  # the PX4 row is full: FOLLOW_TARGET goes to the end of the row above
+        rows[-1].append(("dots", PX4_BGR, "FOLLOW_TARGET"))
         rows.append(
             [
-                ("dots", PX4_BGR, "FOLLOW_TARGET"),
                 ("square", PX4_BGR, "PX4 kestirimi"),
+                ("open_square", PX4_BGR, "süzülmüş hedefi"),
                 ("arrow", PX4_BGR, "varsaydığı rota"),
                 ("circle", PX4_BGR, "gönderdiği yer"),
                 ("cross", PX4_BGR, "hedeflediği"),
@@ -638,6 +674,8 @@ def _legend_symbol(img: np.ndarray, kind: str, colour: tuple, u: int, v: int) ->
             cv2.circle(img, (c[0] + (k << SUB), c[1]), 2 << SUB, colour, -1, cv2.LINE_AA, SUB)
     elif kind == "square":
         cv2.rectangle(img, (u - 5, v - 5), (u + 5, v + 5), colour, -1)
+    elif kind == "open_square":
+        cv2.rectangle(img, (u - 5, v - 5), (u + 5, v + 5), colour, 2)
     elif kind == "arrow":
         cv2.arrowedLine(img, (c[0] - (8 << SUB), c[1]), (c[0] + (8 << SUB), c[1]), colour, 2, cv2.LINE_AA, SUB, 0.4)
     elif kind == "circle":
@@ -687,43 +725,30 @@ def _map_furniture(img: np.ndarray, view: TopView, run: "Run", m: "Moment", labe
 
 
 class Px4Timeline:
-    """follow_target_estimator and follow_target_status of the run's ULog files, by PX4 time (= sim time)."""
+    """PX4's Follow Target internals of the run's ULog files (olcum.Px4Follow), as last logged at each moment."""
 
-    def __init__(self, topics: olcum.Topics, world: konumlama.WorldGeo) -> None:
-        est = topics.get("follow_target_estimator")
-        st = topics.get("follow_target_status")
-        self.ok = est is not None and st is not None and len(est["timestamp"]) > 0 and len(st["timestamp"]) > 0
-        if not self.ok:
-            return
-        self.est_t = np.asarray(est["timestamp"], dtype=float) / 1e6
-        valid = np.asarray(est["valid"]).astype(bool)
-        lat, lon = np.asarray(est["lat_est"], dtype=float), np.asarray(est["lon_est"], dtype=float)
-        xy = np.full((len(lat), 2), np.nan)
-        for i in np.flatnonzero(valid & np.isfinite(lat) & np.isfinite(lon)):
-            xy[i] = world.to_local(lat[i], lon[i])[:2]
-        self.est_xy = xy
-        self.est_speed = np.hypot(np.asarray(est["vel_est[0]"], float), np.asarray(est["vel_est[1]"], float))
-        self.est_stale = np.asarray(est["stale"]).astype(bool)
-        self.st_t = np.asarray(st["timestamp"], dtype=float) / 1e6
-        self.course = np.asarray(st["tracked_target_course"], dtype=float)
-        self.orbit = np.asarray(st["orbit_angle_setpoint"], dtype=float)
-        self.follow_angle = np.asarray(st["follow_angle"], dtype=float)
+    def __init__(self, follow: olcum.Px4Follow | None) -> None:
+        self.follow = follow
+        self.ok = follow is not None
 
     def at(self, t: float) -> Px4View | None:
-        if not self.ok:
+        if self.follow is None or t < self.follow.est_t[0] or t < self.follow.st_t[0]:
             return None
-        i = int(np.searchsorted(self.est_t, t, side="right")) - 1
-        j = int(np.searchsorted(self.st_t, t, side="right")) - 1
-        if i < 0 or j < 0:
-            return None
-        xy = self.est_xy[i]
+        now = self.follow.at(t, hold=True)
+
+        def point(xy: np.ndarray) -> tuple[float, float] | None:
+            return (float(xy[0]), float(xy[1])) if np.isfinite(xy).all() else None
+
         return Px4View(
-            estimate=(float(xy[0]), float(xy[1])) if np.isfinite(xy).all() else None,
-            speed=float(self.est_speed[i]),
-            stale=bool(self.est_stale[i]),
-            course=float(self.course[j]),
-            orbit=float(self.orbit[j]),
-            follow_angle=float(self.follow_angle[j]),
+            estimate=point(now["E"]),
+            speed=now["speed"],
+            stale=now["stale"],
+            course=now["course"],
+            orbit=now["orbit"],
+            follow_angle=now["follow_angle"],
+            filtered=point(now["F"]),
+            setpoint=point(now["P"]),
+            aim=point(now["aim"]),
         )
 
 
@@ -778,6 +803,7 @@ class Run:
     trees: list[tuple[float, float, float]] = field(default_factory=list)
     path: list[tuple[float, float]] | None = None
     has_model: bool = False
+    near_passes: list[dict] = field(default_factory=list)  # ozet.json "yakin_gecis" "olaylar"
 
 
 def load(folder: Path) -> Run:
@@ -809,7 +835,8 @@ def load(folder: Path) -> Run:
     ulogs = [p for p in [*sorted(folder.glob("ucus_once*.ulg")), folder / "ucus.ulg"] if p.is_file()]
     px4 = None
     if source == "follow_me" and ulogs:
-        px4 = Px4Timeline(olcum.Topics.read(ulogs, ["follow_target_estimator", "follow_target_status"]), world)
+        topics = olcum.Topics.read(ulogs, PX4_TOPICS)
+        px4 = Px4Timeline(olcum.Px4Follow.from_topics(topics, world, distance))
         px4 = px4 if px4.ok else None
     spec = dunya.load(sc.world)
     trees = [
@@ -836,6 +863,7 @@ def load(folder: Path) -> Run:
         trees=trees,
         path=path,
         has_model=detections is not None,
+        near_passes=list((summary.get("yakin_gecis") or {}).get("olaylar") or []),
     )
 
 
@@ -921,6 +949,7 @@ def moment(run: Run, t: float, frame_t: float | None, repeated: bool) -> Moment:
             for x, y, s in zip(f["x"][recent], f["y"][recent], f["gonderim_sim"][recent], strict=True)
         ]
     px4 = run.px4.at(t) if run.px4 is not None else None
+    near_pass = next((e["sebep"] for e in run.near_passes if e["baslangic_s"] <= t <= e["bitis_s"]), "")
     mode = ""
     for start, name in run.modes:
         if start <= t:
@@ -940,6 +969,7 @@ def moment(run: Run, t: float, frame_t: float | None, repeated: bool) -> Moment:
         px4_speed=px4.speed if px4 is not None else math.nan,
         px4_course_deg=math.degrees(px4.course) if px4 is not None else math.nan,
         px4_stale=px4.stale if px4 is not None else False,
+        near_pass=near_pass,
     )
     return Moment(
         t=t,

@@ -78,3 +78,25 @@ def test_summary_files_of_the_runs(tmp_path: Path) -> None:
     page = (tmp_path / "toplu.html").read_text(encoding="utf-8")
     assert "Dron–hedef yatay mesafe, ortalama [m]" in page and "8.20" in page and "data:image/png;base64" in page
     assert 'href="kosu_1/kosu.mp4"' in page and 'href="kosu_2/kosu.mp4"' in page and "kosu_3/kosu.mp4" not in page
+
+
+def test_summary_page_has_the_corners_and_every_runs_near_passes(tmp_path: Path) -> None:
+    """Task group 9: toplu.html puts the corners side by side (kose_<i>_* of every run, the same path in every run)
+    and lists each run's < 6 m passes with their cause."""
+    runs = []
+    for i, lag in enumerate((1.2, 1.8, None), start=1):
+        metrics = {"kose_sayisi": 1, "kose_1_yon_deg": 90.0, "kose_1_px4_yetisme_s": lag}
+        metrics |= {"kose_1_arkada_kalma_maks_deg": 100.0 + i, "yakin_gecis_kose_sayisi": 1}
+        s = summary("GEÇTİ", [READY], **metrics)
+        s["koseler"] = [{"no": 1, "baslangic_s": 60.3, "yon_deg": 90.0, "tur": "kalkis", "donus_deg": None}]
+        event = {"baslangic_s": 78.0 + i, "bitis_s": 80.0 + i, "en_az_m": 0.5 * i, "en_az_t_s": 79.0 + i}
+        s["yakin_gecis"] = {"esik_m": 6.0, "olaylar": [event | {"sebep": "kose", "baskin_etken": "px4_suzgec_m"}]}
+        folder = tmp_path / f"kosu_{i}"
+        folder.mkdir()
+        (folder / "ozet.json").write_text(json.dumps(s), encoding="utf-8")
+        runs.append(s | {"klasor": str(folder)})
+    toplu.write(tmp_path, "takip_yuruyen", runs, [], [])
+    page = (tmp_path / "toplu.html").read_text(encoding="utf-8")
+    assert "Köşeler" in page and "60.3 s" in page and "1.20" in page and "1.80" in page and "1.50" in page
+    assert "Yakın geçişler (&lt; 6 m)" in page and "79.0–81.0 s" in page and "köşe / yön değişimi" in page
+    assert "1.50 m" in page  # kosu_3's closest

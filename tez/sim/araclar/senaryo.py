@@ -499,6 +499,32 @@ def _geometry_log_lines(m: dict, source: str, follow_distance: float | None) -> 
         )
 
 
+def _near_pass_log_lines(m: dict, sections: dict) -> None:
+    """The < 6 m passes of the recording with their cause (olcum.near_passes) and the corners (olcum.corner_metrics)."""
+    passes = sections.get("yakin_gecis", {}).get("olaylar", [])
+    spans = "; ".join(
+        f"{e['baslangic_s']:.1f}–{e['bitis_s']:.1f} s en az {e['en_az_m']:.2f} m "
+        f"({rapor.NEAR_PASS_TEXT.get(e['sebep'], e['sebep'])})"
+        for e in passes
+    )
+    log(
+        f"Kayıtta {olcum.CLOSE_PASS_M:g} m'den yakın geçiş: {len(passes)} kez"
+        + (f": {spans}" if spans else "")
+        + f"; mesafe < 4 m %{100 * m['mesafe_4m_alti_orani']:.0f}, < 6 m %{100 * m['mesafe_6m_alti_orani']:.0f}, "
+        f"6–10 m %{100 * m['mesafe_6_10m_orani']:.0f}, > 10 m %{100 * m['mesafe_10m_ustu_orani']:.0f}"
+    )
+    corners = sections.get("koseler", [])
+    if corners:
+        log(
+            f"Köşeler ({len(corners)}): "
+            + "; ".join(
+                f"{c['baslangic_s']:.1f} s → {c['yon_deg']:.0f}°: PX4 yetişme {c['px4_yetisme_s']:.1f} s, arkada kalma "
+                f"en çok {c['arkada_kalma_maks_deg']:.0f}°"
+                for c in corners
+            )
+        )
+
+
 def tracking_sections(tracker: takip.Tracker, m: dict, events: list[str]) -> tuple[dict, dict]:
     """ozet.json "tez_los" and "follow_target" (the whole run) and the events of the window's numbers (olcum.measure):
     the lock changes, a ULog count of TEZ_LOS off by more than TEZ_LOS_ULOG_TOLERANCE, no FOLLOW_TARGET at all."""
@@ -698,6 +724,7 @@ def run(
             _detection_log_lines(more)
     if rows:
         _geometry_log_lines(more | rapor.metrics(sc, pd.DataFrame(rows)), t.source, distance)
+        _near_pass_log_lines(more, sections)
     return rapor.write(
         out,
         sc,

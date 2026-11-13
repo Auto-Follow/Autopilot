@@ -3,8 +3,10 @@
 
 Only the recording window counts (zamanlama.baslama_s -> scenario end), with two documented exceptions: the orbit turn
 "at the start of tracking" (from the mode switch until the target starts walking, and its first YURUYUS_BASI_S) and the
-PX4 course assumption, which both describe what happens before and right at the start of the window. A metric that
-does not apply to a run is NaN (e.g. geolocation_hatasi without FOLLOW_TARGET, arkada_kalma without a follow mode).
+PX4 course assumption, which both describe what happens before and right at the start of the window, and the near
+passes (< CLOSE_PASS_M) with the shares of the distance and the corners of the person's path, which cover the whole
+recording (mode switch -> end, what kosu.mp4 shows). A metric that does not apply to a run is NaN (e.g.
+geolocation_hatasi without FOLLOW_TARGET, arkada_kalma without a follow mode).
 
 Inputs (RunData): the referee's rows (kayit.Recorder.snapshot(): one per camera frame, Gazebo truth), the model's
 processed frames (algilama.DetectionLog: algilama.csv rows, kutular, skipped frames), the tracking side's TEZ_LOS /
@@ -13,7 +15,8 @@ FOLLOW_TARGET attempts and lock events (takip.Tracker), the camera (camera_info)
 
 Groups: (a) model: does a box find the target, which box was chosen, wrong person, false positives; (b) LOS: the
 chosen box's line of sight against the referee's; (c) time: frames, latency, the TEZ_LOS stream and what PX4 logged;
-(d) tracking: distance, frame, behind angle, orbit turns, mode, positions, FOLLOW_TARGET and PX4's estimate of it.
+(d) tracking: distance, frame, behind angle, orbit turns, mode, positions, FOLLOW_TARGET and PX4's estimate of it,
+the corners and the near passes, each split into what brought the drone closer (Px4Follow, decompose()).
 """
 
 import math
@@ -173,6 +176,19 @@ KEY_PATTERNS = (
     "px4_kestirim_hizi_baslangic_{ort,p95,maks}_mps",
     "px4_kestirim_hizi_baslangic_1mps_orani",
     "px4_rota_degisimi_baslangic_sayisi",
+    "mesafe_4m_alti_orani",
+    "mesafe_6m_alti_orani",
+    "mesafe_6_10m_orani",
+    "mesafe_10m_ustu_orani",
+    "yakin_gecis_6m_olay_sayisi",
+    "yakin_gecis_6m_suresi_s",
+    "yakin_gecis_en_az_m",
+    "yakin_gecis_{takip_basi,kilit_kaybi,kose,durma_hizlanma,konum_kaymasi,diger,takip_yok}_sayisi",
+    "kose_sayisi",
+    "kose_px4_yetisme_{ort,maks}_s",
+    "kose_px4_yetismedi_sayisi",
+    "kose_arkada_kalma_maks_deg",
+    "kose_arkada_kalma_90_ustu_s",
 )
 KEYS = tuple(k for p in KEY_PATTERNS for k in _expand(p))
 
@@ -837,6 +853,471 @@ def follow_start_metrics(
     return m
 
 
+@dataclass(eq=False)
+class Px4Follow:
+    """PX4's Follow Target internals of a run from its ULog, in the Gazebo world (x east, y north [m]; angles NED
+    [rad], 0 = north). E: follow_target_estimator (lat_est / lon_est, every 200 ms), the estimator's target. F: the
+    target position the task places the drone around, the estimate through the task's own second order filter
+    (FlightTaskAutoFollowTarget updateTargetPositionVelocityFilter, natural frequency 1 rad/s, damping 0.71, the
+    estimated velocity fed forward); not logged, recovered from follow_target_status (every 400 ms) as
+    desired_position_raw - FLW_TGT_DST (cos, sin)(course + follow angle). P: trajectory_setpoint (every 200 ms), the
+    position setpoint = F + FLW_TGT_DST (cos, sin)(orbit angle setpoint). F, P and the aim (desired_position_raw) are
+    NED from the EKF origin (vehicle_local_position ref_lat / ref_lon); without it they are NaN."""
+
+    est_t: np.ndarray
+    est_xy: np.ndarray  # (n, 2) E; NaN where the estimate was not valid
+    est_vel: np.ndarray  # (n, 2) vel_est north, east [m/s]
+    est_stale: np.ndarray  # no FOLLOW_TARGET for 3 s (PX4 keeps the last position)
+    st_t: np.ndarray
+    course: np.ndarray  # tracked_target_course: the course PX4 assumes for the target
+    orbit: np.ndarray  # orbit_angle_setpoint: direction from F to where PX4 wants the drone now
+    follow_angle: np.ndarray
+    filtered_xy: np.ndarray  # (m, 2) F
+    aim_xy: np.ndarray  # (m, 2) desired_position_raw: F + FLW_TGT_DST behind the assumed course
+    sp_t: np.ndarray
+    setpoint_xy: np.ndarray  # (k, 2) P
+
+    @classmethod
+    def from_topics(cls, topics: "Topics", world: konumlama.WorldGeo, distance: float | None) -> "Px4Follow | None":
+        """None without follow_target_estimator and follow_target_status (no follow_me, or not logged)."""
+        est, st = topics.get("follow_target_estimator"), topics.get("follow_target_status")
+        if est is None or st is None or not len(est["timestamp"]) or not len(st["timestamp"]):
+            return None
+        valid = np.asarray(est["valid"]).astype(bool)
+        lat, lon = np.asarray(est["lat_est"], dtype=float), np.asarray(est["lon_est"], dtype=float)
+        est_xy = np.full((lat.size, 2), math.nan)
+        for i in np.flatnonzero(valid & np.isfinite(lat) & np.isfinite(lon)):
+            est_xy[i] = world.to_local(lat[i], lon[i])[:2]
+        proj = None
+        lp = topics.get("vehicle_local_position")
+        if lp is not None and len(lp["timestamp"]):
+            ref = float(lp["ref_lat"][-1]), float(lp["ref_lon"][-1])
+            if all(math.isfinite(v) for v in ref) and ref != (0.0, 0.0):
+                proj = konumlama.MapProjection(*ref)
+
+        def to_world(north: np.ndarray, east: np.ndarray) -> np.ndarray:
+            out = np.full((len(north), 2), math.nan)
+            if proj is None:
+                return out
+            for i, (n, e) in enumerate(zip(north, east, strict=True)):
+                if math.isfinite(n) and math.isfinite(e):
+                    out[i] = world.to_local(*proj.reproject(float(n), float(e)))[:2]
+            return out
+
+        course = np.asarray(st["tracked_target_course"], dtype=float)
+        follow_angle = np.asarray(st["follow_angle"], dtype=float)
+        aim_n = np.asarray(st["desired_position_raw[0]"], dtype=float)
+        aim_e = np.asarray(st["desired_position_raw[1]"], dtype=float)
+        dst = math.nan if distance is None else float(distance)
+        sp = topics.get("trajectory_setpoint")
+        sp_t = np.asarray(sp["timestamp"], dtype=float) / 1e6 if sp is not None else np.zeros(0)
+        sp_xy = (
+            to_world(np.asarray(sp["position[0]"], dtype=float), np.asarray(sp["position[1]"], dtype=float))
+            if sp is not None
+            else np.zeros((0, 2))
+        )
+        return cls(
+            est_t=np.asarray(est["timestamp"], dtype=float) / 1e6,
+            est_xy=est_xy,
+            est_vel=np.stack([np.asarray(est["vel_est[0]"], float), np.asarray(est["vel_est[1]"], float)], axis=1),
+            est_stale=np.asarray(est["stale"]).astype(bool),
+            st_t=np.asarray(st["timestamp"], dtype=float) / 1e6,
+            course=course,
+            orbit=np.asarray(st["orbit_angle_setpoint"], dtype=float),
+            follow_angle=follow_angle,
+            filtered_xy=to_world(
+                aim_n - dst * np.cos(course + follow_angle), aim_e - dst * np.sin(course + follow_angle)
+            ),
+            aim_xy=to_world(aim_n, aim_e),
+            sp_t=sp_t,
+            setpoint_xy=sp_xy,
+        )
+
+    @staticmethod
+    def _pick(ts: np.ndarray, values: np.ndarray, t: float, hold: bool) -> np.ndarray:
+        """values (n,) or (n, k) at t: the last sample at or before t (hold), or linearly between the samples around
+        t; NaN outside the samples."""
+        shape = values.shape[1:]
+        if ts.size == 0:
+            return np.full(shape, math.nan)
+        if hold:
+            i = int(np.searchsorted(ts, t, side="right")) - 1
+            return values[i].astype(float) if i >= 0 else np.full(shape, math.nan)
+        if values.ndim == 1:
+            return np.asarray(np.interp(t, ts, values, left=math.nan, right=math.nan))
+        return np.array([np.interp(t, ts, values[:, k], left=math.nan, right=math.nan) for k in range(shape[0])])
+
+    def at(self, t: float, hold: bool = False) -> dict:
+        """Everything at sim time t [s]: E, F, P, aim (world x, y), vel (north, east), speed, course, orbit,
+        follow_angle (interpolated, angles unwrapped; hold: as last logged, like the video), stale (as last logged)."""
+        vel = self._pick(self.est_t, self.est_vel, t, hold)
+        stale = self._pick(self.est_t, self.est_stale.astype(float), t, True)
+        angles = {
+            k: float(self._pick(self.st_t, v if hold else np.unwrap(v), t, hold))
+            for k, v in (("course", self.course), ("orbit", self.orbit), ("follow_angle", self.follow_angle))
+        }
+        return {
+            "E": self._pick(self.est_t, self.est_xy, t, hold),
+            "F": self._pick(self.st_t, self.filtered_xy, t, hold),
+            "P": self._pick(self.sp_t, self.setpoint_xy, t, hold),
+            "aim": self._pick(self.st_t, self.aim_xy, t, hold),
+            "vel": vel,
+            "speed": float(np.hypot(*vel)) if vel.size == 2 else math.nan,
+            "stale": bool(stale == 1.0),
+            **angles,
+        }
+
+
+# --- (d) tracking: the person's corners and the near passes ----------------------------------------------------------
+
+CLOSE_PASS_M = 6.0  # [m] user's question (13.11): every span of the recording closer than this is explained
+DISTANCE_BANDS_M = (4.0, 6.0, 10.0)  # [m] shares of the recording below 4, below 6, 6..10 and above 10 m
+LEG_TURN_RATE_DEG_S = 20.0  # [deg/s] slower on a straight leg: the natural sway ~4 deg/s, a 1.3 m arc at 1.4 m/s ~60
+LEG_RATE_SPAN_S = 0.5  # [s] the turn rate is taken over this
+LEG_MIN_S = 1.0  # [s] a straight stretch at least this long is a leg
+LEG_ON_COURSE_DEG = 20.0  # [deg] a leg starts where the person first moves this close to its direction
+CORNER_TURN_DEG = 45.0  # [deg] a leg turning at least this much from the one before starts at a corner
+STAND_S = 1.0  # [s] standing this long before a leg makes it a start (kalkış)
+CATCH_UP_DEG = 30.0  # [deg] PX4's assumed course this close to the new direction: it caught up with the corner
+CORNER_WINDOW_S = 6.0  # [s] after a corner: the overshoot is looked for and a near pass is put down to it
+SPEED_CHANGE_MPS = 1.0  # [m/s] the person's speed changed this much ...
+SPEED_CHANGE_S = 4.0  # [s] ... in this long before the closest moment: it stopped, started or ran
+BLIND_S = 1.5  # [s] no measurement this long at the start of the approach: PX4 flew on its prediction (3 fusions)
+GAP_FACTOR_S = 1.0  # [s] a gap this long (2 fusions) from STALE_S before the approach to its closest moment: a factor
+STALE_S = 3.0  # [s] PX4's stale timeout (TargetEstimator GPS_MESSAGE_STALE_TIMEOUT_MS)
+POSITION_SHIFT_M = 0.5  # [m] the sent position's error brought the drone this much closer: konum kayması
+NEAR_PASS_CAUSES = ("takip_basi", "kilit_kaybi", "kose", "durma_hizlanma", "konum_kaymasi", "diger", "takip_yok")
+DECOMPOSITION_TERMS = ("dron_m", "px4_suzgec_m", "px4_ongoru_m", "konum_hatasi_m", "olcum_yasi_m")
+
+
+def _spans(mask: np.ndarray) -> list[tuple[int, int]]:
+    """[(first, last)] indices of the runs where mask holds."""
+    out, start = [], None
+    for i, m in enumerate(mask):
+        if m and start is None:
+            start = i
+        elif not m and start is not None:
+            out.append((start, i - 1))
+            start = None
+    if start is not None:
+        out.append((start, len(mask) - 1))
+    return out
+
+
+def _mean_course(radians: np.ndarray) -> float:
+    return float(np.degrees(np.arctan2(np.sin(radians).mean(), np.cos(radians).mean())) % 360.0)
+
+
+def legs(referee: Sequence[Mapping]) -> list[dict]:
+    """The straight legs of the person's path from the referee (Gazebo truth, every camera frame), in time order:
+    [{no, baslangic_s, bitis_s, yon_deg, onceki_yon_deg, donus_deg, durus_s, tur}]. A leg is a stretch of at least
+    LEG_MIN_S moving (>= MOVING_SPEED) with the course turning slower than LEG_TURN_RATE_DEG_S; legs less than
+    CORNER_TURN_DEG apart without a stop between are one leg. baslangic_s: where the person first moves within
+    LEG_ON_COURSE_DEG of the leg's direction (yon_deg, NED course, 0 = north) after the leg before; durus_s: standing
+    time before it; tur: kalkis (after standing >= STAND_S), donus (a turn while moving) or ilk."""
+    c = _columns(referee, ("t", "hedef_hiz", "hedef_yaw"))
+    t = c["t"]
+    if t.size < 2:
+        return []
+    moving = c["hedef_hiz"] >= MOVING_SPEED
+    yaw = c["hedef_yaw"]
+    known = np.isfinite(yaw)
+    if not known.any():
+        return []
+    yaw = yaw[np.maximum.accumulate(np.where(known, np.arange(t.size), np.argmax(known)))]  # NaN: the yaw before it
+    course = np.unwrap(math.pi / 2 - yaw)  # ENU yaw -> NED course
+    rate = np.degrees(np.abs(course - np.interp(t - LEG_RATE_SPAN_S, t, course))) / LEG_RATE_SPAN_S
+    dt = durations(t)
+    runs = [(a, b) for a, b in _spans(moving & (rate < LEG_TURN_RATE_DEG_S)) if t[b] - t[a] >= LEG_MIN_S]
+    merged: list[list[tuple[int, int]]] = []
+    for run in runs:
+        if merged:
+            leg = merged[-1]
+            between = slice(leg[-1][1] + 1, run[0])
+            standing = float(dt[between][~moving[between]].sum())
+            turn = abs(wrap_deg(_mean_course(course[run[0] : run[1] + 1]) - _mean_course(_steady(course, leg))))
+            if turn < CORNER_TURN_DEG and standing < STAND_S:
+                leg.append(run)  # a gentle bend: the same leg goes on
+                continue
+        merged.append([run])
+    out = []
+    previous_end, previous_dir = -1, None
+    course_deg = np.degrees(course) % 360.0
+    for k, leg in enumerate(merged):
+        direction = _mean_course(_steady(course, leg))
+        near = np.abs(wrap_deg(course_deg - direction)) < LEG_ON_COURSE_DEG
+        search = np.arange(previous_end + 1, leg[0][0] + 1)
+        hits = search[moving[search] & near[search]]
+        first = int(hits[0]) if hits.size else leg[0][0]
+        before = slice(previous_end + 1, first)
+        standing = float(dt[before][~moving[before]].sum())
+        turn = abs(wrap_deg(direction - previous_dir)) if previous_dir is not None else math.nan
+        kind = "kalkis" if standing >= STAND_S else ("donus" if previous_dir is not None else "ilk")
+        out.append(
+            {
+                "no": k + 1,
+                "baslangic_s": float(t[first]),
+                "bitis_s": float(t[leg[-1][1]]),
+                "yon_deg": direction,
+                "onceki_yon_deg": previous_dir,
+                "donus_deg": turn,
+                "durus_s": standing,
+                "tur": kind,
+            }
+        )
+        previous_end, previous_dir = leg[-1][1], direction
+    return out
+
+
+def _steady(values: np.ndarray, leg: Sequence[tuple[int, int]]) -> np.ndarray:
+    return np.concatenate([values[a : b + 1] for a, b in leg])
+
+
+def corner_metrics(
+    legs_: Sequence[Mapping], referee: Sequence[Mapping], px4: Px4Follow | None, following: bool
+) -> tuple[dict, list[dict]]:
+    """How the follow mode took each leg start (the corners of the person's path; legs()): px4_yetisme_s, the time
+    until PX4's assumed course (follow_target_status) came within CATCH_UP_DEG of the new direction, searched until
+    the next corner (NaN: it did not; NaN without the status); arkada_kalma_maks_deg and arkada_kalma_90_ustu_s, the
+    largest behind-angle error and the time the drone was beside or ahead of the person (> OVERSHOOT_DEG) in the
+    CORNER_WINDOW_S after the corner, until the next one (NaN without a follow mode). The 9.8 work had these in a
+    script outside the repo with the corners of takip_yuruyen written in; here they come from the referee.
+
+    -> (olcutler: the totals and kose_<i>_* of every corner, the corners for ozet.json "koseler")."""
+    t_b, error = behind_error_series(referee)
+    dt = durations(t_b)
+    corners = []
+    for k, g in enumerate(legs_):
+        t_k = g["baslangic_s"]
+        until = legs_[k + 1]["baslangic_s"] if k + 1 < len(legs_) else math.inf
+        c = dict(g) | {"px4_yetisme_s": math.nan, "px4_yetisti": None}
+        if px4 is not None and px4.st_t.size:
+            sel = (px4.st_t >= t_k) & (px4.st_t < until)
+            off = np.abs(wrap_deg(np.degrees(px4.course[sel]) - g["yon_deg"]))
+            hit = np.flatnonzero(off < CATCH_UP_DEG)
+            c["px4_yetisti"] = bool(hit.size)
+            c["px4_yetisme_s"] = float(px4.st_t[sel][hit[0]] - t_k) if hit.size else math.nan
+        c["arkada_kalma_maks_deg"] = c["arkada_kalma_90_ustu_s"] = math.nan
+        if following:
+            w = (t_b >= t_k) & (t_b < min(t_k + CORNER_WINDOW_S, until)) & np.isfinite(error)
+            c["arkada_kalma_maks_deg"] = float(error[w].max()) if w.any() else math.nan
+            c["arkada_kalma_90_ustu_s"] = float(dt[w & (error > OVERSHOOT_DEG)].sum())
+        corners.append(c)
+    lags = (c["px4_yetisme_s"] for c in corners)
+    m: dict = {"kose_sayisi": len(corners)} | stats("kose_px4_yetisme", lags, ("ort", "maks"), "_s")
+    known = [c for c in corners if c["px4_yetisti"] is not None]
+    m["kose_px4_yetismedi_sayisi"] = sum(not c["px4_yetisti"] for c in known) if known else math.nan
+    worst = [c["arkada_kalma_maks_deg"] for c in corners if math.isfinite(c["arkada_kalma_maks_deg"])]
+    m["kose_arkada_kalma_maks_deg"] = max(worst) if worst else math.nan
+    m["kose_arkada_kalma_90_ustu_s"] = (
+        float(sum(c["arkada_kalma_90_ustu_s"] for c in corners)) if following and corners else math.nan
+    )
+    for i, c in enumerate(corners, start=1):
+        for key in ("yon_deg", "px4_yetisme_s", "arkada_kalma_maks_deg", "arkada_kalma_90_ustu_s"):
+            m[f"kose_{i}_{key}"] = c[key]
+    return m, corners
+
+
+def _stream(sent: Sequence[Mapping]) -> tuple[np.ndarray, np.ndarray, list[Mapping]]:
+    """(send times, newest capture time sent so far, rows) of the measurements that reached PX4, by send time."""
+    rows = sorted(sent, key=lambda a: a["gonderim_sim"])
+    send = np.array([float(a["gonderim_sim"]) for a in rows])
+    capture = np.maximum.accumulate(np.array([float(a["t"]) for a in rows])) if rows else np.zeros(0)
+    return send, capture, rows
+
+
+def _age(x: float, send: np.ndarray, capture: np.ndarray) -> float:
+    """[s] how old PX4's newest measurement was at x (from its capture time); inf before the first one."""
+    i = int(np.searchsorted(send, x, side="right")) - 1
+    return float(x - capture[i]) if i >= 0 else math.inf
+
+
+def _largest_gap(x0: float, x1: float, send: np.ndarray, capture: np.ndarray) -> float:
+    """[s] the largest age of PX4's newest measurement anywhere in x0..x1 (just before each arrival, and at x1)."""
+    ages = [_age(x0, send, capture), _age(x1, send, capture)]
+    for j in np.flatnonzero((send > x0) & (send <= x1)):
+        ages.append(float(send[j] - capture[j - 1]) if j > 0 else math.inf)
+    return max(ages)
+
+
+def decompose(
+    target: np.ndarray,
+    drone: np.ndarray,
+    setpoint: np.ndarray,
+    filtered: np.ndarray,
+    estimate: np.ndarray,
+    sent: np.ndarray,
+    sent_truth: np.ndarray,
+    orbit: float,
+    distance: float | None,
+) -> dict:
+    """How much closer than FLW_TGT_DST the drone was to the person along n, the direction PX4 wanted it from its
+    target (orbit angle setpoint, NED; world x east, y north [m]), split exactly by D - T = (D - P) + (P - F) + (F - E)
+    + (E - S) + (S - T_c) + (T_c - T), where P - F is FLW_TGT_DST along n. Each term is how much it brought the drone
+    closer (+) or pushed it away (-): dron_m (the drone short of its setpoint P: its momentum, the position
+    controller), px4_suzgec_m (the task's filtered target F ahead of the estimate E), px4_ongoru_m (E ahead of the
+    last FOLLOW_TARGET S: the estimator's prediction with its velocity and acceleration), konum_hatasi_m (S against
+    the person at its frame's capture time T_c: the position from the model's box), olcum_yasi_m (the person moved
+    since that frame). kalan_m: what the sum misses (P - F not exactly FLW_TGT_DST along n: topics sampled at other
+    times). NaN where an input is missing."""
+    n = np.array([math.sin(orbit), math.cos(orbit)]) if math.isfinite(orbit) else np.full(2, math.nan)
+    dst = math.nan if distance is None else float(distance)
+    parts = {
+        "toplam_m": float(dst - (drone - target) @ n),
+        "dron_m": float(-(drone - setpoint) @ n),
+        "px4_suzgec_m": float(-(filtered - estimate) @ n),
+        "px4_ongoru_m": float(-(estimate - sent) @ n),
+        "konum_hatasi_m": float(-(sent - sent_truth) @ n),
+        "olcum_yasi_m": float(-(sent_truth - target) @ n),
+    }
+    parts["kalan_m"] = parts["toplam_m"] - sum(parts[k] for k in DECOMPOSITION_TERMS)
+    return parts
+
+
+def near_passes(
+    referee: Sequence[Mapping],
+    start: float,
+    legs_: Sequence[Mapping],
+    sent: Sequence[Mapping],
+    lock_events: Sequence[Mapping],
+    px4: Px4Follow | None,
+    distance: float | None,
+    source: str,
+) -> tuple[dict, list[dict]]:
+    """Every span of the recording (the referee's rows: mode switch -> scenario end, what kosu.mp4 shows) with the
+    drone closer than CLOSE_PASS_M to the person, why, and the shares of the distance. sent: the measurements that
+    reached PX4 (FOLLOW_TARGET in follow_me: t, gonderim_sim, x, y, gercek_x, gercek_y; TEZ_LOS with a target in
+    tez_los); px4 and distance (FLW_TGT_DST) give the decomposition at the closest moment (decompose(), follow_me).
+
+    The cause (sebep), the first that holds: takip_yok (source yok: the drone hovers), takip_basi (the person had not
+    started walking: the orbit turn of the follow start), kilit_kaybi (at the start of the approach PX4's newest
+    measurement was BLIND_S old, or its estimate went stale), kose (a leg turning >= CORNER_TURN_DEG started at most
+    CORNER_WINDOW_S before the approach or during it), durma_hizlanma (the person's speed changed >= SPEED_CHANGE_MPS
+    in the SPEED_CHANGE_S before the closest moment), konum_kaymasi (the position error term is the largest and
+    >= POSITION_SHIFT_M), diger. etkenler: every one of these that holds (olcum_boslugu: a gap >= GAP_FACTOR_S or a
+    lock loss from STALE_S before the approach to its closest moment, or a stale estimate: a gap during the approach
+    may also be its result, the person below the camera's near limit; the decomposition tells how much it counted).
+
+    -> (olcutler, the events for ozet.json "yakin_gecis")."""
+    names = ("t", "yatay_mesafe", "hedef_hiz", "hedef_yaw", "hedef_x", "hedef_y", "dron_x", "dron_y")
+    c = _columns(referee, names)
+    t, d = c["t"], c["yatay_mesafe"]
+    m: dict = {
+        "yakin_gecis_6m_olay_sayisi": 0,
+        "yakin_gecis_6m_suresi_s": math.nan,
+        "yakin_gecis_en_az_m": math.nan,
+        **{f"yakin_gecis_{k}_sayisi": 0 for k in NEAR_PASS_CAUSES},
+        "mesafe_4m_alti_orani": math.nan,
+        "mesafe_6m_alti_orani": math.nan,
+        "mesafe_6_10m_orani": math.nan,
+        "mesafe_10m_ustu_orani": math.nan,
+    }
+    if t.size == 0 or not np.isfinite(d).any():
+        return m, []
+    dt = durations(t)
+    total = float(dt.sum())
+    low, near_m, high = DISTANCE_BANDS_M
+    m |= {
+        "yakin_gecis_6m_suresi_s": float(dt[d < CLOSE_PASS_M].sum()),
+        "yakin_gecis_en_az_m": float(np.nanmin(d)),
+        "mesafe_4m_alti_orani": float(dt[d < low].sum() / total),
+        "mesafe_6m_alti_orani": float(dt[d < near_m].sum() / total),
+        "mesafe_6_10m_orani": float(dt[(d >= near_m) & (d <= high)].sum() / total),
+        "mesafe_10m_ustu_orani": float(dt[d > high].sum() / total),
+    }
+    send, capture, rows = _stream(sent)
+    corners = [g for g in legs_ if g["onceki_yon_deg"] is not None and g["donus_deg"] >= CORNER_TURN_DEG]
+    losses = [e["t"] for e in lock_events if e.get("olay") == "kilit_kaybi"]
+    course = (90.0 - np.degrees(c["hedef_yaw"])) % 360.0
+    events = []
+    for a, b in intervals(t, d < CLOSE_PASS_M):
+        span = (t >= a) & (t <= b) & (d < CLOSE_PASS_M)
+        j = int(np.argmin(np.where(span, d, np.inf)))
+        t_min = float(t[j])
+        if rows:
+            age, gap = _age(a, send, capture), _largest_gap(a - STALE_S, t_min, send, capture)
+            age_min = _age(t_min, send, capture)
+        elif source == "yok":
+            age = gap = age_min = math.nan
+        else:  # a follow mode without a single measurement: PX4 never knew where the person was
+            age = gap = age_min = math.inf
+        stale = False
+        if px4 is not None and px4.est_t.size:
+            stale = bool(px4.est_stale[(px4.est_t >= a - STALE_S) & (px4.est_t <= t_min)].any())
+        recent = [g for g in corners if a - CORNER_WINDOW_S <= g["baslangic_s"] <= t_min]
+        window = (t >= t_min - SPEED_CHANGE_S) & (t <= t_min)
+        change = float(np.nanmax(c["hedef_hiz"][window]) - np.nanmin(c["hedef_hiz"][window]))
+        parts = dict.fromkeys(("toplam_m", *DECOMPOSITION_TERMS, "kalan_m"), math.nan)
+        px4_speed = px4_course = math.nan
+        if px4 is not None:
+            now = px4.at(t_min)
+            px4_speed, px4_course = now["speed"], math.degrees(now["course"]) % 360.0
+            newest = int(np.searchsorted(send, t_min, side="right")) - 1
+            if newest >= 0 and "x" in rows[newest]:
+                s = rows[newest]
+                parts = decompose(
+                    np.array([c["hedef_x"][j], c["hedef_y"][j]]),
+                    np.array([c["dron_x"][j], c["dron_y"][j]]),
+                    now["P"],
+                    now["F"],
+                    now["E"],
+                    np.array([float(s["x"]), float(s["y"])]),
+                    np.array([float(s["gercek_x"]), float(s["gercek_y"])]),
+                    now["orbit"],
+                    distance,
+                )
+        finite = {k: parts[k] for k in DECOMPOSITION_TERMS if math.isfinite(parts[k])}
+        main = max(finite, key=finite.get) if finite and max(finite.values()) > 0 else None
+        shift = bool(parts["konum_hatasi_m"] >= POSITION_SHIFT_M)
+        flags = {
+            "takip_basi": t_min < start,
+            "olcum_boslugu": bool(gap >= GAP_FACTOR_S) or stale or any(a - STALE_S <= x <= t_min for x in losses),
+            "kose": bool(recent),
+            "durma_hizlanma": change >= SPEED_CHANGE_MPS,
+            "konum_kaymasi": shift,
+        }
+        if source == "yok":
+            cause = "takip_yok"
+        elif flags["takip_basi"]:
+            cause = "takip_basi"
+        elif age >= BLIND_S or stale:
+            cause = "kilit_kaybi"
+        elif flags["kose"]:
+            cause = "kose"
+        elif flags["durma_hizlanma"]:
+            cause = "durma_hizlanma"
+        elif shift and main == "konum_hatasi_m":
+            cause = "konum_kaymasi"
+        else:
+            cause = "diger"
+        m[f"yakin_gecis_{cause}_sayisi"] += 1
+        events.append(
+            {
+                "baslangic_s": a,
+                "bitis_s": b,
+                "sure_s": float(dt[span].sum()),
+                "en_az_m": float(d[j]),
+                "en_az_t_s": t_min,
+                "sebep": cause,
+                "etkenler": [k for k, v in flags.items() if v] if source != "yok" else [],
+                "olcum_yasi_baslangicta_s": age,
+                "olcum_yasi_en_azda_s": age_min,
+                "en_buyuk_bosluk_s": gap,
+                "px4_bayat": stale,
+                "kose_s": recent[-1]["baslangic_s"] if recent else None,
+                "hiz_degisimi_mps": change,
+                "hedef_hizi_mps": float(c["hedef_hiz"][j]),
+                "gercek_rota_deg": float(course[j]) if c["hedef_hiz"][j] >= MOVING_SPEED else math.nan,
+                "px4_hiz_kestirimi_mps": px4_speed,
+                "px4_rota_deg": px4_course,
+                "ayristirma": parts,
+                "baskin_etken": main,
+            }
+        )
+    m["yakin_gecis_6m_olay_sayisi"] = len(events)
+    return m, events
+
+
 def mode_timeline(status: Mapping | None) -> list[dict]:
     """[{baslangic_s, bitis_s, nav_state, ad}] of PX4's navigation state (vehicle_status) over the run's ULogs."""
     if status is None or len(status["timestamp"]) == 0:
@@ -977,12 +1458,15 @@ ULOG_TOPICS = (
     "vehicle_attitude",
     "vehicle_attitude_groundtruth",
     "sensor_mag",
+    "trajectory_setpoint",
+    "vehicle_local_position",
 )
 
 
 def measure(d: RunData) -> tuple[dict, dict]:
     """Every metric of a run except rapor.metrics' F1 ones and the RTF (senaryo.py); -> (olcutler, more ozet.json
-    sections: "mod" (wanted mode, ULog timeline), "yakin_mesafe" (the near-distance events))."""
+    sections: "mod" (wanted mode, ULog timeline), "yakin_mesafe" (the 3 m events of the window), "koseler" (the
+    corners of the person's path and how PX4 took them), "yakin_gecis" (the < 6 m passes of the recording and why))."""
     start, end = d.start, d.end
     following = d.source != "yok"
     m = frame_metrics(d.detections, d.skipped, d.referee, start, end)
@@ -1014,6 +1498,15 @@ def measure(d: RunData) -> tuple[dict, dict]:
     m |= attitude_in_ulog(
         topics.get("vehicle_attitude"), topics.get("vehicle_attitude_groundtruth"), topics.get("sensor_mag"), start, end
     )
+    px4 = Px4Follow.from_topics(topics, d.world, d.follow_distance) if d.world is not None else None
+    path = legs(d.referee)
+    corner_m, corners = corner_metrics(path, d.referee, px4, following)
+    if d.source == "follow_me":
+        stream = [a for a in d.follow_attempts if a["sonuc"] == "gonderildi"]
+    else:  # tez_los: what the mode gets is TEZ_LOS with a target; yok: none
+        stream = [a for a in d.attempts if a["sonuc"] == "gonderildi" and a["hedef"]] if following else []
+    near_m, passes = near_passes(d.referee, start, path, stream, d.lock_events, px4, d.follow_distance, d.source)
+    m |= corner_m | near_m
     timeline = mode_timeline(topics.get("vehicle_status"))
     wanted = wanted_nav_state(timeline, d.mode_switched_s)
     m["mod_korunma_orani"] = mode_kept(timeline, wanted, start, end)
@@ -1031,6 +1524,12 @@ def measure(d: RunData) -> tuple[dict, dict]:
             "ulog": timeline,
         },
         "yakin_mesafe": {"esik_m": NEAR_DISTANCE_M, "olaylar": near},
+        "koseler": corners,
+        "yakin_gecis": {
+            "esik_m": CLOSE_PASS_M,
+            "pencere": "kayıt (video): mod seçimi -> senaryo sonu",
+            "olaylar": passes,
+        },
     }
     if topics.error:
         sections["ulog_hatasi"] = topics.error

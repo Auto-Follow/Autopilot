@@ -30,7 +30,7 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import matplotlib
@@ -55,6 +55,24 @@ MAIN_KEYS = (
     "yakin_mesafe_3m_suresi_s",
     "yakin_mesafe_3m_olay_sayisi",
     "kadraj_yakin_sinir_alti_s",
+    "yakin_gecis_en_az_m",
+    "mesafe_4m_alti_orani",
+    "mesafe_6m_alti_orani",
+    "mesafe_6_10m_orani",
+    "mesafe_10m_ustu_orani",
+    "yakin_gecis_6m_olay_sayisi",
+    "yakin_gecis_6m_suresi_s",
+    "yakin_gecis_takip_basi_sayisi",
+    "yakin_gecis_kilit_kaybi_sayisi",
+    "yakin_gecis_kose_sayisi",
+    "yakin_gecis_durma_hizlanma_sayisi",
+    "yakin_gecis_konum_kaymasi_sayisi",
+    "yakin_gecis_diger_sayisi",
+    "kose_px4_yetisme_ort_s",
+    "kose_px4_yetisme_maks_s",
+    "kose_px4_yetismedi_sayisi",
+    "kose_arkada_kalma_maks_deg",
+    "kose_arkada_kalma_90_ustu_s",
     "arkada_kalma_hatasi_ort_deg",
     "arkada_kalma_hatasi_p95_deg",
     "arkada_kalma_hatasi_90_ustu_s",
@@ -94,6 +112,8 @@ MAIN_KEYS = (
 DOT_KEYS = (
     "yatay_mesafe_ort_m",
     "en_az_yatay_mesafe_m",
+    "mesafe_6m_alti_orani",
+    "kose_px4_yetisme_ort_s",
     "yakin_mesafe_3m_suresi_s",
     "arkada_kalma_hatasi_ort_deg",
     "baslangic_yorunge_donusu_deg",
@@ -106,6 +126,11 @@ DOT_KEYS = (
     "rtf_ort",
 )
 LABELS = {k: label for _, rows in rapor.METRIC_GROUPS for k, label in rows}
+CORNER_ROWS = (  # kose_<i>_<key> of every corner (olcum.corner_metrics), one table row each
+    ("px4_yetisme_s", "PX4'ün rotasının yeni yönün 30° içine girmesi [s] (– yetişmedi)"),
+    ("arkada_kalma_maks_deg", "Köşeden sonraki 6 s'de arkada kalma hatası, en çok [°]"),
+    ("arkada_kalma_90_ustu_s", "Dron yanında/önünde (> 90°, aşma) [s]"),
+)
 
 
 def log(text: str) -> None:
@@ -276,20 +301,65 @@ def write(out: Path, scenario: str, runs: list[dict], attempts: list[dict], extr
             w.writerow(
                 [key, *("" if v is None else v for v in d["kosular"]), d["ort"], d["en_az"], d["en_cok"], d["n"]]
             )
-    (out / "toplu.html").write_text(_html(scenario, summary, agg, plot_dots(agg, len(runs)) if runs else ""), "utf-8")
+    dots = plot_dots(agg, len(runs)) if runs else ""
+    (out / "toplu.html").write_text(_html(scenario, summary, agg, dots, runs), "utf-8")
     return summary
 
 
-def _html(scenario: str, s: dict, agg: dict, dots: str) -> str:
+def _corners_html(runs: Sequence[dict], agg: dict, row: Callable[[str, str], str], table: str) -> str:
+    """The corners side by side: the person walks the same path in every run, so corner i is the same corner."""
+    corners = next((r.get("koseler") for r in runs if r.get("koseler")), None)
+    if not corners:
+        return ""
+    body = []
+    for i, c in enumerate(corners, start=1):
+        kind = rapor.CORNER_KIND.get(c.get("tur"), c.get("tur"))
+        body.append(
+            f"<tr><th colspan=99>Köşe {i}: {c['baslangic_s']:.1f} s, {html.escape(str(kind))}, yeni yön "
+            f"{c['yon_deg']:.0f}° (0 = kuzey)</th></tr>"
+        )
+        body += [row(f"kose_{i}_{key}", label) for key, label in CORNER_ROWS if f"kose_{i}_{key}" in agg]
+    return (
+        "<h2>Köşeler (PX4'ün yeni yöne yetişmesi ve aşma)</h2><p class=muted>Köşe anı ilk koşudan; tanım spec "
+        f'"Ölçüt Tanımları".</p><table>{table}{"".join(body)}</table>'
+    )
+
+
+def _near_passes_html(runs: Sequence[dict]) -> str:
+    """Every run's < 6 m passes: a short list, the whole table (rapor.near_pass_rows) folded."""
+    if not any("yakin_gecis" in r for r in runs):
+        return ""
+    e = html.escape
+    items, rows = [], []
+    for r in runs:
+        name = e(Path(r["klasor"]).name)
+        events = (r.get("yakin_gecis") or {}).get("olaylar", [])
+        spans = "; ".join(
+            f"{x['baslangic_s']:.1f}–{x['bitis_s']:.1f} s {e(rapor.NEAR_PASS_TEXT.get(x['sebep'], x['sebep']))} "
+            f"(en az {x['en_az_m']:.2f} m)"
+            for x in events
+        )
+        items.append(f"<li>{name}: {spans or 'yok'}</li>")
+        rows.append(f"<tr><th colspan=99>{name}</th></tr>{rapor.near_pass_rows(events)}")
+    return (
+        f"<h2>Yakın geçişler (&lt; {rapor.olcum.CLOSE_PASS_M:g} m)</h2><p class=muted>Kayıt (video) penceresi: mod "
+        'seçimi → senaryo sonu; sebep, sırayla ilk tutan kural (spec "Ölçüt Tanımları").</p>'
+        f"<ul>{''.join(items)}</ul>"
+        f"<details><summary>Ayrıştırmalarıyla</summary><table>{rapor.NEAR_PASS_HEAD}{''.join(rows)}</table>"
+        f"{rapor.NEAR_PASS_NOTE}</details>"
+    )
+
+
+def _html(scenario: str, s: dict, agg: dict, dots: str, summaries: Sequence[dict] = ()) -> str:
     e = html.escape
     n = s["kosu_sayisi"]
     head = "".join(f"<th>koşu {i}</th>" for i in range(1, n + 1))
 
-    def row(key: str) -> str:
+    def row(key: str, label: str | None = None) -> str:
         d = agg[key]
         cells = "".join(f"<td class=num>{e(_fmt(v, key))}</td>" for v in d["kosular"])
         spread = "".join(f"<td class=num><b>{e(_fmt(d[k], key))}</b></td>" for k in ("ort", "en_az", "en_cok"))
-        return f"<tr><td>{e(LABELS.get(key, key))}<br><code>{e(key)}</code></td>{cells}{spread}</tr>"
+        return f"<tr><td>{e(label or LABELS.get(key, key))}<br><code>{e(key)}</code></td>{cells}{spread}</tr>"
 
     main = "".join(row(k) for k in MAIN_KEYS if k in agg)
     rest = "".join(row(k) for k in sorted(agg) if k not in MAIN_KEYS)
@@ -327,6 +397,8 @@ td.num {{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowra
 <code>rapor.html</code>'inde. Değerler ölçümdür, başarı eşiği yoktur (m01).</p>
 <h2>Koşular</h2><ul>{runs}</ul>
 <h2>Ana ölçütler</h2><table>{table}{main}</table>
+{_corners_html(summaries, agg, row, table)}
+{_near_passes_html(summaries)}
 <h2>Koşu koşu (nokta: koşu, çizgi: ortalama)</h2>{img}
 <h2>Denemeler</h2><ul>{tries}</ul>
 <details><summary>Bütün sayısal ölçütler</summary><table>{table}{rest}</table></details>

@@ -202,16 +202,26 @@ için öne çıkanlar:
 | `baslangic_yorunge_donusu_deg`, `yuruyus_basi_yorunge_donusu_deg` | Dronun kişi etrafında döndüğü toplam açı: kişi dururken ve yürümeye başladığı ilk 10 s |
 | `px4_rota_kuzey_varsayimi_s`, `px4_rota_hatasi_*`, `px4_yorunge_donusu_*` | `follow_me`: PX4'ün kendi Follow Target görevinin iç durumu (ULog `follow_target_status`): rotayı kuzey varsaydığı süre, rota hatası, yörünge hedefinin dönüşü |
 | `follow_target_titresim_baslangic_m`, `px4_kestirim_hizi_baslangic_*`, `px4_rota_degisimi_baslangic_sayisi` | `follow_me`, takip başı (kişi dururken): PX4'e giden konumun titreşimi; PX4'ün hedef kestiricisinin bundan ürettiği **sahte hız** (ULog `follow_target_estimator.vel_est`) ve 1 m/s'yi (rota güncelleme eşiği) aştığı süre; PX4'ün rotasının kaç kez değiştiği. Stok Follow Me'nin duran kişi etrafında salınmasının sebebi |
+| `mesafe_{4m_alti,6m_alti,6_10m,10m_ustu}_orani` | Kaydın tamamında (videonun gösterdiği aralık: mod seçimi → son) dron–kişi mesafesinin 4 m altında, 6 m altında, 6–10 m arasında, 10 m üstünde geçen payı |
+| `yakin_gecis_6m_olay_sayisi`, `yakin_gecis_<sebep>_sayisi` | Kayıtta dronun kişiye 6 m'den yakın geçtiği aralıklar ve sebepleri (`ozet.json` → `yakin_gecis.olaylar`: başlangıç/bitiş, en az mesafe, sebep, etkenler ve en az mesafe anında "8 m'den neden yakın" ayrıştırması). Sebepler: takip başı yörünge dönüşü, kilit kaybı / bayat kestirim, köşe / yön değişimi, kişi durdu ya da hızlandı, konum kayması, diğer. Rapor ve `toplu.html`'de tablo, raporda zaman çizelgesi, videoda durum satırı |
+| `kose_px4_yetisme_{ort,maks}_s`, `kose_arkada_kalma_maks_deg`, `kose_<i>_*` | Kişinin yolunun köşeleri (hakemden bulunan bacak başları): PX4'ün varsaydığı rotanın yeni yöne (30° içine) yetişme süresi ve köşeden sonra dronun aşması (arkada kalma açısı hatası, > 90°) |
 | `mod_korunma_orani` | İstenen modda geçen süre (ULog `vehicle_status`) |
 | `ekf_yaw_hatasi_ulog_*`, `mag_sapma_olculen_deg` | EKF yaw − gerçek yaw (ULog, her örnek) ve manyetometrenin ölçtüğü alanın sapması (PX4 WMM'i +3.41°) |
 
 Stok Follow Me'nin takip başında hedefin etrafında dönmesi ve köşede hedefi aşması **PX4'ün kendi davranışıdır**
 (gerçek dronda da olur; spec "PX4 stok Follow Target davranışı"); ölçütler bunu sayıya döker.
-Stok ayarlarla ne kadar düzeldiği (9.8 ön işi, her ayar 3 koşu): `FLW_TGT_RS 0.3` duran kişideki salınımı gideriyor
-(sahte hız 0.57 → 0.15 m/s), bedeli köşelerde 0.5–0.9 s gecikme ve daha yakın geçiş; 0.5 ve üstünde PX4 köşelere
-yetişemiyor. m06'nın varsayılanları değişmedi; ayrıntı ve öneri
-`agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09-on-followme-ayar.md`. Bir ayarı denemek:
-`$P tez/sim/araclar/toplu.py --senaryo takip_yuruyen --tekrar 3 -- --param FLW_TGT_RS=0.3`.
+Stok ayarlarla ne kadar düzeldiği (9.8 ön işi ve 9. grup, her ayar 3 koşu): `FLW_TGT_RS 0.3` duran kişideki salınımı
+her koşuda gideriyor (sahte hız 0.53 → 0.14 m/s; 0.2 üç koşunun ikisinde gidermedi), bedeli köşelerde PX4'ün yeni yöne
+0.5–1 s geç yetişmesi ve köşede daha yakın geçiş; 0.5 ve üstünde PX4 köşelere yetişemiyor. **Kullanıcı kararı (13.11):
+Follow Me senaryoları (`takip_yuruyen`, `takip_yuruyen_10m`) `FLW_TGT_RS 0.3` ile koşar** (senaryonun
+`takip.px4_parametreleri`'nde; sim seçimidir, gerçek dronun parametre dosyasında 0.1'dir ve `gercek_dron.params`
+değişmedi). PX4'ün varsayılanıyla koşmak: `--param FLW_TGT_RS=0.1`. Ayrıntı:
+`agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09.md` (ve `-09-on-followme-ayar.md`).
+
+Dronun kişiye neden zaman zaman 8 m'den çok yaklaştığı (9. grup): PX4 dronu kişinin kendisine değil, kestirimini kendi
+süzgecinden geçirdiği bir noktaya göre koyar; kişi aniden durunca ya da dönünce bu nokta eski hızla kişiyi geçer
+(stok modda en az mesafe koruması yoktur). Her koşunun `rapor.html`'inde "Yakın geçişler" tablosu bunu geçiş geçiş
+paylara ayırır.
 
 Aynı senaryoyu birkaç kez koşup dağılımını almak (m06 kararı: her senaryo 3 kez):
 
@@ -228,7 +238,9 @@ $P tez/sim/araclar/toplu.py --ozet tez/sim/sonuclar/A tez/sim/sonuclar/B        
 Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu), `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
 kısa koşu, sert geri dönüş) — ikisi düz alanda — ve `kalabalik_park` (çayırda hedef + dört kişi: patikada yürüyen,
 çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır). `takip_yuruyen`:
-`yuruyen_insan`'ın yolu, dron 8 m'den stok Follow Me ile 8 m geriden izler (takip kaynağı `follow_me`). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
+`yuruyen_insan`'ın yolu, dron 8 m'den stok Follow Me ile 8 m geriden izler (takip kaynağı `follow_me`).
+`takip_yuruyen_10m`: aynı yol, kamera raporunun "çim alan" ayarı 10 m / 10 m (9. grupta 8/8 ile karşılaştırmak için;
+varsayılan 8/8). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
 
 - `dunya`: `duz_alan` (tek renk düz alan, hızlı) veya `cayir` (aşağıda "Dünyalar")
 - `drone.yukseklik_m`
@@ -316,13 +328,16 @@ vlc tez/sim/sonuclar/<klasör>/kosu.mp4 2>/dev/null
   burnu) ve son 10 s'lik izleri; açık mavi alan kameranın yerde gördüğü yer; kişinin çevresinde kırmızı kesikli 3 m
   halkası ve gri kesikli kameranın yakın görüş sınırı (dron bunun içine girerse kişinin ayakları kadrajdan çıkar); yeşil
   yıldız dronun olması gereken yer (yürüyen kişinin `FLW_TGT_DST` gerisi); mor noktalar son 3 s'de gönderilen
-  `FOLLOW_TARGET` konumları (titreşimleri görünür); `follow_me`'de PX4'ün kendi iç durumu (ULog): mor kare kişi
-  kestirimi, mor ok varsaydığı rota, mor halka dronu şu an gönderdiği yer, mor × hedeflediği yer. Ölçek çubuğu, kuzey
-  oku, dron–kişi mesafesi.
+  `FOLLOW_TARGET` konumları (titreşimleri görünür); `follow_me`'de PX4'ün kendi iç durumu (ULog): dolu mor kare
+  kestiricinin kişi kestirimi, içi boş mor kare görevin **süzülmüş hedefi** (dron bunun `FLW_TGT_DST` gerisine konur;
+  kişi durunca ya da dönünce kişiyi metrelerce geçer: yakın geçişlerin asıl sebebi), mor ok varsaydığı rota, mor halka
+  dronu şu an gönderdiği yer (PX4'ün kendi ayar noktası, `trajectory_setpoint`), mor × hedeflediği yer. Ölçek çubuğu,
+  kuzey oku, dron–kişi mesafesi.
 - **Altta durum satırı:** ne olduğu (takip başı / kişi yürüyor / koşuyor, mesafe, arkada kalma açısı hatası);
   **kırmızı**: kilit kaybı, "hedef yok", dron 3 m ya da kameranın yakın sınırı içinde, kişi kadraj dışında; turuncu:
-  dron kişinin yanında/önünde (köşede aşma); yoksa PX4'ün kişinin hızı kestirimi ("≥ 1 m/s: rota güncellenir") ve
-  varsaydığı rota.
+  dron kişinin yanında/önünde (köşede aşma); dron kişiye 6 m'den yakınken o geçişin sebebi ("6 m'den yakın geçiş:
+  köşe / yön değişimi" gibi; `ozet.json` → `yakin_gecis`); yoksa PX4'ün kişinin hızı kestirimi ("≥ 1 m/s: rota
+  güncellenir") ve varsaydığı rota.
 - Video hakemin kaydını kapsar: dron modunu seçtiği andan senaryo sonuna (kişi dururken geçen "takip başı" da dahil).
   Kareler koşu sırasında ayrı bir süreçte yalnız diske yazılır (`goruntu_yayini.py`: 15 kare/sim-s, 1280×720 JPEG,
   `kareler/`); video koşu bittikten sonra çevrimdışı birleştirilir (`video.py`, ffmpeg: H.264, yuv420p) ve kareler

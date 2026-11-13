@@ -398,6 +398,11 @@ def test_measure_writes_every_key() -> None:
     } <= set(m)
     assert m["en_az_yatay_mesafe_m"] == pytest.approx(2.0) and math.isnan(m["algilama_orani"])
     assert sections["yakin_mesafe"]["esik_m"] == olcum.NEAR_DISTANCE_M and len(sections["yakin_mesafe"]["olaylar"]) == 1
+    # the recording's corners and near passes (task group 9): one leg (east from 60 s), one pass under 6 m (70 s)
+    assert [round(c["yon_deg"]) for c in sections["koseler"]] == [90] and m["kose_sayisi"] == 1
+    passes = sections["yakin_gecis"]
+    assert passes["esik_m"] == olcum.CLOSE_PASS_M and [e["sebep"] for e in passes["olaylar"]] == ["takip_yok"]
+    assert m["yakin_gecis_takip_yok_sayisi"] == 1 and math.isnan(m["kose_px4_yetisme_ort_s"])
 
 
 def test_run_log_lines_of_every_tracking_source(capsys: pytest.CaptureFixture[str]) -> None:
@@ -413,6 +418,11 @@ def test_run_log_lines_of_every_tracking_source(capsys: pytest.CaptureFixture[st
     senaryo._geometry_log_lines(empty, "tez_los", None)
     out = capsys.readouterr().out
     assert "Takip (yok)" in out and "FLW_TGT_DST 8" in out and "arkada kalma" in out
+    # task group 9: the < 6 m passes of the recording with their cause, and the corners
+    _, sections = olcum.measure(olcum.RunData(start=60.0, end=80.0, referee=walk(), source="yok", camera=CM3))
+    senaryo._near_pass_log_lines(m, sections)
+    out = capsys.readouterr().out
+    assert "6 m'den yakın" in out and "70.0" in out and "dron takip etmiyor" in out and "Köşeler (1)" in out
 
 
 def test_jitter_of_the_standing_target_and_the_speed_px4_makes_of_it() -> None:

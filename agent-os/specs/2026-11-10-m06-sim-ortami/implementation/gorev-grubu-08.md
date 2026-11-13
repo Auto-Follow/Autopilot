@@ -153,10 +153,10 @@ süreç kalmadı.
 ### Açık kararlar ve bekleyenler
 
 - **Video penceresi:** spec "kayıt penceresi" diyordu; video hakemin kaydını (takip başı + kayıt penceresi) kapsıyor
-  (karar 1). Kullanıcının onayı bekleniyor; yalnız ölçüt penceresi istenirse `video.make`'e bir başlangıç zamanı vermek
-  yeter.
-- **Kare kaydının RTF payı (≈ 0.05):** azaltmak istenirse seçenekler yukarıda ("Ne yapılabilir"); 11. grubun QGC yayını
-  aynı süreçte olacağı için karar o grupla birlikte verilmeli.
+  (karar 1). **Karar (13.11, kullanıcı; 9. grupta spec'e yazıldı):** böyle kalır, takip moduna geçişten koşu sonuna.
+- **Kare kaydının RTF payı (≈ 0.05):** azaltmak istenirse seçenekler yukarıda ("Ne yapılabilir"). **Karar (13.11,
+  kullanıcı):** 11. grupta QGC yayınıyla birlikte ele alınır (`tasks.md` 11.6); o zamana kadar RTF'in önemli olduğu
+  ölçümlerde `--videosuz`.
 - **`dunya` modülünün `ruff.toml`'daki yeri** (önceden de eksikti; ayrı küçük bir iş).
 
 ### Commit ayrımı (A ve B aynı dosyalara dokundu)

@@ -157,8 +157,10 @@ yazılmasın diye eklendi (3 koşu).
 | RTF | **0.82** (0.74–0.90) | **0.84** (0.82–0.88) | **0.82** (0.82–0.83) | **0.82** (0.82–0.83) | **0.83** (0.82–0.84) | **0.83** (0.83–0.83) | **0.79** (0.78–0.80) | **0.86** (0.82–0.92) | **0.82** (0.79–0.85) |
 
 "Köşe" ölçütleri (`dogru_cevap.csv` + ULog `follow_target_status`): kişinin gerçek rotası yeni yöne (±20°) geldiği
-andan PX4'ün varsaydığı rotanın o yönün 30° içine girmesine kadar geçen süre (yürüyüş başı: doğu, 60 s; kuzeye koşu
-≈ 71.6 s; batıya dönüş ≈ 75 s); "yetişmedi": koşu bitene kadar girmedi. "Köşe (batı) en çok": batıya dönüşten sonraki 6
+andan PX4'ün varsaydığı rotanın o yönün 30° içine girmesine kadar geçen süre (yürüyüş başı: doğu, 60.3 s; kuzeye koşu
+73.0 s; batıya dönüş 77.6 s; bu anlar ilk yazımda yanlışlıkla ≈ 71.6 / ≈ 75 s yazılmıştı, gecikmeler betiğin hakemden
+bulduğu doğru anlarla hesaplanmıştı: 9. grupta `olcum.py`'ye taşınan kodla aynı sayılar çıktı); "yetişmedi": koşu
+bitene kadar girmedi. 9. grupta bu ölçütler `olcum.py`'ye taşındı (`kose_*`, karar 4, 13.11). "Köşe (batı) en çok": batıya dönüşten sonraki 6
 s'de arkada kalma açısı hatasının en büyüğü.
 
 **Okuma (salınım ↔ tepkisellik, ikisi birlikte):**
@@ -287,8 +289,8 @@ birlikte giderir. m06 aynı senaryo, aynı ölçütler ve aynı videoyla karşı
   yazıldı. Bu iki koşu tabloda bırakıldı: sim zamanında ölçülen her şey (mesafe, açı, gecikme) RTF'den bağımsızdır;
   yalnız model sim saatine göre biraz hızlı görünür.
 - **Köşe ölçütleri repoda değil:** "PX4 rotasının köşeye yetişmesi" ve "batı dönüşünde en çok arkada kalma" bu belge için
-  betikle koşu klasörlerinden hesaplandı (`gorev9on_betikler/is_b_analiz.py`; senaryoya özgü köşe anları); kalıcı bir
-  ölçüt olarak eklenmesi m01 / m17'de düşünülebilir.
+  betikle koşu klasörlerinden hesaplandı (`gorev9on_betikler/is_b_analiz.py`; senaryoya özgü köşe anları). **9. grupta
+  `olcum.py`'ye taşındı** (kullanıcı kararı 13.11; köşeler hakemden bulunur, `kose_*`, testli; `gorev-grubu-09.md`).
 
 ## 9. Görseller (repo dışı)
 

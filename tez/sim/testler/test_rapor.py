@@ -131,3 +131,44 @@ def test_report_has_every_key_the_new_sections_and_the_warning_event(tmp_path: P
         "Takip zaman çizelgesi",
     ):
         assert part in page, part
+
+
+def test_report_explains_the_near_passes_and_the_corners(tmp_path: Path) -> None:
+    """Task group 9: the < 6 m passes of the recording with their cause and decomposition, and the corners with how
+    fast PX4 caught up, as tables, a check line and a timeline figure (distance, cause bands, corners)."""
+    sc = scenario({})
+    rows = [
+        r
+        | {"kamera_z": 8.0, "hedef_x": 10.0, "hedef_y": 0.0, "hedef_yaw": 0.0, "hedef_hiz": 0.0, "ayak_gorunur": True}
+        | {"bas_gorunur": True, "gorunur": True, "hedef_piksel": 900.0, "merkez_u": 1152.0, "merkez_v": 648.0}
+        for r in recording().to_dict("records")
+    ]
+    parts = {"toplam_m": 5.0, "dron_m": 1.5, "px4_suzgec_m": 2.5, "px4_ongoru_m": 1.2, "konum_hatasi_m": -0.3}
+    parts |= {"olcum_yasi_m": 0.1, "kalan_m": 0.0}
+    event = {"baslangic_s": 64.0, "bitis_s": 65.5, "sure_s": 1.5, "en_az_m": 3.0, "en_az_t_s": 64.8, "sebep": "kose"}
+    event |= {"etkenler": ["kose", "durma_hizlanma"], "ayristirma": parts, "baskin_etken": "px4_suzgec_m"}
+    event |= {"olcum_yasi_baslangicta_s": 0.2, "en_buyuk_bosluk_s": 0.4, "hedef_hizi_mps": 1.4}
+    event |= {"px4_hiz_kestirimi_mps": 2.6, "px4_rota_deg": 355.0, "gercek_rota_deg": 270.0, "kose_s": 63.0}
+    corner = {"no": 1, "baslangic_s": 60.3, "bitis_s": 69.0, "yon_deg": 90.0, "onceki_yon_deg": None, "tur": "kalkis"}
+    corner |= {"donus_deg": None, "durus_s": 34.0, "px4_yetisme_s": 1.5, "px4_yetisti": True}
+    corner |= {"arkada_kalma_maks_deg": 120.0, "arkada_kalma_90_ustu_s": 1.2}
+    metrics = {"yakin_gecis_6m_olay_sayisi": 1, "yakin_gecis_6m_suresi_s": 1.5, "yakin_gecis_kose_sayisi": 1}
+    metrics |= {"mesafe_6m_alti_orani": 0.06, "kose_sayisi": 1, "kose_px4_yetisme_ort_s": 1.5}
+    sections = {"yakin_gecis": {"esik_m": 6.0, "olaylar": [event]}, "koseler": [corner]}
+    rapor.write(tmp_path, sc, rows, [], True, [], None, None, None, {}, metrics, sections)
+    saved = json.loads((tmp_path / "ozet.json").read_text(encoding="utf-8"))
+    check = next(c for c in saved["kontroller"] if c["ad"] == "yakin_gecis")
+    assert check["durum"] == "uyari" and "köşe" in check["metin"] and "64.0" in check["metin"]
+    page = (tmp_path / "rapor.html").read_text(encoding="utf-8")
+    for part in (
+        "Yakın geçişler (&lt; 6 m)",
+        "köşe / yön değişimi",
+        "PX4'ün süzülmüş hedefi",
+        "+2.50",
+        "Köşeler",
+        "kalkış",
+        "1.50",
+        "Yakın geçişler ve sebepleri",
+        "%6.0",
+    ):
+        assert part in page, part

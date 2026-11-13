@@ -210,6 +210,69 @@ def plot_target_speed(sc: Scenario, df: pd.DataFrame) -> str:
     return _png(fig)
 
 
+# The causes of a near pass (olcum.near_passes) and the parts of its decomposition (olcum.decompose), as the reports,
+# toplu.html and the video's status line say them.
+NEAR_PASS_TEXT = {
+    "takip_basi": "takip başı yörünge dönüşü",
+    "kilit_kaybi": "kilit kaybı / bayat kestirim",
+    "kose": "köşe / yön değişimi",
+    "durma_hizlanma": "kişi durdu ya da hızlandı",
+    "konum_kaymasi": "konum kayması",
+    "diger": "diğer",
+    "takip_yok": "dron takip etmiyor",
+}
+NEAR_PASS_COLOR = {
+    "takip_basi": "#7b3fa0",
+    "kilit_kaybi": "#c62828",
+    "kose": "#eb6834",
+    "durma_hizlanma": "#d4a017",
+    "konum_kaymasi": "#2a78d6",
+    "diger": "#8b8a86",
+    "takip_yok": "#5f8f4e",
+}
+FACTOR_TEXT = NEAR_PASS_TEXT | {"olcum_boslugu": "ölçüm boşluğu"}
+TERM_TEXT = {
+    "dron_m": "dron ayar noktasının gerisinde (ataleti, konum kontrolcüsü)",
+    "px4_suzgec_m": "PX4'ün süzülmüş hedefi kestirimi geçti (görevin süzgeci, hız ileri beslemeli)",
+    "px4_ongoru_m": "PX4 kestiricisi son FOLLOW_TARGET'ı geçti (hız ve ivmeyle öngörü)",
+    "konum_hatasi_m": "gönderilen konumun hatası (model kutusu)",
+    "olcum_yasi_m": "ölçümün yaşı (kişi kareden beri yürüdü)",
+}
+
+
+def plot_near_passes(df: pd.DataFrame, passes: Mapping | None, corners: list | None, start: float) -> str:
+    """The distance over the recording with the < 6 m passes as bands coloured by their cause and the corners of the
+    person's path as dashed lines (olcum.near_passes, olcum.legs)."""
+    fig, ax = plt.subplots(figsize=(7.6, 3.2))
+    _style(ax)
+    seen = set()
+    for e in (passes or {}).get("olaylar", []):
+        cause = e["sebep"]
+        label = None if cause in seen else NEAR_PASS_TEXT.get(cause, cause)
+        seen.add(cause)
+        ax.axvspan(
+            e["baslangic_s"], e["bitis_s"], color=NEAR_PASS_COLOR.get(cause, OTHERS_COLOR), alpha=0.3, lw=0, label=label
+        )
+    ax.plot(df.t, df.yatay_mesafe, color=TEXT, linewidth=1.6)
+    for limit, style in ((olcum.CLOSE_PASS_M, "--"), (olcum.DISTANCE_BANDS_M[0], ":")):
+        ax.axhline(limit, color=WARNING_COLOR, linewidth=0.9, linestyle=style)
+        ax.text(df.t.iloc[0], limit, f" {limit:g} m", color=WARNING_COLOR, fontsize=8, va="bottom")
+    top = float(np.nanmax(df.yatay_mesafe)) if len(df) else 10.0
+    for c in corners or []:
+        ax.axvline(c["baslangic_s"], color=TEXT_2, linewidth=0.8, linestyle="--")
+        ax.text(c["baslangic_s"], top, f" {c['yon_deg']:.0f}°", color=TEXT_2, fontsize=8, va="top")
+    ax.axvline(start, color=TEXT_2, linewidth=0.8)
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel("Simülasyon zamanı [s]")
+    ax.set_ylabel("Yatay mesafe [m]")
+    ax.set_title(
+        "Dron–kişi mesafesi; bantlar: 6 m altı ve sebebi; kesikli: köşe (yeni yön)", color=TEXT, fontsize=11, loc="left"
+    )
+    if seen:
+        ax.legend(loc="lower right", fontsize=8, frameon=False)
+    return _png(fig)
+
+
 def plot_image_track(df: pd.DataFrame, camera: dict) -> str:
     fig, ax = plt.subplots(figsize=(7.2, 7.2 * camera["h"] / camera["w"] + 0.6))
     _style(ax)
@@ -374,6 +437,10 @@ PERCENT_KEYS = {
     "px4_kestirim_gecerli_orani",
     "px4_kestirim_hizi_baslangic_1mps_orani",
     "mod_korunma_orani",
+    "mesafe_4m_alti_orani",
+    "mesafe_6m_alti_orani",
+    "mesafe_6_10m_orani",
+    "mesafe_10m_ustu_orani",
 }
 
 
@@ -438,6 +505,30 @@ METRIC_GROUPS = (
             ("px4_yorunge_acisi_ilk_deg", "PX4'ün ilk yörünge açısı hedefi [°] (0 = hedefin kuzeyi)"),
             ("px4_durum_sayisi", "ULog'daki follow_target_status kaydı (400 ms'de bir)"),
             ("mod_korunma_orani", "İstenen PX4 modunda geçen süre / kayıt penceresi"),
+        ),
+    ),
+    (
+        "Yakın geçişler (< 6 m) ve mesafenin dağılımı (kayıt / video penceresi: mod seçimi → senaryo sonu)",
+        (
+            ("mesafe_4m_alti_orani", "Dron–kişi yatay mesafe 4 m'nin altında"),
+            ("mesafe_6m_alti_orani", "… 6 m'nin altında"),
+            ("mesafe_6_10m_orani", "… 6–10 m arasında"),
+            ("mesafe_10m_ustu_orani", "… 10 m'nin üstünde"),
+            ("yakin_gecis_en_az_m", "Kaydın en az yatay mesafesi [m]"),
+            ("yakin_gecis_6m_olay_sayisi", "6 m altına iniş (yakın geçiş) sayısı"),
+            ("yakin_gecis_6m_suresi_s", "6 m altında geçen süre [s]"),
+            *((f"yakin_gecis_{k}_sayisi", f"Sebebi: {v}") for k, v in NEAR_PASS_TEXT.items()),
+        ),
+    ),
+    (
+        "Köşeler: PX4'ün yeni yöne yetişmesi ve aşma (kişinin yolunun bacakları)",
+        (
+            ("kose_sayisi", "Bacak (köşe) sayısı"),
+            ("kose_px4_yetisme_ort_s", "PX4'ün rotasının yeni yönün 30° içine girmesi, ortalama [s]"),
+            ("kose_px4_yetisme_maks_s", "PX4'ün yetişmesi, en uzun [s]"),
+            ("kose_px4_yetismedi_sayisi", "PX4'ün bir sonraki köşeye kadar yetişemediği köşe"),
+            ("kose_arkada_kalma_maks_deg", "Köşeden sonraki 6 s'de arkada kalma hatası, en çok [°]"),
+            ("kose_arkada_kalma_90_ustu_s", "Köşelerden sonra dron yanında/önünde (> 90°, aşma) [s]"),
         ),
     ),
     (
@@ -637,6 +728,35 @@ def checks(m: Mapping, sections: Mapping, model_ran: bool) -> list[dict]:
                 "olay": False,
             }
         )
+    passes = sections.get("yakin_gecis", {}).get("olaylar", [])
+    if passes:
+        worst = min(passes, key=lambda e: e["en_az_m"])
+        spans = "; ".join(
+            f"{e['baslangic_s']:.1f}–{e['bitis_s']:.1f} s {NEAR_PASS_TEXT.get(e['sebep'], e['sebep'])} (en az "
+            f"{e['en_az_m']:.2f} m)"
+            for e in passes[:6]
+        )
+        more = f"; … {len(passes) - 6} kez daha" if len(passes) > 6 else ""
+        out.append(
+            {
+                "ad": "yakin_gecis",
+                "durum": "uyari",
+                "metin": f"Dron kişiye {olcum.CLOSE_PASS_M:g} m'den yakın geçti (kayıt penceresi): {len(passes)} kez, "
+                f"toplam {_value(m, 'yakin_gecis_6m_suresi_s'):.1f} s, en az {worst['en_az_m']:.2f} m: {spans}{more}. "
+                "Sebep ve ayrıştırma: 'Yakın geçişler' tablosu. Açıklama eşiğidir, başarı eşiği değildir.",
+                "olay": False,
+            }
+        )
+    elif "yakin_gecis" in sections and not math.isnan(_value(m, "yakin_gecis_en_az_m")):
+        out.append(
+            {
+                "ad": "yakin_gecis",
+                "durum": "tamam",
+                "metin": f"Dron kişiye {olcum.CLOSE_PASS_M:g} m'den yakın geçmedi (kayıt penceresinde en az "
+                f"{_value(m, 'yakin_gecis_en_az_m'):.2f} m)",
+                "olay": False,
+            }
+        )
     below = _value(m, "kadraj_yakin_sinir_alti_s")
     if below > 0:
         out.append(
@@ -754,6 +874,9 @@ def write(
         following = sc.tracking_source != "yok"
         distance = _follow_distance(settings) if sc.tracking_source == "follow_me" else None
         figures.append(("Takip zaman çizelgesi", plot_tracking(sc, df, cam, following, distance)))
+        if "yakin_gecis" in sections:
+            passes, corners = sections["yakin_gecis"], sections.get("koseler")
+            figures.append(("Yakın geçişler ve sebepleri", plot_near_passes(df, passes, corners, sc.start_time)))
         status = olcum.Topics.read([ulog], ["follow_target_status"]).get("follow_target_status") if ulog else None
         if status is not None and len(status["timestamp"]):
             figures.append(("PX4 Follow Target", plot_px4_follow(sc, status, df)))
@@ -861,6 +984,91 @@ def _settings_html(settings: Mapping) -> str:
         else ""
     )
     return f"<table>{table}</table>{ptable}"
+
+
+def _signed(value: object) -> str:
+    return "–" if value is None or (isinstance(value, float) and not math.isfinite(value)) else f"{value:+.2f}"
+
+
+def near_pass_rows(passes: list) -> str:
+    """Table rows of the < 6 m passes (olcum.near_passes; also toplu.html)."""
+    e = html.escape
+    rows = []
+    for x in passes:
+        p = x.get("ayristirma") or {}
+        factors = ", ".join(FACTOR_TEXT.get(f, f) for f in x.get("etkenler", []) if f != x["sebep"]) or "–"
+        main = x.get("baskin_etken")
+        terms = " · ".join(
+            f"{'<b>' if k == main else ''}{k.removesuffix('_m').replace('_', ' ')} {_signed(p.get(k))}"
+            f"{'</b>' if k == main else ''}"
+            for k in olcum.DECOMPOSITION_TERMS
+        )
+        rows.append(
+            f"<tr><td class=num>{x['baslangic_s']:.1f}–{x['bitis_s']:.1f}</td>"
+            f"<td class=num>{x['en_az_m']:.2f} ({x['en_az_t_s']:.1f} s)</td>"
+            f"<td><b>{e(NEAR_PASS_TEXT.get(x['sebep'], x['sebep']))}</b><br><span class=muted>{e(factors)}</span></td>"
+            f"<td class=num>{_fmt(x.get('olcum_yasi_baslangicta_s'))} / {_fmt(x.get('en_buyuk_bosluk_s'))}</td>"
+            f"<td class=num>{_fmt(x.get('hedef_hizi_mps'))} / {_fmt(x.get('px4_hiz_kestirimi_mps'))}</td>"
+            f"<td class=num>{_fmt(x.get('gercek_rota_deg'))} / {_fmt(x.get('px4_rota_deg'))}</td>"
+            f"<td class=num>{_signed(p.get('toplam_m'))}</td><td>{terms}</td></tr>"
+        )
+    return "".join(rows)
+
+
+NEAR_PASS_HEAD = (
+    "<tr><th>Aralık [s]</th><th>En az [m] (anı)</th><th>Sebep<br><span class=muted>diğer etkenler</span></th>"
+    "<th>Ölçümün yaşı başta / en büyük boşluk [s]</th><th>Kişinin hızı / PX4'ün kestirimi [m/s]</th>"
+    "<th>Gerçek rota / PX4'ün rotası [°]</th><th>FLW_TGT_DST'den yakın [m]</th><th>Ayrıştırma [m] (+ yaklaştırdı)</th>"
+    "</tr>"
+)
+NEAR_PASS_NOTE = (
+    "<p class=muted>Ayrıştırma en az mesafe anında, PX4'ün ULog'undan (yalnız <code>follow_me</code>): FLW_TGT_DST − "
+    "(dron − kişi)·n, n PX4'ün dronu hedefinden istediği yön (yörünge açısı hedefi). "
+    + " · ".join(f"<b>{k.removesuffix('_m').replace('_', ' ')}</b>: {v}" for k, v in TERM_TEXT.items())
+    + ". PX4'ün süzülmüş hedefi (F), görevin kestirimi kendi ikinci derece süzgecinden geçirdiği konumdur; dron onun "
+    'FLW_TGT_DST gerisine konur (spec "Ölçüt Tanımları").</p>'
+)
+
+
+def _near_pass_html(passes: Mapping | None) -> str:
+    if passes is None:
+        return ""
+    head = f"<h2>Yakın geçişler (&lt; {olcum.CLOSE_PASS_M:g} m)</h2>"
+    if not passes.get("olaylar"):
+        return f"{head}<p class=muted>Kayıt penceresinde dron kişiye {olcum.CLOSE_PASS_M:g} m'den yakın geçmedi.</p>"
+    return (
+        f"{head}<p>Pencere: {html.escape(str(passes.get('pencere', '')))}; sebep, sırayla ilk tutan kural (spec "
+        f'"Ölçüt Tanımları").</p><table>{NEAR_PASS_HEAD}{near_pass_rows(passes["olaylar"])}</table>{NEAR_PASS_NOTE}'
+    )
+
+
+CORNER_KIND = {"kalkis": "kalkış", "donus": "dönüş", "ilk": "ilk"}
+
+
+def _corners_html(corners: list | None) -> str:
+    if corners is None:
+        return ""
+    if not corners:
+        return "<h2>Köşeler</h2><p class=muted>Kişi yürümedi (bacak yok).</p>"
+    rows = "".join(
+        f"<tr><td class=num>{c['no']}</td><td class=num>{c['baslangic_s']:.1f}</td>"
+        f"<td>{CORNER_KIND.get(c['tur'], c['tur'])}</td>"
+        f"<td class=num>{_fmt(c.get('onceki_yon_deg'))} → {c['yon_deg']:.0f}</td>"
+        f"<td class=num>{_fmt(c.get('donus_deg'))}</td><td class=num>{_fmt(c.get('durus_s'))}</td>"
+        f"<td class=num>{_fmt(c.get('px4_yetisme_s')) if c.get('px4_yetisti') is not False else 'yetişmedi'}</td>"
+        f"<td class=num>{_fmt(c.get('arkada_kalma_maks_deg'))}</td>"
+        f"<td class=num>{_fmt(c.get('arkada_kalma_90_ustu_s'))}</td>"
+        "</tr>"
+        for c in corners
+    )
+    return (
+        "<h2>Köşeler</h2><p>Kişinin yolunun bacakları (hakemden) ve her bacağın başında PX4'ün yeni yöne yetişmesi "
+        "(varsaydığı rota, <code>follow_target_status</code>, yeni yönün 30° içinde) ve dronun aşması (köşeden sonraki "
+        "6 s'de arkada kalma açısı hatası).</p><table><tr><th>Köşe</th><th>Başlangıç [s]</th><th>Tür</th>"
+        "<th>Yön [°] (önceki → yeni, 0 = kuzey)</th><th>Dönüş [°]</th><th>Önceki duruş [s]</th>"
+        "<th>PX4 yetişme [s]</th><th>Arkada kalma en çok [°]</th><th>&gt; 90° [s]</th></tr>"
+        f"{rows}</table>"
+    )
 
 
 def _mode_html(mode: Mapping | None) -> str:
@@ -977,6 +1185,8 @@ code {{ font-size:13px; }}
 <p class=muted>Yalnız kayıt penceresi ({sc.start_time:.0f} s → {sc.end_time:.1f} s); "takip başı" ölçütleri mod
 seçiminden hedefin yürümeye başlamasına kadardır. Tanımlar: spec "Ölçüt Tanımları". "–" = bu koşuda uygulanmaz.</p>
 {_metric_tables(m)}
+{_near_pass_html(s.get("yakin_gecis"))}
+{_corners_html(s.get("koseler"))}
 <h2>Grafikler</h2>{figs}
 {_mode_html(s.get("mod"))}
 <h2>Ayarlar</h2>{_settings_html(s.get("ayarlar") or {})}
