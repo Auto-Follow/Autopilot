@@ -149,6 +149,61 @@ def test_status_line_says_what_happens_and_turns_red() -> None:
     assert level == "alarm" and "3 m" in line2 and "köşe" in line2
 
 
+def test_status_line_says_when_the_box_px4_got_is_on_somebody_else() -> None:
+    """ "YANLIŞ KİŞİ" (red, first): the chosen box PX4 had is on another person by the referee (the yanlis_kisi_orani
+    rule); a person dressed like the target is named as such."""
+    walking = video.Situation(t=65.0, start_s=60.0, following=False, speed=1.4, distance=12.0)
+    _, line2, level = video.status(video.Situation(**{**walking.__dict__, "wrong_person": 3}))
+    assert level == "alarm" and line2.startswith("YANLIŞ KİŞİ") and "insan3" in line2 and "aynı kıyafet" not in line2
+    _, line2, level = video.status(
+        video.Situation(**{**walking.__dict__, "wrong_person": 4, "wrong_same_clothes": True, "in_view": False})
+    )
+    assert level == "alarm" and line2.startswith("YANLIŞ KİŞİ (hedefle aynı kıyafetli)") and "insan4" in line2
+    assert "kadraj dışında" in line2  # the next alarm still shows
+    assert "YANLIŞ" not in video.status(walking)[1]
+
+
+def test_a_long_status_line_still_fits_the_top_view() -> None:
+    """The status band is 700 px wide: a line shrinks down to 10 px type, then drops its last " · " items (the first
+    one, the most important alarm, always stays)."""
+    long = (
+        "YANLIŞ KİŞİ: PX4'e giden kutu insan3 üstünde · 6 m'den yakın geçiş: köşe / yön değişimi · "
+        "dron hedefe 3 m'den yakın (2.5 m)"
+    )
+    text, size = video.fit_text(long, video.RIGHT[0] - 20, True)
+    assert video.text_width(text, size, True) <= video.RIGHT[0] - 20 and size >= 10
+    assert text.startswith("YANLIŞ KİŞİ") and text.count(" · ") < long.count(" · ")
+    short = "Hedef yürüyor (1.4 m/s) · dron–hedef 7.5 m"
+    assert video.fit_text(short, video.RIGHT[0] - 20, True) == (short, 15)
+
+
+def test_the_video_marks_the_moments_the_chosen_box_is_on_somebody_else(tmp_path: Path) -> None:
+    """video.moment: the model result PX4 had at that moment against the referee of its own frame; the person
+    dressed like the target (scenario clothes) is flagged. Same frames, same rule as the metric."""
+    folder = run_folder(tmp_path)
+    text = (folder / "senaryo.yaml").read_text(encoding="utf-8")
+    other = (
+        "diger_insanlar:\n  - baslangic: [14, 3]\n    kiyafet: {ust: yesil, alt: kot}\n"
+        "    yol:\n      - {nokta: [20, 3], hiz_mps: 1.0}\n"
+    )
+    (folder / "senaryo.yaml").write_text(text.replace("zamanlama:", other + "\nzamanlama:"), encoding="utf-8")
+    ref = pd.read_csv(folder / "dogru_cevap.csv")
+    ref = ref.assign(
+        insan1_x=14.0, insan1_y=3.0, insan1_kutu_u0=1500.0, insan1_kutu_v0=500.0, insan1_kutu_u1=1600.0
+    ).assign(insan1_kutu_v1=700.0)
+    ref.to_csv(folder / "dogru_cevap.csv", index=False)
+    boxes = pd.read_csv(folder / "kutular.csv")
+    boxes.loc[boxes["t_us"] == 60_400_000, ["u0", "u1"]] = [1495.0, 1605.0]  # the second result: on insan1
+    boxes.to_csv(folder / "kutular.csv", index=False)
+    run = video.load(folder)
+    assert run.same_clothes == frozenset({1})  # the target wears the default green / jeans too
+    before = video.moment(run, 60.3, None, False).situation  # the first result (on the target)
+    after = video.moment(run, 60.6, None, False).situation  # the second one, sent at 60.52 s
+    assert before.wrong_person is None and not before.wrong_same_clothes
+    assert after.wrong_person == 1 and after.wrong_same_clothes
+    assert video.status(after)[1].startswith("YANLIŞ KİŞİ (hedefle aynı kıyafetli)")
+
+
 def test_where_px4_sends_the_drone_comes_from_its_own_setpoint() -> None:
     """The ring (where PX4 sends the drone now) is trajectory_setpoint and the cross (its final aim) is
     desired_position_raw, both around F, the task's filtered target: at a corner F is metres ahead of the

@@ -42,6 +42,24 @@ def model_row(t: float, chosen: tuple | None, **more: object) -> dict:
     return row | more
 
 
+def test_the_wrong_person_rule_of_the_metric_is_one_function() -> None:
+    """olcum.wrong_person: the other person (insan<i>, 1-based) a chosen box is on: IoU with that person's referee box
+    at least 0.3 and bigger than with the target's (yanlis_kisi_orani); the video's "YANLIŞ KİŞİ" uses the same rule."""
+    ref = referee_row(60.0)
+    assert olcum.wrong_person(OTHER, ref, others=1) == 1
+    assert olcum.wrong_person(TARGET, ref, others=1) is None  # on the target
+    assert olcum.wrong_person((100.0, 100.0, 150.0, 200.0), ref, others=1) is None  # on nobody
+    assert olcum.wrong_person(OTHER, ref, others=0) is None  # nobody else in the scenario
+    between = (1000.0, 400.0, 1150.0, 600.0)  # on the target (IoU 0.67) and on a person beside it (0.39): not wrong
+    assert olcum.wrong_person(between, referee_row(60.0, other=(1080.0, 400.0, 1180.0, 600.0)), others=1) is None
+    hidden = referee_row(60.0, hedef_kutu_u0=math.nan)  # target hidden behind a tree, the box on someone else
+    assert olcum.wrong_person(OTHER, hidden, others=1) == 1
+    weak = referee_row(60.0, other=(1430.0, 400.0, 1530.0, 600.0))  # IoU 70/130 = 0.54
+    assert olcum.wrong_person(OTHER, weak, others=1) == 1
+    assert olcum.wrong_person((1460.0, 400.0, 1560.0, 600.0), weak, others=1) == 1  # IoU 0.54 (≥ 0.3)
+    assert olcum.wrong_person((1490.0, 400.0, 1590.0, 600.0), weak, others=1) is None  # IoU 40/160 = 0.25 (< 0.3)
+
+
 def test_every_key_of_the_spec_table_is_measured() -> None:
     """The keys of "Ölçüt Tanımları" (second column, {a,b} expanded) are exactly olcum.KEYS: ozet.json gets each of
     them in every run, NaN where a metric does not apply."""

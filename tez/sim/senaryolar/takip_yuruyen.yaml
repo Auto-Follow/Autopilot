@@ -1,28 +1,32 @@
-# Takip eden yürüyüş: yuruyen_insan'ın yolu, bu kez dron hedefi stok PX4 Follow Me ile 8 m geriden izler.
+# Takip eden yürüyüş: yuruyen_insan'ın yolu, bu kez dron hedefi stok PX4 Follow Me ile 10 m yükseklikten, 10 m geriden
+# izler (kamera raporunun "çim alanın açık kısmı" ayarı, 45° kamerada yükseklik = geride durma).
 #
 #   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo takip_yuruyen
 #
 # Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
-# Kamera raporunun stad ayarı 8/8: 8 m yükseklik, 8 m geride; 45° kamera yerde dronun ~3.6–17.5 m önünü görür.
+# Kullanıcı kararı 14.11: m06'nın Follow Me senaryosu 10 m / 10 m (9. grupta 3 koşuda en az mesafe 2.99–5.10 m, kişi
+# köşeden sonra hiç kaybedilmedi; 8 m / 8 m'de 0.45–1.94 m ve 3/3 kayıp). 9. grubun 8 m / 8 m'si takip_yuruyen_8m.
+# Gerçek uçuşta hangi ayarın kullanılacağı ekip kararıdır (gerçek dronun 22.08 dosyasında 8/8; m22/m25).
+# 45° kamera 10 m'de yeri ≈ 4.9 m'den (yakın görüş sınırı) ≈ 21.7 m'ye kadar görür; kişi ≈ 170 px boyunda.
 # Döngü: Gazebo kamerası → model (kutu) → düz zemin konum hesabı → FOLLOW_TARGET → PX4 "Follow Target" → dron.
 # --los hakem: model yerine hedefin gerçek konumu gider (yalnız göründüğü karelerde, "mükemmel algılayıcı").
 
 ad: takip_yuruyen
 aciklama: >
   İnsan dronun 10 m önünde durur; 60. saniyede doğuya yürür, 3 s durur, kuzeye koşar, sonra batıya yürür
-  (yuruyen_insan'ın yolu). Dron 8 m yükseklikten stok PX4 Follow Me ile hedefi 8 m geriden izler; hedefin konumu
+  (yuruyen_insan'ın yolu). Dron 10 m yükseklikten stok PX4 Follow Me ile hedefi 10 m geriden izler; hedefin konumu
   model kutusundan düz zemin hesabıyla bulunur.
 
 dunya: duz_alan
 
 drone:
-  yukseklik_m: 8
+  yukseklik_m: 10           # FLW_TGT_HT verilmediği için Follow Me yüksekliği de 10 m
 
 takip:
   kaynak: follow_me         # yok | follow_me (stok Follow Me, PX4 "Follow Target") | tez_los (+ mod_adi)
   los: model                # TEZ_LOS'un kaynağı: model (model kutusu) | hakem (doğru cevap, "mükemmel algılayıcı")
   px4_parametreleri:        # parametre dosyalarından sonra, --param'dan önce yüklenir; koşuda PX4'ten geri okunur
-    FLW_TGT_DST: 8          # Follow Me: hedefin 8 m gerisinde dur (kamera raporu, stad 8/8)
+    FLW_TGT_DST: 10         # Follow Me: hedefin 10 m gerisinde dur (kamera raporu, çim alan 10/10; karar 14.11)
     FLW_TGT_RS: 0.3         # sim seçimi, kullanıcı kararı 13.11 ("0.2 veya 0.3"); gerçek dronda 0.1 (aşağıda)
   # FLW_TGT_RS: PX4'ün hedef kestiricisinin gürültü bastırması (PX4 0.1–1.0'a kısar; küçük = tepkisel, gürültüyü az
   # bastırır). Varsayılan 0.1'de model kutusundan bulunan konumun bakış yönüne bağlı kayması (≈ 0.5 m) PX4'te duran
@@ -31,7 +35,6 @@ takip:
   # yeni yöne 0.5–1 s geç yetişiyor ve dron köşede kişiye daha yakın geçiyor (en az mesafe ölçülür, raporda uyarı).
   # Gerçek dronun parametre dosyasında (22.08) 0.1; gercek_dron.params değişmedi. Ölçüm ve karar:
   # agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09.md (ve -09-on-followme-ayar.md).
-  # FLW_TGT_HT verilmezse drone.yukseklik_m kullanılır (Follow Me yüksekliği = kalkış yüksekliği)
 
 # Diğer bloklar varsayılanlarıyla (spec "Senaryo alanları"; komut satırı bayrakları bunları ezer):
 # algilama: {etkin: true, model: ~/auto-follow-modeller/person_detection_model_v0.2.pt, conf: 0.25, cekirdek: 4}

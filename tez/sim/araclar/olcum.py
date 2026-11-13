@@ -257,6 +257,18 @@ def chosen_box(row: Mapping) -> tuple[float, float, float, float] | None:
     return tuple(float(row[f"secilen_{k}"]) for k in ("u0", "v0", "u1", "v1"))
 
 
+def wrong_person(box: Sequence[float] | Kutu, ref: Mapping, others: int) -> int | None:
+    """The other person (insan<i>, 1-based) a chosen box is on by the referee of its frame: IoU with that person's
+    box at least PERSON_IOU and bigger than with the target's (yanlis_kisi_orani); None if the box is on the target or
+    on nobody. The video's "YANLIŞ KİŞİ" uses this too, so its moments are the metric's frames."""
+    on_target = algilama.iou(box, target_box(ref))
+    scores = {i: algilama.iou(box, person_box(ref, i)) for i in range(1, others + 1)}
+    other = max(scores, key=scores.get, default=None)
+    if other is not None and scores[other] >= PERSON_IOU and scores[other] > on_target:
+        return other
+    return None
+
+
 def _inside(t: float, start: float, end: float) -> bool:
     return start <= t <= end
 
@@ -304,10 +316,8 @@ def model_metrics(
         if b is None:
             continue
         chosen += 1
-        on_target = algilama.iou(b, target_box(ref))
-        scores = {i: algilama.iou(b, person_box(ref, i)) for i in range(1, others + 1)}
-        other = max(scores, key=scores.get, default=None)
-        if other is not None and scores[other] >= PERSON_IOU and scores[other] > on_target:
+        other = wrong_person(b, ref, others)
+        if other is not None:
             wrong += 1
             wrong_same += other in same_clothes
     n, nv = len(frames), len(visible)

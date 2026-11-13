@@ -417,21 +417,28 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     model = hedef.CommandLine(model="~/m.pt", imgsz=960, conf=0.5, class_name="Person")
     hedef.check_wired(hedef.load(write(tmp_path, GOOD + "algilama: {cekirdek: 2}\n"), model))
 
-    # the Follow Me scenario (tasks.md 2.4): the walk of yuruyen_insan at 8 m, wired since group 6
+    # the Follow Me scenario (tasks.md 2.4): the walk of yuruyen_insan, wired since group 6; 10 m / 10 m since the
+    # user's decision 14.11, the 8 m / 8 m of task groups 6-9 stays as takip_yuruyen_8m
     follow, walk = hedef.load("takip_yuruyen"), hedef.load("yuruyen_insan")
-    assert (follow.altitude, follow.tracking.source, follow.tracking.los) == (8.0, "follow_me", "model")
+    assert (follow.altitude, follow.tracking.source, follow.tracking.los) == (10.0, "follow_me", "model")
     assert np.array_equal(follow.track.x, walk.track.x) and np.array_equal(follow.track.y, walk.track.y)
     hedef.check_wired(follow)
     hedef.check_wired(hedef.load("takip_yuruyen", hedef.CommandLine(los="hakem", no_model=True)))
+    low = hedef.load("takip_yuruyen_8m")
+    assert (low.altitude, low.tracking.source, low.tracking.los) == (8.0, "follow_me", "model")
+    assert np.array_equal(low.track.x, follow.track.x) and low.end_time == follow.end_time
+    hedef.check_wired(low)
 
 
 def test_follow_me_scenario_uses_the_chosen_flw_tgt_rs() -> None:
-    """Decision 1 (13.11): the Follow Me scenario sets FLW_TGT_RS 0.3, the sim's choice; the real vehicle's 22.08
+    """Decision 1 (13.11): the Follow Me scenarios set FLW_TGT_RS 0.3, the sim's choice; the real vehicle's 22.08
     parameters have 0.1 and gercek_dron.params is not changed for it. PX4 clamps the parameter to 0.1..1.0
     (TargetEstimator::update_filter_gains): a value outside would silently be another one (the 0.05 of task 9.8)."""
     assert "FLW_TGT_RS" not in {p.name for p in hedef.load("yuruyen_insan").tracking.px4_params}
-    rs = {p.name: p for p in hedef.load("takip_yuruyen").tracking.px4_params}["FLW_TGT_RS"]
-    assert rs.value == 0.3 and 0.1 <= rs.value <= 1.0 and rs.source == "takip.px4_parametreleri"
+    for name in ("takip_yuruyen", "takip_yuruyen_8m"):
+        rs = {p.name: p for p in hedef.load(name).tracking.px4_params}["FLW_TGT_RS"]
+        assert rs.value == 0.3 and 0.1 <= rs.value <= 1.0 and rs.source == "takip.px4_parametreleri"
+    assert not (hedef.SIM_DIR / "senaryolar" / "takip_yuruyen_10m.yaml").exists()  # takip_yuruyen is 10/10 now
     assert "FLW_TGT_RS" not in (hedef.SIM_DIR / "parametreler" / "gercek_dron.params").read_text(encoding="utf-8")
 
 
@@ -441,9 +448,15 @@ def test_follow_me_flies_at_the_scenario_height_unless_flw_tgt_ht_is_given(tmp_p
     stays as given. Other tracking sources leave it alone."""
     follow = hedef.load("takip_yuruyen")
     assert [(p.name, p.value, p.source) for p in follow.tracking.px4_params] == [
-        ("FLW_TGT_HT", 8.0, "drone.yukseklik_m (follow_me)"),
-        ("FLW_TGT_DST", 8, "takip.px4_parametreleri"),
+        ("FLW_TGT_HT", 10.0, "drone.yukseklik_m (follow_me)"),
+        ("FLW_TGT_DST", 10, "takip.px4_parametreleri"),
         ("FLW_TGT_RS", 0.3, "takip.px4_parametreleri"),
+    ]
+    low = hedef.load("takip_yuruyen_8m")
+    assert [(p.name, p.value) for p in low.tracking.px4_params] == [
+        ("FLW_TGT_HT", 8.0),
+        ("FLW_TGT_DST", 8),
+        ("FLW_TGT_RS", 0.3),
     ]
     high = write(tmp_path, GOOD.replace("kaynak: yok", "kaynak: follow_me"))  # GOOD flies at 10 m
     params = hedef.settings(hedef.load(high))["px4_parametreleri"]

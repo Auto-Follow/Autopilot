@@ -491,17 +491,99 @@ Koşu klasörleri (`tez/sim/sonuclar/`, git dışında): `gorev9_RS0.2_model_x3`
 ## 12. Açık kararlar ve bekleyenler
 
 - **Görsel kontrol (9.5):** Ahmet'te; izleme listesi bölüm 6, komutlar "Kendin dene" 3.
-- **10 m / 10 m varsayılan olsun mu?** (bölüm 4): sim koşularında belirgin olarak daha güvenli ve kişiyi kaybetmiyor;
-  bedeli kilit kaybı ve çekim uzaklığı. Karar kullanıcıda; m06'da tek satırlık iş.
+- ~~**10 m / 10 m varsayılan olsun mu?**~~ **Karar verildi (14.11, kullanıcı):** `takip_yuruyen` 10 m / 10 m, 8 m / 8 m
+  `takip_yuruyen_8m` (bölüm 13).
 - **RS 0.2 daha çok koşuyla ölçülsün mü?** 3 koşunun ikisinde salınım vardı; seçim 0.3 (bölüm 2). İstenirse 3 koşu daha.
 - **Takım arkadaşlarına öneriler** (bölüm 3, "Öneriler"): m15 en az mesafe koruması ve kişi kadrajdan çıkınca davranış;
   m11 süzülmüş hız ve durma/dönme anının hızlı kestirimi; m01'e en az mesafe / 6 m altı payı ölçütü. Kime iletileceği
   kullanıcının ve Hüseyin'in kararı.
 - **`FLW_TGT_MAX_VEL`** için daha çok koşuyla ayrı karşılaştırma (9.8'den açık; bu grupta yapılmadı).
-- **Videoda yanlış kişi işareti (öneri, yapılmadı):** durum satırı seçilen kutunun başka bir kişide olduğunu (hakeme
-  göre) şimdilik söylemiyor; kutular videoda görünüyor ve anlar bölüm 6'da listeli. İstenirse `video.py`'ye küçük bir
-  ek (testli); mevcut videolar ancak yeniden koşulunca değişir (kareler saklanmadı).
+- ~~**Videoda yanlış kişi işareti (öneri, yapılmadı)**~~ **Karar verildi (14.11, kullanıcı): yapıldı** (bölüm 13):
+  durum satırında kırmızı "YANLIŞ KİŞİ", aynı kıyafetli kişi ayrıca yazılı.
 - **Kare kaydının RTF payı:** 11. grupta (karar 3, `tasks.md` 11.6).
+
+## 13. Kullanıcı kararları (14.11): `takip_yuruyen` 10 m / 10 m ve videoda "YANLIŞ KİŞİ" (iş A)
+
+**Karar 1 — `takip_yuruyen` 10 m yükseklik / 10 m geride** (bölüm 4'ün önerisi; `FLW_TGT_RS 0.3` kalır):
+
+- `senaryolar/takip_yuruyen.yaml`: `drone.yukseklik_m: 10` (Follow Me yüksekliği de 10 m: `FLW_TGT_HT` verilmediği
+  için `drone.yukseklik_m`'den), `FLW_TGT_DST: 10`; yorumlar kararı, 9. gruptaki ölçümü (en az mesafe 2.99–5.10 m, kişi
+  köşeden sonra kaybedilmedi; 8/8'de 0.45–1.94 m ve 3/3 kayıp) ve kameranın 10 m'deki yer şeridini (≈ 4.9 → 21.7 m)
+  söyler. Kişinin yolu ve zamanlaması değişmedi (kişi dronun 10 m önünde başlar).
+- **8 m / 8 m ayrı senaryo** `senaryolar/takip_yuruyen_8m.yaml` (6–9. grupların `takip_yuruyen`'i: aynı yol, aynı
+  zamanlama, `FLW_TGT_RS 0.3`). 9. gruptaki `takip_yuruyen_10m.yaml` artık `takip_yuruyen`'in aynısı olduğu için
+  **kaldırıldı** (iki dosyada aynı ayar tutarsızlık doğururdu); eski koşu klasörü `sonuclar/gorev9_takip_yuruyen_10m_x3`
+  olduğu gibi duruyor.
+- **Gerçek uçuş:** hangi ayarın kullanılacağı ekip kararıdır (gerçek dronun 22.08 parametre dosyasında 8/8;
+  `gercek_dron.params` değişmedi; m22/m25). Spec'te ("8. Senaryo dosyası", "İnsan hedefi", "Yaklaşma mesafesi",
+  "Açık Konular") öyle yazıldı.
+- F0 ve F1 etkilenmez: ikisi de `yuruyen_insan` (takip `yok`) ve parametre dosyalarını kullanır; yeniden koşuldu,
+  ikisi de GEÇTİ (aşağıda).
+- Atıflar: README (senaryolar, RS kararı), spec, `test_hedef.py` (10 m ve 8 m senaryoları, RS 0.3 ikisinde de,
+  `takip_yuruyen_10m.yaml` artık yok). Eski belgelerdeki (`gorev-grubu-09.md` 4, `kabul-kosulari.md`) `takip_yuruyen_10m`
+  geçmiş kaydıdır, değiştirilmedi.
+
+**Karar 2 — videonun alt durum satırında kırmızı "YANLIŞ KİŞİ":**
+
+- Tanım `yanlis_kisi_orani` ile **aynı fonksiyon**: `olcum.wrong_person(kutu, hakem_satırı, kişi_sayısı)` → seçilen kutu
+  başka bir insanın hakem kutusuyla IoU ≥ 0.3 ve hedefinkinden büyükse o kişinin numarası (`insan<i>`), değilse
+  `None`. `olcum.model_metrics` artık bunu çağırıyor (davranış aynı; testler değişmeden geçti), video da.
+- Videoda: o anda PX4'ün elindeki son model sonucunun seçilen kutusu (videonun kırmızı kalın kutusu), **o sonucun kendi
+  karesinin** hakem satırıyla karşılaştırılır (ölçütle aynı kareler). Durum satırının kırmızı ikinci satırının **ilk**
+  maddesi olur: `YANLIŞ KİŞİ: PX4'e giden kutu insan3 üstünde`; o kişi hedefle aynı kıyafetliyse (senaryodaki
+  `kiyafet` hedefinkiyle aynı) `YANLIŞ KİŞİ (hedefle aynı kıyafetli): …`. Diğer alarmlar (3 m, kadraj dışı …) arkasından
+  gelir.
+- Uzun satır: "YANLIŞ KİŞİ" + yakın geçiş + 3 m uyarısı bir aradayken satır 700 px'lik bandı aşıyordu (844 px);
+  `video.fit_text` yazıyı 15 → 10 px'e kadar küçültür, yine sığmazsa sondaki maddeleri bırakır (ilk madde, en önemli
+  alarm, hep kalır).
+- Testler (önce yazıldı): `test_olcum.py::test_the_wrong_person_rule_of_the_metric_is_one_function` (kural: başka kişi,
+  hedef, kimse, senaryoda başka kişi yok, hedefle komşunun arasında, hedef ağaç arkasında, IoU eşiği 0.3),
+  `test_video.py::test_status_line_says_when_the_box_px4_got_is_on_somebody_else`,
+  `test_a_long_status_line_still_fits_the_top_view`, `test_the_video_marks_the_moments_the_chosen_box_is_on_somebody_else`
+  (küçük bir koşu klasöründe ikinci model sonucu başka kişinin üstünde: o andan itibaren uyarı, aynı kıyafet).
+  234 → 238 test (temiz HEAD + iş A).
+
+**Doğrulama koşuları (13.11.2026, 16:17–16:30, iş A'nın kodu, videolu):**
+
+| Koşu | Sonuç | Sayılar |
+|---|---|---|
+| `toplu.py --senaryo takip_yuruyen --tekrar 1` (yeni 10 m / 10 m, `sonuclar/gorev10on_A_takip_yuruyen/kosu_1`) | GEÇTİ | PX4'ten geri okunan `FLW_TGT_HT` 10, `FLW_TGT_DST` 10, `FLW_TGT_RS` 0.3; dron yüksekliği ort. 10.00 m; mod %100 "Follow Target"; yatay mesafe ort. 9.83 m, **en az 6.39 m** (6 m altı geçiş yok); kişinin tamamı kadrajda %99; kişi sonuna kadar izlendi; algılama %47, kilit kaybı 8; yanlış kişi %0 (başka kişi yok); `TEZ_LOS` ULog 309 / gönderilen 309; RTF 0.98; video 952 kare / 63.5 s, h264 / yuv420p / 2000×720 (`ffprobe`) |
+| `toplu.py --senaryo kalabalik_park --tekrar 1` (`yok`, `sonuclar/gorev10on_A_kalabalik_park/kosu_1`) | GEÇTİ | algılama %73, seçim doğru %64, **yanlış kişi %9.3 (aynı kıyafetli %8.0)**, kilit kaybı 1; hedef gerçekten görünür %81; `TEZ_LOS` ULog 376 / gönderilen 376; `model_ms` 90; RTF 0.85; video 971 kare / 64.7 s, h264 / yuv420p / 2000×720 |
+| `tez/sim/araclar/f0_kabul.sh` | GEÇTİ | 21/21 başlangıç parametresi PX4'te dosyadaki değerde; kamera 2304×1296, 30.5 kare/sim-s, fx 1773.9, RTF 1.00; `SYS_AUTOSTART` 4001; "Hold" + "Follow Target" listede; 10 m'ye kalkış; Hold'da 15 s, sapma yatay 0.06 / dikey 0.05 m |
+| `tez/sim/araclar/f1_kabul.sh` (`--modelsiz`, `yok`, `yuruyen_insan`) | GEÇTİ | hedef doğrulama farkı en çok 0.13 / 0.13 m (sınır 0.30); iki koşu arası 10 ortak anda en büyük fark 0.000 m (sınır 0.15); RTF 0.943 / 0.942 |
+
+**"YANLIŞ KİŞİ" videoda ve ölçütte aynı anda** (`kalabalik_park`): ölçütün penceresindeki 376 işlenmiş karenin
+35'inde seçilen kutu başka bir kişide (30'unda hedefle aynı kıyafetli `insan4`'te), hepsi sim 80.6–83.2 s'de: kare kare
+`olcum.wrong_person` ile sayıldı, `ozet.json`'daki %9.3 / %8.0 ile birebir (35/376, 30/376). Video aynı kareleri o
+sonucun PX4'e ulaştığı andan itibaren gösteriyor (sonuç kareden ≈ 0.2 s sonra gelir): `insan3` sim 80.8–81.1 s (video
+0:56.2–0:56.5), `insan4` (aynı kıyafetli) sim 81.2–83.4 s (video **0:56.6–0:58.8**). Kare:
+`~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev10on_yanlis_kisi_karesi.png` (video 57.7 s: kalın kırmızı kutu
+`insan4`'ün üstünde, durum satırında kırmızı "YANLIŞ KİŞİ (hedefle aynı kıyafetli): PX4'e giden kutu insan4 üstünde").
+Videolar: `gorev10on_A_kalabalik_park_kosu.mp4`, `gorev10on_A_takip_yuruyen_10m_kosu.mp4` (aynı klasör). Koşu satırları
+`kabul-kosulari.md`'de.
+
+**Yama (ayrı commit):** `~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev10on_is_A.patch`. Temiz HEAD `b5ee6160fe`'nin
+ayrı bir klonunda (paylaşımlı `git clone`, kullanıcının deposu ve index'i değişmedi) uygulandı: 238 test geçti (HEAD'in 234'ü + 4 yeni), `ruff format --check` ve `ruff check` temiz; ayrıca kullanıcının deposunda `git apply --check --cached` ile HEAD'e uygulanabildiği denendi (yalnız kontrol, index değişmedi).
+Dosyalar:
+
+| Dosya | Değişiklik |
+|---|---|
+| `tez/sim/senaryolar/takip_yuruyen.yaml` | 10 m / 10 m, yorumlar |
+| `tez/sim/senaryolar/takip_yuruyen_8m.yaml` | Yeni: 8 m / 8 m (eski `takip_yuruyen`) |
+| `tez/sim/senaryolar/takip_yuruyen_10m.yaml` | Kaldırıldı |
+| `tez/sim/araclar/olcum.py` | `wrong_person` (yanlış kişi kuralı tek fonksiyon), `model_metrics` onu çağırır |
+| `tez/sim/araclar/video.py` | `Situation.wrong_person` / `wrong_same_clothes`, `Run.same_clothes`, `moment` (sonucun kendi karesinin hakemiyle), `status` (ilk kırmızı madde), `fit_text` |
+| `tez/sim/testler/test_hedef.py`, `test_olcum.py`, `test_video.py` | Yukarıdaki testler |
+| `tez/sim/README.md` | Senaryolar, RS kararındaki senaryo adları, durum satırı |
+| `agent-os/specs/2026-11-10-m06-sim-ortami/spec.md` | 6. madde (`FLW_TGT_DST`), 8. madde (karar), 9. madde (durum satırı), Dosya Planı, "Yaklaşma mesafesi" (karar), "İnsan hedefi" (senaryolar), "Ölçüt Tanımları" (`yanlis_kisi_orani`), Görsel kontrol, "Açık Konular" |
+| `agent-os/specs/2026-11-10-m06-sim-ortami/tasks.md` | 9.9 |
+| `implementation/gorev-grubu-09.md` | Bölüm 12 (iki açık karar kapandı), bu bölüm |
+| `implementation/kabul-kosulari.md` | İki doğrulama koşusu, F0, F1 |
+
+Kalan her şey (kamera eğimi ayarı, tarama, Görev Grubu 17'nin belgeleri) iş B'dir: `gorev-grubu-17-on-kamera-acisi.md`.
+Ortak dosyalarda (`video.py`, `olcum.py`, `test_hedef.py`, README, spec, tasks, `kabul-kosulari.md`) A ile B ayrı
+parçalardadır; A'nın yaması B'li çalışma ağacına da temiz uygulanır (çalışma ağacında A + B: bütün testler geçiyor; sayı Görev Grubu 17 belgesinde test).
+
 
 ---
 
@@ -673,3 +755,46 @@ cd ~/Desktop/Projects/Auto-Follow/Autopilot && tez/sim/araclar/f1_kabul.sh
 ```
 
 Beklenen: `234 passed`; `KILIT SAGLAM (v1.17.0)`; F0 (~1 dakika) ve F1 (~5 dakika) sonunda `SONUÇ: GEÇTİ`.
+
+### 9. Kullanıcı kararları 14.11 (iş A): 10 m / 10 m ve "YANLIŞ KİŞİ" uyarısı
+
+Önce yanlış kişi uyarısının göründüğü kare (kırmızı kalın kutu `insan4`'te, alttaki durum satırında kırmızı yazı):
+
+```bash
+xdg-open ~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev10on_yanlis_kisi_karesi.png
+```
+
+Sonra videonun kendisi: **Ctrl+T** ile **0:56**'ya git, **Boşluk** ile durdur, **E** ile kare kare ilerle. 0:56.2'de
+kutu `insan3`'e, 0:56.6–0:58.8 arasında hedefle aynı kıyafetli `insan4`'e geçiyor; sağ alttaki durum satırı o sürece
+kırmızı "YANLIŞ KİŞİ" yazıyor.
+
+```bash
+vlc ~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev10on_A_kalabalik_park_kosu.mp4 2>/dev/null
+```
+
+Yeni varsayılan `takip_yuruyen` (10 m yükseklik, 10 m geride): dron köşede kişiye en çok 6.4 m yaklaşıyor, kişi
+sonuna kadar kadrajda.
+
+```bash
+vlc ~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev10on_A_takip_yuruyen_10m_kosu.mp4 2>/dev/null
+```
+
+Kendin koşturmak için (pencere yok, ≈ 2.5 dakika; sonuç `tez/sim/sonuclar/` altında tarihli bir klasörde):
+
+```bash
+cd ~/Desktop/Projects/Auto-Follow/Autopilot && ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz
+```
+
+```bash
+cd ~/Desktop/Projects/Auto-Follow/Autopilot && ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo takip_yuruyen_8m --ekransiz
+```
+
+```bash
+cd ~/Desktop/Projects/Auto-Follow/Autopilot && ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo kalabalik_park --ekransiz
+```
+
+Testler (iş A'nın yamasıyla `238 passed`, çalışma ağacında A + B ile daha fazla; bkz. bölüm 13):
+
+```bash
+cd ~/Desktop/Projects/Auto-Follow/Autopilot && ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pytest tez/sim/testler -q
+```

@@ -21,8 +21,10 @@ nose, the camera's footprint on the ground, the 3 m warning ring and the camera'
 the drone should be (FLW_TGT_DST behind the walking person), the FOLLOW_TARGET points of the last 3 s and, in
 follow_me, PX4's own target estimate and its filtered target (the one the drone is placed around), the course it
 assumes, the place it sends the drone to now (its position setpoint) and its final aim; a scale bar, the horizontal
-distance and a short status line at the bottom (red: lock lost, no target, closer than the camera's near limit or
-3 m, target out of view; the cause of a < 6 m pass of ozet.json "yakin_gecis").
+distance and a short status line at the bottom (red: "YANLIŞ KİŞİ" when the chosen box PX4 had is on another person
+by the referee, the rule of yanlis_kisi_orani (olcum.wrong_person), with the person dressed like the target named;
+lock lost, no target, closer than the camera's near limit or 3 m, target out of view; the cause of a < 6 m pass of
+ozet.json "yakin_gecis").
 
 Frames go raw (bgr24) through a pipe to ffmpeg: libx264, yuv420p, veryfast, crf 23, +faststart, 15 fps; VLC 3.0.20
 plays it. OpenCV's VideoWriter is not used: the pip OpenCV has no H.264 encoder.
@@ -141,6 +143,18 @@ def render_labels(frame: np.ndarray, labels: Sequence[Label]) -> np.ndarray:
 
 def text_width(text: str, size: int, bold: bool = False) -> float:
     return font(size, bold).getlength(text)
+
+
+def fit_text(text: str, width: float, bold: bool, sizes: Sequence[int] = (15, 13, 12, 11, 10)) -> tuple[str, int]:
+    """(text, font size) that fits `width` [px]: the largest size, else the smallest with the last " · " items left
+    out (the first one stays)."""
+    for size in sizes:
+        if text_width(text, size, bold) <= width:
+            return text, size
+    items = text.split(" · ")
+    while len(items) > 1 and text_width(" · ".join(items), sizes[-1], bold) > width:
+        items.pop()
+    return " · ".join(items), sizes[-1]
 
 
 def shade(img: np.ndarray, x0: int, y0: int, x1: int, y1: int, colour: tuple[int, int, int], alpha: float) -> None:
@@ -473,6 +487,8 @@ class Situation:
     px4_course_deg: float = math.nan  # [deg] PX4's assumed course
     px4_stale: bool = False
     near_pass: str = ""  # cause of the < 6 m pass this moment is in (ozet.json "yakin_gecis"), "" if none
+    wrong_person: int | None = None  # insan<i> the chosen box PX4 had is on (olcum.wrong_person), None if not
+    wrong_same_clothes: bool = False  # that person is dressed like the target
 
 
 def status(s: Situation) -> tuple[str, str, str]:
@@ -489,6 +505,9 @@ def status(s: Situation) -> tuple[str, str, str]:
     if s.following and math.isfinite(s.behind_error):
         line1 += f" · arkada kalma hatası {s.behind_error:.0f}°"
     alarms = []
+    if s.wrong_person is not None:
+        same = " (hedefle aynı kıyafetli)" if s.wrong_same_clothes else ""
+        alarms.append(f"YANLIŞ KİŞİ{same}: PX4'e giden kutu insan{s.wrong_person} üstünde")
     if s.distance < olcum.NEAR_DISTANCE_M:
         alarms.append(f"dron hedefe {olcum.NEAR_DISTANCE_M:g} m'den yakın ({s.distance:.1f} m)")
     elif math.isfinite(s.near_limit) and s.distance < s.near_limit:
@@ -714,8 +733,8 @@ def _map_furniture(img: np.ndarray, view: TopView, run: "Run", m: "Moment", labe
     background = {"normal": (238, 238, 236), "uyari": (205, 238, 255), "alarm": (215, 215, 250)}[level]
     shade(img, 0, y0, RIGHT[0], RIGHT[1], background, 1.0)
     second = {"normal": TEXT2_BGR, "uyari": AMBER_BGR, "alarm": WARNING_BGR}[level]
-    size1 = 15 if text_width(line1, 15, True) < RIGHT[0] - 20 else 13
-    size2 = 15 if text_width(line2, 15, level != "normal") < RIGHT[0] - 20 else 12
+    line1, size1 = fit_text(line1, RIGHT[0] - 20, True)
+    line2, size2 = fit_text(line2, RIGHT[0] - 20, level != "normal")
     labels.append(Label(RIGHT_X + 10, y0 + 17, line1, TEXT_BGR, size1, True, "lm"))
     if line2:
         labels.append(Label(RIGHT_X + 10, y0 + 41, line2, second, size2, level != "normal", "lm"))
@@ -804,6 +823,7 @@ class Run:
     path: list[tuple[float, float]] | None = None
     has_model: bool = False
     near_passes: list[dict] = field(default_factory=list)  # ozet.json "yakin_gecis" "olaylar"
+    same_clothes: frozenset[int] = frozenset()  # the other people dressed like the target (1-based)
 
 
 def load(folder: Path) -> Run:
@@ -864,6 +884,7 @@ def load(folder: Path) -> Run:
         path=path,
         has_model=detections is not None,
         near_passes=list((summary.get("yakin_gecis") or {}).get("olaylar") or []),
+        same_clothes=frozenset(i for i, o in enumerate(sc.others, start=1) if o.clothes == sc.clothes),
     )
 
 
@@ -934,6 +955,11 @@ def moment(run: Run, t: float, frame_t: float | None, repeated: bool) -> Moment:
         dst = run.follow_distance or 8.0
         behind = (target[0] - dst * math.cos(yaw), target[1] - dst * math.sin(yaw))
     model = run.model.at(t) if run.model is not None else None
+    wrong = None
+    if model is not None and model.chosen is not None and model.chosen < len(model.boxes):
+        k = run.ref_keys.get(round(model.t * 1e6))  # the referee of the model result's own frame
+        if k is not None:
+            wrong = olcum.wrong_person(model.boxes[model.chosen][:4], run.ref_rows.iloc[k], run.others)
     no_target, delay = False, math.nan
     if run.los is not None:
         j = _latest(run.los["gonderim_sim"], t)
@@ -970,6 +996,8 @@ def moment(run: Run, t: float, frame_t: float | None, repeated: bool) -> Moment:
         px4_course_deg=math.degrees(px4.course) if px4 is not None else math.nan,
         px4_stale=px4.stale if px4 is not None else False,
         near_pass=near_pass,
+        wrong_person=wrong,
+        wrong_same_clothes=wrong is not None and wrong in run.same_clothes,
     )
     return Moment(
         t=t,

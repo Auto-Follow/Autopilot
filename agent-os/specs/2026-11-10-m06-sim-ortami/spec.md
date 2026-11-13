@@ -278,7 +278,8 @@
   - `FLW_TGT_HT` senaryoda verilmezse `drone.yukseklik_m` kullanılır.
     Uygulamada: `takip.px4_parametreleri`'nin başına kaynak `drone.yukseklik_m (follow_me)` ile eklenir (dosyalardan
     sonra, senaryo ve `--param`'dan önce); senaryo ya da `--param` verirse eklenmez. Koşuda PX4'ten geri okunur.
-  - `FLW_TGT_DST` parametre dosyasından gelir (8 m).
+  - `FLW_TGT_DST` parametre dosyasından gelir (8 m); Follow Me senaryoları kendi değerini verir (`takip_yuruyen` 10 m,
+    `takip_yuruyen_8m` 8 m; kullanıcı kararı 14.11).
   - `FLW_TGT_RS` (kestiricinin gürültü bastırması): Follow Me senaryolarında 0.3 (kullanıcı kararı 13.11, 9. grup; sim
     seçimi, senaryonun `takip.px4_parametreleri`'nde). Gerçek dronun parametre dosyasında ve PX4'te varsayılan 0.1;
     `gercek_dron.params` değişmedi. Gerekçe ve ölçüm: "PX4 stok Follow Target davranışı".
@@ -334,6 +335,10 @@
 **8. Senaryo dosyası ve komut satırı**
 - `drone.mod` alanı kalkar, çünkü iskelet mod yok. Yerine `takip` bloğu gelir; ayrıca `algilama`, `gecikme`, `kusurlar` ve `video` blokları eklenir. Alan tablosu "Faz A Dosya Planı" bölümündedir.
 - Mevcut 3 senaryo `takip: {kaynak: yok}` olarak güncellenir. Yeni `senaryolar/takip_yuruyen.yaml` eklenir: `yuruyen_insan` yolu, `follow_me`, 8 m yükseklik / 8 m geride, LOS kaynağı model.
+  **Kullanıcı kararı (14.11):** `takip_yuruyen` 10 m yükseklik / 10 m geride oldu (kamera raporunun çim alan ayarı;
+  9. grupta 8/8'den belirgin olarak güvenli, kişi köşeden sonra kaybedilmedi); 8 m / 8 m ayrı senaryo
+  `takip_yuruyen_8m` olarak kaldı, 9. gruptaki `takip_yuruyen_10m` kaldırıldı. Gerçek uçuşta hangi ayarın
+  kullanılacağı ekip kararıdır (gerçek dronun 22.08 dosyasında 8/8; m22/m25).
 - Yanlış alan adı ya da değer, hangi alan olduğu söylenerek reddedilir (`hedef._check_keys` deseni). Ayrıca:
   - `tez_los` için `mod_adi` zorunludur.
   - `algilama.etkin: false` iken `takip.los: model` reddedilir. `los` hiç verilmemişse ve algılama kapalıysa: `yok`
@@ -431,8 +436,9 @@
       soluk; 3 m halkası ve kameranın yakın görüş sınırı halkası (kişinin çevresinde); olması gereken "arka" noktası
       (kişi yürürken `FLW_TGT_DST` gerisi); son 3 s'nin `FOLLOW_TARGET` noktaları (konum titreşimi görünür); `follow_me`'de
       ULog'dan PX4'ün hedef kestirimi, varsaydığı rota (ok), gönderdiği yer (yörünge açısı hedefi) ve hedeflediği yer
-      (rota + `FLW_TGT_FA`); altta durum satırı: kilit kaybı, hedef yok, yakın sınır ya da 3 m içinde, kadraj dışı →
-      kırmızı; köşede aşma → turuncu; yoksa PX4'ün kişinin hızı kestirimi (≥ 1 m/s ise "rota güncellenir") ve rotası.
+      (rota + `FLW_TGT_FA`); altta durum satırı: "YANLIŞ KİŞİ" (14.11, kullanıcı kararı: PX4'e giden seçilen kutu
+      hakeme göre başka bir kişide, `yanlis_kisi_orani` ile aynı kural, `olcum.wrong_person`; aynı kıyafetli kişi
+      ayrıca belirtilir), kilit kaybı, hedef yok, yakın sınır ya da 3 m içinde, kadraj dışı → kırmızı; köşede aşma → turuncu; yoksa PX4'ün kişinin hızı kestirimi (≥ 1 m/s ise "rota güncellenir") ve rotası.
 - Kodlama:
   - Kareler ham BGR olarak `ffmpeg`'e borudan verilir (`rawvideo`, `bgr24`).
   - `ffmpeg` ayarları: `libx264`, `-pix_fmt yuv420p`, `-preset veryfast`, `-crf 23`, `-movflags +faststart`. Video VLC 3.0.20'de açılır.
@@ -665,7 +671,7 @@ flowchart LR
 | `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler |
 | `araclar/senaryo.py`, `hedef.py`, `rapor.py`, `onizleme.py` | değişir | Yeni alanlar, bayraklar, süreçler, ölçütler, MP4. 3. grupta: `onizleme.capture()` / `people_of()` ayrıldı, `hedef.read_detection()` herkese açık oldu (`model_dene.py` kullanır) |
 | `araclar/f0_testi.py`, `f1_testi.py` | değişir | Stok modlar + parametre doğrulaması; `--modelsiz` |
-| `senaryolar/*.yaml`, `senaryolar/takip_yuruyen.yaml` | değişir / yeni | `drone.mod` → `takip`; Follow Me 8/8 senaryosu. 9. grupta: `takip_yuruyen_10m.yaml` (10/10 denemesi) ve Follow Me senaryolarında `FLW_TGT_RS` (karar 1) |
+| `senaryolar/*.yaml`, `senaryolar/takip_yuruyen.yaml` | değişir / yeni | `drone.mod` → `takip`; Follow Me 8/8 senaryosu. 9. grupta: `takip_yuruyen_10m.yaml` (10/10 denemesi) ve Follow Me senaryolarında `FLW_TGT_RS` (karar 1). 14.11 (kullanıcı kararı): `takip_yuruyen` 10/10, `takip_yuruyen_8m.yaml` 8/8, `takip_yuruyen_10m.yaml` kaldırıldı |
 | `testler/test_*.py` | yeni | "Test Planı"ndaki birim testleri |
 | `tez/sim/ruff.toml` | değişir | `known-first-party`'ye yeni modüller |
 | `tez/sim/server.config`, `parametreler/sim.params`, `worlds/*.sdf`, `testler/test_manyetometre.py` | değişir / yeni (7. grup, iş A) | Gazebo manyetometre sistemi kapalı, PX4 `sensor_mag_sim` (`SENS_EN_MAGSIM 1`); dünyaların `<magnetic_field>`'ı PX4 WMM değeri; neden ve değerler testli |
@@ -852,8 +858,9 @@ Faz B'nin geniş taramasının yerini tutmaz; iki ayarın stok modla ilk karşı
 - Yaklaşmanın sebebi PX4'ün stok modu ("PX4 stok Follow Target davranışı" 6): dron kişiye değil, görevin süzülmüş
   hedefine göre konur; kişi durunca bu hedef kişiyi ≈ 2 m, koşudan sonra dönünce ≈ 6–7 m geçer (ULog'la ayrıştırıldı).
   Aşma iki ayarda da aynı, 10 m'de pay büyük olduğu için dron kişiye inmiyor ve kişi kadrajda kalıyor.
-- Model kişiyi 10 m'de biraz daha sık kaybediyor (kişi baş–ayak ≈ 168 px; 8 m'de ≈ 215 px). Varsayılan 8/8 kaldı; 10/10
-  önerisi ve karar kullanıcıda ("Açık Konular").
+- Model kişiyi 10 m'de biraz daha sık kaybediyor (kişi baş–ayak ≈ 168 px; 8 m'de ≈ 215 px).
+- **Karar (14.11, kullanıcı):** m06'nın Follow Me senaryosu `takip_yuruyen` 10 m / 10 m; 8 m / 8 m `takip_yuruyen_8m`
+  olarak kalır. Gerçek uçuşta hangi ayarın kullanılacağı ekip kararıdır (gerçek dronun 22.08 dosyasında 8/8).
 
 **Dron ayarları ve ilk gerçek uçuş**
 - Follow Me'de `FLW_TGT_HT` = yükseklik, `FLW_TGT_DST` = geride durma. Ekibin kendi modunda da aynı çift kullanılacak. Raporda kontrol tarafının önerdiği adlar `TEZ_FOL_ALT` / `TEZ_FOL_DIST`'tir; adları m15'i yapan kişi belirler.
@@ -928,10 +935,10 @@ Faz B'nin geniş taramasının yerini tutmaz; iki ayarın stok modla ilk karşı
 - **Hazır senaryolar:**
   - `yuruyen_insan` ve `kivrimli_yuruyus`: `duz_alan` dünyasında.
   - `kalabalik_park`: `cayir` dünyasında hedef + 4 kişi (patikada yürüyen, çapraz koşan, durup yürüyen, aynı kıyafetli); hedef bir süre çamın arkasında kalır.
-  - `takip_yuruyen` (yeni): Follow Me 8/8, `yuruyen_insan`'ın yolu (60 s'de doğuya yürür, 3 s durur, kuzeye koşar,
-    batıya döner; köşeler hakemden 60.3 s, 73.0 s, 77.6 s).
-  - `takip_yuruyen_10m` (9. grup): aynı yol ve zamanlama, Follow Me 10/10 (kamera raporunun çim alan ayarı); 8/8 ile
-    karşılaştırma için, varsayılan 8/8 kalır.
+  - `takip_yuruyen`: Follow Me 10/10 (kullanıcı kararı 14.11; kamera raporunun çim alan ayarı), `yuruyen_insan`'ın
+    yolu (60 s'de doğuya yürür, 3 s durur, kuzeye koşar, batıya döner; köşeler hakemden 60.3 s, 73.0 s, 77.6 s).
+  - `takip_yuruyen_8m`: aynı yol ve zamanlama, Follow Me 8/8 (kamera raporunun stad ayarı; 6–9. grupların
+    `takip_yuruyen`'i); karşılaştırma için.
 
 ### Model dosyası (v0.2)
 
@@ -1027,7 +1034,7 @@ F1 ölçütleri `rapor.metrics`'te hesaplanır; her koşunun `ozet.json` → `ol
 | (a) Model | `algilama_orani`, `kacirma_orani` | Hedefin `gorunur` olduğu işlenmiş karelerde, hedefin hakem kutusuyla IoU ≥ 0.5 olan en az bir kutu bulunan kare oranı; kaçırma = 1 − bu |
 | | `iou_ort`, `iou_p50` | Hedefin bulunduğu (IoU ≥ 0.5) karelerde en iyi eşleşen kutunun IoU'su (uygulamada netleşti: bulunamayan kareler kaçırma oranına girer, buraya değil) |
 | | `secim_dogru_orani` | Hedef görünürken seçilen kutunun hedefle IoU ≥ 0.5 olduğu oran |
-| | `yanlis_kisi_orani`, `yanlis_kisi_ayni_kiyafet_orani` | Seçilen kutunun başka bir insanın hakem kutusuyla IoU'sunun ≥ 0.3 ve hedefinkinden büyük olduğu işlenmiş kare oranı; aynı kıyafetli kişiler (`kiyafet` hedefinkiyle aynı) ayrıca sayılır |
+| | `yanlis_kisi_orani`, `yanlis_kisi_ayni_kiyafet_orani` | Seçilen kutunun başka bir insanın hakem kutusuyla IoU'sunun ≥ 0.3 ve hedefinkinden büyük olduğu işlenmiş kare oranı; aynı kıyafetli kişiler (`kiyafet` hedefinkiyle aynı) ayrıca sayılır. Kare başına kural `olcum.wrong_person`; videonun durum satırındaki "YANLIŞ KİŞİ" de bunu kullanır (14.11) |
 | | `yanlis_pozitif_kare_basi` | Hiçbir insanın (hedef + diğerleri) hakem kutusuyla IoU ≥ 0.3 olmayan kutu sayısı / işlenen kare. Hakem kutusu yalnız görünen pikselleri kapsar: kısmen örtülü birinin kutusu da yanlış pozitif sayılabilir |
 | | `yeniden_kilit_sayisi`, `kilit_kaybi_sayisi` | Kare zamanı pencerede olan hakemle yeniden kilitler ve kilit kayıpları (10 işlenmiş karede eşleşme yok) |
 | | `secili_kare_orani` | Bir kutunun hedef seçildiği işlenmiş kare oranı |
@@ -1149,7 +1156,7 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
 | `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw. 9.8 ön işinde: takip başında gönderilen konumun titreşimi, drona doğru kayma, PX4'ün sahte hızı ve rota değişimi |
 | `test_yakin_gecis.py` (9. grup) | Kişinin yolunun bacakları ve köşeleri (dönüş, duruş, hafif kıvrımın köşe sayılmaması); PX4'ün köşeye yetişmesi (yetişmeme dahil) ve aşma; 6 m altı geçişlerin sebebi (takip başı, diğer, durma, köşe, kilit kaybı; `yok`'ta "takip etmiyor") ve mesafe payları; en az mesafe anında ayrıştırmanın beş payı (elle hesaplanan vektörlerle, konum kayması sınıfı); ULog'dan dünyaya dönüşüm (`Px4Follow`: kestirim enlem/boylamdan, süzülmüş hedef ve ayar noktası EKF kökeninden, < 1 cm). Ayrıca `test_rapor.py`, `test_toplu.py`, `test_video.py` (ayar noktası halkası, durum satırında sebep), `test_olcum.py` (`measure` bölümleri, günlük satırı) |
 | `test_toplu.py` (7. grup) | Çok koşunun dağılımı (ort / en az / en çok, NaN'lı koşu), yalnız başlayamayan koşunun yeniden denenmesi, `senaryo.py` komutu, özet dosyaları |
-| `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü |
+| `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü. 14.11'de: durum satırında "YANLIŞ KİŞİ" (aynı kıyafetli kişi dahil) ve bir koşu klasöründe anların ölçütün kuralıyla bulunması (`test_olcum.py`: kuralın kendisi) |
 | `test_goruntu_yayini.py` (8. grup) | Kare seçimi (sim zamanında 15 fps ızgarası, pencere, kaybolan kare), 1280×720 JPEG, dolu kuyrukta kare düşürme ve sayma |
 | `test_hedef.py` (eklenir) | Yeni senaryo alanları; hatanın alan adıyla verilmesi; `tez_los`'ta `mod_adi` zorunluluğu |
 
@@ -1177,8 +1184,9 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
 - Model kutusu hedefin üstünde ve gecikmesi gözle görülebiliyor.
 - Hakem kutusu hedefle çakışıyor.
 - Üstten görünüm kamera görüntüsüyle tutarlı (izdüşüm, kişiler).
-- `follow_me`'de dron hedefi 8 m geriden izliyor.
-- Kalabalıkta yanlış kişiye geçişler videoda ve ölçütte aynı anda görülüyor.
+- `follow_me`'de dron hedefi `FLW_TGT_DST` kadar geriden izliyor (`takip_yuruyen` 10 m, `takip_yuruyen_8m` 8 m; 14.11).
+- Kalabalıkta yanlış kişiye geçişler videoda ve ölçütte aynı anda görülüyor (14.11'den beri durum satırında kırmızı
+  "YANLIŞ KİŞİ", aynı kıyafetli kişi ayrıca yazılı).
 
 Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 
@@ -1282,15 +1290,16 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
   yakın geçiş. **Karar (13.11, kullanıcı): "0.2 veya 0.3 daha iyi olur"; 9. grupta 0.2 ölçüldü (3 + 3 koşu) ve 0.3
   seçildi**: salınımı ölçülen her koşuda gideren tek aday (0.2 üç koşunun ikisinde gidermedi); bedeli (köşede ≈ 0.5 m
   daha yakın geçiş, PX4'ün yeni yöne 0.2–0.6 s daha geç yetişmesi; mükemmel algılayıcıyla ölçüldü) her koşuda
-  ölçülür. Follow Me senaryolarında (`takip_yuruyen`, `takip_yuruyen_10m`) `takip.px4_parametreleri`'ne yazıldı;
+  ölçülür. Follow Me senaryolarında (`takip_yuruyen`, `takip_yuruyen_8m`) `takip.px4_parametreleri`'ne yazıldı;
   `gercek_dron.params` değişmedi (gerçek dronda 0.1). Açık kalanlar: `FLW_TGT_MAX_VEL` için daha çok koşuyla ayrı
   karşılaştırma ve Pi'nin hız göndermesinin m11'e önerilmesi (`implementation/gorev-grubu-09.md`).
 - **Stok Follow Me'nin yakın geçişi ve köşeden sonra kişiyi kaybetmesi (9. grupta ölçüldü; kullanıcının sorusu 13.11):**
   8 m / 8 m'de her koşuda iki yaklaşma var: kişi durunca ≈ 5.5–5.9 m, kişi koşudan sonra dönünce 0.45–2 m; sebebi PX4'ün
   süzülmüş hedefi, hız ileri beslemesi ve öngörüsü, stok modda en az mesafe koruması yok ("PX4 stok Follow Target
   davranışı" 6). Köşedeki geçişten sonra kişi kameranın görüş alanından çıkıyor ve demo koşularının 3/3'ünde stok mod onu
-  bir daha bulamıyor. **Karar bekliyor (kullanıcı):** m06'nın Follow Me senaryosu 10 m / 10 m'ye mi geçsin (`takip_yuruyen_10m`
-  3 koşuda en az 2.99–5.10 m, kişi kaybı 0/3, kilit kaybı daha sık; `implementation/gorev-grubu-09.md` 4). **Takım
+  bir daha bulamıyor. **Karar (14.11, kullanıcı):** m06'nın Follow Me senaryosu 10 m / 10 m'ye geçti (`takip_yuruyen`;
+  9. grupta 3 koşuda en az 2.99–5.10 m, kişi kaybı 0/3, kilit kaybı daha sık; `implementation/gorev-grubu-09.md` 4 ve
+  13); 8 m / 8 m `takip_yuruyen_8m`. Gerçek uçuş ayarı ayrı ekip kararıdır. **Takım
   arkadaşlarına öneri (m06 yapmadı):** m15 kendi modunda en az mesafe koruması, kişi durunca/dönünce hız ileri
   beslemesini sınırlamak ve kişi kadrajdan çıkınca tanımlı bir davranış; m11 süzülmüş hız göndermek ve durma/dönme anını
   hızlı yakalamak; m01'e "en az yatay mesafe" ve "6 m altı süre payı" ölçütleri.
