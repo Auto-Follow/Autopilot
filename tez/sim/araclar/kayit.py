@@ -10,6 +10,14 @@ Live use (task group 5): Recorder(on_frame=...) hands every camera frame to the 
 knows it: while recording, once both the row and the segmentation frame of that time are there (FrameJoin); outside
 the recording (no referee), with no row at all. That is the referee's LOS (ii) and the operator's choice of the target
 (first lock) in the run; it comes as late as the referee really is.
+
+Segmentation frames are read from their raw bytes (read_image), not parsed by the protobuf module: Gazebo 8's
+segmentation camera (gz-sensors 8.2.2) appends one more `frame_id` entry to the header of every frame it publishes and
+never clears them (~51 bytes a frame, ~2000 entries after a minute of recording). Parsed whole with the pure Python
+protobuf the tools use, a frame took longer and longer and filled the heap; full garbage collections came every
+~0.3 s and after ~70 s of recording the gz-transport thread fell behind the 30 Hz frames: the referee's rows reached
+the tracking side after the model's results and no re-lock was possible (spec 2026-11-10-m06-sim-ortami,
+implementation/gorev-grubu-17-on-kamera-acisi.md, "Canlı hakem akışı"). read_image skips the header's entries unread.
 """
 
 import math
@@ -17,16 +25,16 @@ import os
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
 os.environ.setdefault("GZ_IP", "127.0.0.1")  # same as calistir.sh
 
 import numpy as np  # noqa: E402
 from gz.msgs10.camera_info_pb2 import CameraInfo  # noqa: E402
-from gz.msgs10.image_pb2 import Image  # noqa: E402
 from gz.msgs10.pose_v_pb2 import Pose_V  # noqa: E402
-from gz.transport13 import Node  # noqa: E402
+from gz.transport13 import Node, SubscribeOptions  # noqa: E402
 
 from hedef import OTHER_LABEL, TARGET_LABEL, Scenario  # noqa: E402
 from kamera import ENU_TO_NED, FLU_TO_FRD, GZ_CAMERA_TO_OPTICAL, Camera, deviation, quat_to_dcm  # noqa: E402
@@ -38,6 +46,7 @@ CAMERA_TOPIC = "/x500_tez/kamera"
 TARGET_POINTS = (("ayak", 0.0), ("merkez", 0.9), ("bas", 1.75))  # [m] above ground
 POSE_HISTORY = 100  # poses kept for interpolation (2 s at 50 Hz)
 SEG_TOPIC = "/x500_tez/kamera_seg/labels_map"  # models/x500_tez: segmentation camera, half resolution
+IMAGE_TYPE = "gz.msgs.Image"
 SEG_SCALE = 2  # drone camera pixels per segmentation pixel
 VISIBLE_PX = 40  # [px of the drone camera] fewer visible pixels of the target = not visible (hidden or too small)
 JOIN_KEEP_S = 3.0  # [s sim] a half of a referee frame waits this long for the other half, then it is dropped
@@ -87,6 +96,106 @@ class FrameJoin:
             for k in old:
                 del waiting[k]
             self.dropped += len(old)
+
+
+@dataclass(frozen=True)
+class ImageFrame:
+    """What the referee needs of a gz.msgs.Image, read from its raw bytes (read_image)."""
+
+    t: float  # [s sim] header stamp
+    width: int
+    height: int
+    data: memoryview  # the pixels as sent, not copied
+
+
+# gz.msgs field numbers: Image {Header header = 1; uint32 width = 2; uint32 height = 3; bytes data = 5; ...},
+# Header {Time stamp = 1; repeated Map data = 2}, Time {int64 sec = 1; int32 nsec = 2}
+WIRE_VARINT, WIRE_FIXED64, WIRE_LEN, WIRE_FIXED32 = 0, 1, 2, 5
+
+
+def _varint(buf: memoryview, pos: int, end: int) -> tuple[int, int]:
+    value = shift = 0
+    while True:
+        if pos >= end or shift > 63:
+            raise ValueError("gz.msgs.Image kesik ya da bozuk (varint)")
+        byte = buf[pos]
+        pos += 1
+        value |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            return value, pos
+        shift += 7
+
+
+def _fields(buf: memoryview, pos: int, end: int) -> Iterator[tuple[int, int, int, int]]:
+    """(field number, wire type, value, end of the field) of the fields in buf[pos:end]; for a length-delimited field
+    value is where its bytes start. Fields this reader does not need are skipped by their wire type."""
+    while pos < end:
+        tag, pos = _varint(buf, pos, end)
+        number, wire = tag >> 3, tag & 7
+        if wire == WIRE_VARINT:
+            value, pos = _varint(buf, pos, end)
+            yield number, wire, value, pos
+            continue
+        if wire == WIRE_LEN:
+            size, start = _varint(buf, pos, end)
+            pos = start + size
+            value = start
+        elif wire == WIRE_FIXED64:
+            value, pos = pos, pos + 8
+        elif wire == WIRE_FIXED32:
+            value, pos = pos, pos + 4
+        else:
+            raise ValueError(f"gz.msgs.Image bozuk: tel türü {wire}")
+        if pos > end:
+            raise ValueError("gz.msgs.Image kesik: alan mesajın sonunu aşıyor")
+        yield number, wire, value, pos
+
+
+def _signed(value: int) -> int:
+    """int64 / int32 varints carry negative numbers as 64-bit two's complement."""
+    return value - (1 << 64) if value >= 1 << 63 else value
+
+
+def _stamp(buf: memoryview, pos: int, end: int) -> float | None:
+    """[s] header.stamp of a Header's bytes, None if it has none. Gazebo (C++) writes the stamp before the data
+    entries: the entries after it are never looked at."""
+    for number, wire, value, field_end in _fields(buf, pos, end):
+        if number == 1 and wire == WIRE_LEN:
+            sec = nsec = 0
+            for n, w, v, _ in _fields(buf, value, field_end):
+                if w == WIRE_VARINT and n == 1:
+                    sec = _signed(v)
+                elif w == WIRE_VARINT and n == 2:
+                    nsec = _signed(v)
+            return sec + nsec * 1e-9
+    return None
+
+
+def read_image(raw: bytes | memoryview) -> ImageFrame:
+    """The header stamp, size and pixels of a serialized gz.msgs.Image without the protobuf module; the header's
+    data entries are skipped unread (Gazebo's segmentation camera piles them up, see the module text). ValueError
+    if the bytes are cut short or not protobuf."""
+    buf = memoryview(raw).cast("B")
+    t, width, height, data = 0.0, 0, 0, memoryview(b"")
+    for number, wire, value, end in _fields(buf, 0, len(buf)):
+        if number == 1 and wire == WIRE_LEN:
+            stamp = _stamp(buf, value, end)
+            t = stamp if stamp is not None else t
+        elif number == 2 and wire == WIRE_VARINT:
+            width = value
+        elif number == 3 and wire == WIRE_VARINT:
+            height = value
+        elif number == 5 and wire == WIRE_LEN:
+            data = buf[value:end]
+    return ImageFrame(t, width, height, data)
+
+
+def label_channel(frame: ImageFrame) -> np.ndarray:
+    """(h, w) label per pixel of an instance segmentation frame: the label is in the third channel (the first two
+    encode the instance). ValueError if the pixels do not fill width x height x 3."""
+    if len(frame.data) != frame.width * frame.height * 3:
+        raise ValueError(f"segmentasyon karesi boyutu tutmuyor: {len(frame.data)} bayt, {frame.width}x{frame.height}x3")
+    return np.frombuffer(frame.data, np.uint8).reshape(frame.height, frame.width, 3)[:, :, 2]
 
 
 def visible_parts(labels: np.ndarray, wanted: dict[int, str]) -> dict:
@@ -208,10 +317,11 @@ class Recorder:
         scenario: Scenario,
         world: str,
         on_frame: Callable[[float, dict | None, float], None] | None = None,
+        node: object | None = None,
     ) -> None:
         """on_frame(t, row, ready): every camera frame for the tracking side, `row` = the referee's row joined with
         its segmentation frame (None outside the recording), `ready` = monotonic time it became known. Runs in a
-        gz-transport thread: it must return quickly."""
+        gz-transport thread: it must return quickly. node: the gz-transport Node (a stand-in in tests)."""
         self.sc = scenario
         self._on_frame = on_frame
         self._join = FrameJoin()
@@ -228,7 +338,7 @@ class Recorder:
         self._rel: tuple[np.ndarray, np.ndarray] | None = None
         self._seg: dict[int, dict] = {}  # frame time [us] -> visible_parts()
         self._labels = {TARGET_LABEL: "hedef"} | {OTHER_LABEL + i: f"insan{i + 1}" for i in range(len(scenario.others))}
-        self._node = Node()
+        self._node = node if node is not None else Node()
         self._node.subscribe(Pose_V, f"/world/{world}/dynamic_pose/info", self._on_pose)
         self._node.subscribe(CameraInfo, f"{CAMERA_TOPIC}/camera_info", self._on_info)
 
@@ -239,8 +349,8 @@ class Recorder:
             return self._join.dropped
 
     def start(self) -> None:
-        # segmentation frames only from now on: parsing them in Python all the time slowed the MAVLink tools
-        self._node.subscribe(Image, SEG_TOPIC, self._on_seg)
+        # segmentation frames only from now on (Gazebo renders them only while someone listens), raw: read_image
+        self._node.subscribe_raw(SEG_TOPIC, self._on_seg, IMAGE_TYPE, SubscribeOptions())
         self._recording = True
 
     def stop(self) -> None:
@@ -272,12 +382,17 @@ class Recorder:
                 if len(self.errors) < 20:
                     self.errors.append(f"{type(e).__name__}: {e}")
 
-    def _on_seg(self, msg: Image) -> None:
+    def _on_seg(self, raw: bytes, _info: object) -> None:
         if not self._recording:
             return
-        t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
-        # instance segmentation: the label is in the third channel (the first two encode the instance)
-        labels = np.frombuffer(msg.data, np.uint8).reshape(msg.height, msg.width, 3)[:, :, 2]
+        try:
+            frame = read_image(raw)
+            labels = label_channel(frame)
+        except ValueError as e:  # the transport thread keeps running; the run reports it
+            if len(self.errors) < 20:
+                self.errors.append(f"segmentasyon karesi okunamadı: {e}")
+            return
+        t = frame.t
         parts = visible_parts(labels, self._labels)
         key = round(t * 1e6)
         with self._lock:

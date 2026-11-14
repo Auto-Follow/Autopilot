@@ -15,10 +15,10 @@ os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # pro
 os.environ.setdefault("GZ_IP", "127.0.0.1")  # same as calistir.sh
 
 import numpy as np  # noqa: E402
-from gz.msgs10.image_pb2 import Image  # noqa: E402
-from gz.transport13 import Node  # noqa: E402
+from gz.transport13 import Node, SubscribeOptions  # noqa: E402
 
 from hedef import OTHER_LABEL, TARGET_LABEL, Scenario  # noqa: E402
+from kayit import IMAGE_TYPE, label_channel, read_image  # noqa: E402
 
 HFOV = 1.2  # [rad]
 SIZE = (800, 600)  # [px] 3-5 cm per pixel on the ground: enough for the 0.3 m limit, light to receive
@@ -99,14 +99,14 @@ class OverheadCheck:
         self.frames: dict[float, np.ndarray] = {}
         self._lock = threading.Lock()
         self._node = Node()
-        self._node.subscribe(Image, LABELS_TOPIC, self._on_image)
+        # raw (kayit.read_image): Gazebo's segmentation frames carry a header that grows every frame
+        self._node.subscribe_raw(LABELS_TOPIC, self._on_image, IMAGE_TYPE, SubscribeOptions())
 
-    def _on_image(self, msg: Image) -> None:
-        t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
+    def _on_image(self, raw: bytes, _info: object) -> None:
+        frame = read_image(raw)
         for want in self.times:
-            if want not in self.frames and abs(t - want) < 0.06:
-                # instance segmentation: label in the third channel
-                img = np.frombuffer(msg.data, np.uint8).reshape(msg.height, msg.width, 3)[:, :, 2].copy()
+            if want not in self.frames and abs(frame.t - want) < 0.06:
+                img = label_channel(frame).copy()
                 with self._lock:
                     self.frames[want] = img
 

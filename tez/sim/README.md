@@ -319,6 +319,16 @@ de "kadrajda" sayılır. Dronda, kameranın yanında aynı açıda yarım çöz�
 
 Rapor bunlardan "gerçekten göründüğü süre" ve "kadrajda ama örtülü" oranlarını verir.
 
+**Canlı hakem akışı ve Gazebo'nun büyüyen başlığı:** Gazebo 8'in segmentasyon kamerası (gz-sensors 8.2.2) her
+yayımladığı karenin başlığına bir `frame_id` girdisi daha ekler ve hiç temizlemez (kare başına ≈ 51 bayt). Bu yüzden
+hakemin segmentasyon karesi protobuf modülüyle değil ham baytından okunur (`kayit.read_image`: damga, boyut, pikseller;
+başlık girdileri çözülmeden atlanır); `dogrulama.py` ve `onizleme.py` de öyle. Eskiden kare saf Python protobuf ile
+baştan sona çözülüyordu ve ≈ 70 s kayıttan sonra hakem geride kalıyor, kilit düşünce yeniden kilit olamıyordu
+(Görev Grubu 17 belgesi, bölüm 16). Her koşuda `ozet.json` → `tez_los.hakem_akisi`: hakem karesinin yakalamadan sonra
+ne kadar geç hazır olduğu (`gecikme_ms_p50/p95/maks`, 100 ms'den geç kare `gec_kare`), hakemi bulamayan kilitsiz model
+karesi (`hakem_yok_kare`; kayıttan önce hakem yoktur) ve bunlardan hakemin karesi sonradan gelenler
+(`hakem_sonradan_gelen_kare`: hakem eksik değil geç). Sonradan gelen 5'ten fazlaysa raporda olay olarak yazılır.
+
 ### Kamera eğimi × yükseklik × mesafe taraması (`tarama.py`)
 
 Bir takip senaryosunu kamera eğimi, yükseklik ve geride durma mesafesinin bir ızgarasında koşar (Görev Grubu 17'nin

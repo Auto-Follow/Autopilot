@@ -84,6 +84,9 @@ PROGRESS_EVERY = 10.0  # [s sim] the model's numbers in the log while recording
 # PX4 must have logged the TEZ_LOS messages sent in the window (ULog debug_vect) within this share (tasks.md 5.7)
 TEZ_LOS_ULOG_TOLERANCE = 0.05
 LOCK_EVENTS_LISTED = 12  # lock events written into the report's events one by one
+# unlocked model frames whose referee frame came only after the selection looked for it (takip.Tracker "hakem_akisi"):
+# more than this many is an event (~0.5 s of processed frames; the recording's first frame alone can be one)
+REFEREE_LATE_EVENT_FRAMES = 5
 # follow_me: FOLLOW_TARGETs sent before PX4's logger is restarted, so that the follow_target topic exists (see
 # simulasyon.restart_logger); ~0.3 s after the first one. The restart must be done before the window starts.
 LOGGER_RESTART_AFTER = 3
@@ -545,6 +548,7 @@ def tracking_sections(tracker: takip.Tracker, m: dict, events: list[str]) -> tup
     follow = summary.pop("follow_target")
     if follow["etkin"] and m["follow_target_gonderilen"] == 0:
         events.append("FOLLOW_TARGET: kayıt penceresinde hiç gönderilmedi (Follow Me'nin hedefi yok)")
+    _referee_stream_lines(summary["hakem_akisi"], events)
     lock_events = summary["kilit"]["olaylar"]
     names = {"ilk_kilit": "ilk kilit", "yeniden_kilit": "yeniden kilit", "kilit_kaybi": "kilit kaybı"}
     for e in lock_events[:LOCK_EVENTS_LISTED]:
@@ -556,6 +560,22 @@ def tracking_sections(tracker: takip.Tracker, m: dict, events: list[str]) -> tup
     _tracking_log_lines(m, summary)
     _follow_log_lines(m, follow)
     return summary, follow
+
+
+def _referee_stream_lines(stream: dict, events: list[str]) -> None:
+    """How late the live referee was (takip.referee_stream) and whether a re-lock had to wait for it."""
+    log(
+        f"Hakem akışı: {stream['kare']} kare, yakalamadan sonra p50 {stream['gecikme_ms_p50']:.0f} ms, p95 "
+        f"{stream['gecikme_ms_p95']:.0f} ms, en çok {stream['gecikme_ms_maks']:.0f} ms ({stream['gec_kare']} kare > "
+        f"{stream['gec_esik_ms']:.0f} ms); hakemi bulamayan kilitsiz model karesi {stream['hakem_yok_kare']}, "
+        f"hakemi sonradan gelen {stream['hakem_sonradan_gelen_kare']}"
+    )
+    if stream["hakem_sonradan_gelen_kare"] > REFEREE_LATE_EVENT_FRAMES:
+        events.append(
+            f"Hakem akışı geç kaldı: {stream['hakem_sonradan_gelen_kare']} kilitsiz model karesi hakemi bulamadı, "
+            f"hakemin karesi sonradan geldi (yeniden kilit beklemek zorunda kaldı; hakem en çok "
+            f"{stream['gecikme_ms_maks']:.0f} ms geç)"
+        )
 
 
 def run(

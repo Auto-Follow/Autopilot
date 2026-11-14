@@ -36,6 +36,10 @@
   çeşitliliği simde ölçülemedi; Ortatepe'ye 8 öneri (bölüm 9).
 - **Modelsiz raporla fark:** raporun "15 m'de bile rahat tespit" ve "8 m geride her eğimde başarılı" sonuçları modelle
   geçerli değil; geometri (yer şeridi, ufuk, konum duyarlılığı) aynı.
+- **Canlı hakem hatası (İş 1, bölüm 16):** "≈ 7 s duran" hakem, Gazebo'nun segmentasyon karesinin başlığı her karede
+  büyüdüğü için ≈ 70 s kayıttan sonra geride kalıyordu; düzeltildi (kare ham okunuyor). Kıvrımlı yol yeniden koşuldu:
+  35° 7/10 ve 30° 6/10.4 artık 2/3 (belirsiz kayıplar hataymış), **35° 8/11.4 de 2/3** (bu kez gerçek bir kayıp); iki
+  günde 5/6, 3/6, 3/6.
 
 ## 1. Ne yapıldı (kod)
 
@@ -293,6 +297,8 @@ yürür, 3.5 m/s kısa koşu, sonra 88 s'de **164°'lik sert geri dönüşle** d
   (`hakem_yok`; satırlar sonradan `dogru_cevap.csv`'de var). Gerçekte operatör ya da m11 hedefi yeniden seçerdi. Bu iki
   koşu izlenmiş sayılırsa 35° 7/10 ve 30° 6/10.4 kıvrımlı yolda 2/3 olur; **35° 8/11.4 yine iki yolda da 3/3 geçen tek
   ayar** kalır.
+  **Sonra (İş 1, bölüm 16):** kök neden bulundu ve düzeltildi; iki kayıp hakem hatasıydı. Düzeltilmiş kodla yeniden koşuda
+  35° 7/10 ve 30° 6/10.4 2/3, 35° 8/11.4 de 2/3 (bir gerçek kayıp); iki günün altı koşusunda 3/6, 3/6, 5/6.
 
 Görseller: `gorev10on_hakem_karsilastirma.png`, `gorev10on_kivrimli_karsilastirma.png`.
 
@@ -768,7 +774,7 @@ pozla konum payı 0.23–0.26 m, eğimden bağımsız. Yani Gazebo modeli, LOS, 
   bileşimini aynı eğim, yükseklik ve mesafedeki `takip_yuruyen` bileşiminin yinelemesi sayıp planlamazdı. Bileşimler
   artık `temel` alanını taşıyor, yineleme yalnız aynı yolunkiler arasında aranıyor; alansız eski plan kayıtları planın
   ilk yolu sayılıyor (`test_another_base_path_joins_the_plan_at_the_same_settings`).
-- **Canlı hakem akışı nadiren ≈ 7 s duruyor (açık, kök neden bulunamadı):** kilit düşünce yeniden kilit, o model
+- **Canlı hakem akışı nadiren ≈ 7 s duruyor (kök nedeni İş 1'de bulundu ve düzeltildi, bölüm 16):** kilit düşünce yeniden kilit, o model
   karesinin hakem satırını canlı akıştan (`kayit.Recorder` → `takip.Tracker.on_referee`) arıyor. Hakem satırı normalde
   model sonucundan önce hazır (mükemmel algılayıcı koşularında `kaynak_ms` p50 46 ms, en çok 129 ms; model sonucu ≈ 140 ms),
   ama 152 koşunun 3'ünde (kıvrımlı yolda 35° 7/10 koşu 2 ve 30° 6/10.4 koşu 1, 9. grubun `gorev9_RS0.3_model_x3/kosu_2`'si)
@@ -856,10 +862,172 @@ Koşu klasörleri (`tez/sim/sonuclar/`, git dışında): `gorev10on_tarama/` (`p
   önerilebilir; eşikleri m01 belirler.
 - **Simin ölçemedikleri** (bölüm 10): rüzgâr, gerçek CM3 lensi (m09), otomatik pozlama ve bulanıklık (Görev Grubu 15),
   zemin eğimi ve GPS yükseklik hatası, insan çeşitliliği. Öneri bunlar ölçülünce yeniden değerlendirilmeli.
-- **m06'nın kendi açık hatası:** canlı hakem akışının nadiren ≈ 7 s durması (bölüm 12); kök neden ve düzeltme ayrı bir
-  iş (önce hatayı yakalayan test). Düzelince kıvrımlı yolun 35° 7/10 ve 30° 6/10.4 koşuları yeniden koşulmalı.
+- **m06'nın kendi açık hatası (kapandı, İş 1):** canlı hakem akışının "durması" Gazebo'nun büyüyen segmentasyon
+  başlığından; düzeltildi ve kıvrımlı yolun 35° 7/10, 30° 6/10.4, 35° 8/11.4 koşuları yeniden koşuldu (bölüm 16).
 - **Yasal sınırlar:** insanların yakınında ve üstünde uçuş için SHGM kurallarına bakılmalı; bu belge yasal bir sayı
   vermez.
+
+## 16. Canlı hakem akışının "durması": kök neden ve düzeltme (İş 1)
+
+**Kısaca:** Hata simin kendi hatasıydı, gerçek sistemde karşılığı yok (hakem yalnız simde var). Gazebo'nun
+segmentasyon kamerası (gz-sensors 8.2.2) her yayımladığı karenin başlığına bir `frame_id` girdisi daha ekliyor ve hiç
+temizlemiyor. Ana süreç bu kareyi saf Python protobuf ile baştan sona çözdüğü için kare başına iş koşu boyunca
+doğrusal büyüdü, Python'un tam çöp toplaması (GC) sıklaştı ve ≈ 70 s kayıttan sonra gz-transport iş parçacığı 30 Hz'e
+yetişemedi: hakemin satırları modelin sonucundan sonra gelmeye başladı ve kilit düşünce yeniden kilit hiç olamadı.
+"≈ 7 s duruyor" gözlemi aslında **son kilit kaybından kaydın sonuna kadar** olan süreydi. Düzeltme: segmentasyon
+karesi ham baytından okunuyor, başlığın girdileri çözülmeden atlanıyor (önce hatayı yakalayan test). Düzeltmeden sonra
+hakem karesi kayıt boyunca yakalamadan ≈ 36 ms sonra hazır, büyümüyor.
+
+### 16.1 Etkilenen koşular (yeniden sayıldı)
+
+- Belgede "152 koşunun 3'ü" yazıyordu. Bütün model koşuları (194) yeniden tarandı (repo dışı `engellenen_kilit.py`):
+  kayıt içinde hakemi bulamayan (`hakem_yok`) kilitsiz kare **122 koşuda** var ve bu 1051 karenin 1046'sı kaydın
+  **ikinci yarısında**. Ama hakem zamanında gelseydi kilidin olacağı kare (kişi görünür ve bir model kutusu hakemin
+  kutusuyla IoU ≥ 0.3, yani `LOCK_MIN_IOU`) yalnız **8 koşuda** var; çoğunda 1 kare.
+- **Sonucu değiştiren:** kıvrımlı yol 35° 7/10 koşu 2 (89.9 s'den sonra 64 kare) ve 30° 6/10.4 koşu 1 (91.1 s'den
+  sonra 45 kare). İkisinde de kişi kadrajdaydı, model onu buluyordu, ama yeniden kilit yapılamadı ve kişi "sonda
+  kaybedildi" sayıldı. 30° 6/10.4 koşu 3'te 1 kare (90.7 s) ve aşama 1'in 45° 12/8'inde 1 kare: tek kare, kişi zaten
+  kaybediliyordu.
+- **Değiştirmeyen:** 9. grubun `gorev9_RS0.3_model_x3/kosu_2`'si (belgede üçüncü örnekti): `hakem_yok` var ama o anda
+  modelin hiç kutusu yok (0 kutu); hakem zamanında gelseydi de kilit olmazdı.
+- Üç örnekte de "durma" son kilit kaybından kaydın sonuna kadar sürüyor (89.5–97.4 s, 91.0–97.4 s, 83.2–89.4 s). Kilitli
+  olunduğu sürece hakeme bakılmadığı için gecikme daha önce başlamıştı ama görünmüyordu.
+
+### 16.2 Kanıt (ölçüm sırasıyla)
+
+1. **Hakem kaynaklı 31 koşu** (`tez_los.csv` → `kaynak_ms`: hakem karesinin yakalamadan kaç ms sonra hazır olduğu):
+   her koşuda kayıt boyunca büyüyor, ilk 15 s'de ortanca ≈ 40 ms, son 15 s'de 70–80 ms; **9 koşuda** son saniyelerde
+   120–1141 ms (en kötüsü aşama 2 hakem 30° 6/10.4 koşu 1). Modelsiz hakem koşusunda (`gorev5_C2`) 17 → 26 ms.
+   Model sonucu yakalamadan ≈ 120–150 ms sonra hazır (`hazir_sim`); hakem bundan geç kalınca kilitsiz her kare
+   `hakem_yok` oluyor.
+2. **Suçlu olmayanlar:** ana sürecin sim saati (`SimClock`, aynı gz-transport iş parçacığında) geride kalmıyor (model
+   sonucunun `hazir_sim − t`'si 117 → 158 ms, artıda); MAVLink poz akışı zamanında (`poz_yok` 0); Tracker'ın hakem
+   kuyruğu ≤ 7 ms; hakemin yarım-kare birleştirmesi hiç kare düşürmedi (`hakem_eksik_kare` 0).
+3. **Ölçümlü koşu 1** (`sonuclar/gorev17b_teshis/once_1`, e30 · 6 m / 10.4 m, takip yolu, model, videolu; geri
+   çağrılara zaman ölçerleri, GIL sondası, iş parçacığı başına CPU, GC olayları): gz-transport iş parçacığının CPU'su
+   kayıt boyunca **doğrusal 0.15 → 0.87 çekirdek**; tam (2. kuşak) GC 33. s'de başlıyor, 45 s'den sonra ≈ 0.3 s'de
+   bir, her biri 70–84 ms (toplam 122 kez, 9.1 s, GIL tutularak); GIL sondasının %95'i 0.3 → 6.5 ms. Geri çağrıların
+   kendi gövdeleri ise sabit süreli (poz 0.1 ms, segmentasyon 3–4 ms): büyüyen iş geri çağrıdan önce.
+4. **Ölçümlü koşu 2** (`once_2`, videosuz; mesaj başına ham boy, çözme süresi, iş parçacığı CPU'su, yığın örnekleri):
+   segmentasyon mesajı 2 242 985 → 2 339 631 bayt (görüntü 2 239 488 bayt sabit, **kare başına ≈ 51 bayt**); saf
+   Python ile çözme **0.95 → 19.4 ms**, kare başına CPU **3.5 → 30.8 ms** (kamera 33 ms'de bir kare gönderir);
+   yığın örneklerinin çoğu protobuf'un tekrarlı alan çözücüsünde (`DecodeRepeatedField` → `containers.add`, dizgi
+   çözme). Poz ve `camera_info` mesajları sabit (0.3 / 0.2 ms). Videosuz da aynı: video kaydedicisi sebep değil.
+5. **Gazebo'nun kendisi** (`seg_baslik.py`; Gazebo sunucusu PX4'süz, aynı dünya, 40 s, ham yakalama;
+   `sonuclar/gorev17b_teshis/seg_baslik.txt`): `labels_map` ve `colored_map` başlığında 36.5 s'de **1107 özdeş
+   `frame_id` girdisi** (kare başına +1); RGB kamerada hep 2 girdi (`frame_id`, `seq`). Sensör yalnız abonesi varken
+   yayımladığı için büyüme hakemin kayıt başındaki aboneliğiyle başlıyor.
+
+**Zincir:** Gazebo segmentasyon karesinin başlığını büyütür → araçlar `PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python`
+(saf Python protobuf) ile her kareyi baştan sona çözer, kare başına binlerce kısa ömürlü Python nesnesi → Python'un tam
+çöp toplaması GIL'i tutarak 0.3 s'de bir → ana süreçteki tek gz-transport iş parçacığı ≈ 70 s kayıttan sonra 30 Hz'e
+yetişemez, mesajlar birikir → hakemin satırı modelin sonucundan sonra gelir → kilit düşmüşse her model karesi
+`hakem_yok`, yeniden kilit olmaz. Kıvrımlı yolun kaydı (≈ 73 s) takip yolununkinden (≈ 65 s) uzun olduğu için sonucu
+değiştiren kayıplar hep orada çıktı.
+
+### 16.3 Önce test, sonra düzeltme
+
+`testler/test_hakem_akisi.py` (5 test, donanımsız, simsiz):
+
+| Test | Ne sınanır |
+|---|---|
+| `test_a_segmentation_frame_is_read_from_its_raw_bytes` | Ham bayttan okunan damga, boyut ve pikseller protobuf'un çözdüğüyle aynı: 1, 0, 2200 girdili başlık, damgası girdilerden sonra yazılmış kare, başlıksız kare |
+| `test_a_broken_frame_is_refused_with_a_reason` | Kesik kare ve tutmayan boyut nedeniyle reddedilir |
+| `test_reading_a_frame_does_not_slow_down_as_gazebos_header_grows` | **Hatayı yakalayan test:** 20 000 girdili kare (≈ 11 dk Gazebo) 5 ms altında ve ilk kare kadar hızlı okunur |
+| `test_the_recorder_takes_the_referees_frames_raw_and_joins_them` | Recorder segmentasyona yalnız kayıtta ve ham abone olur; büyümüş başlıklı kare de birleşik hakem karesine (görünen piksel, kutu) dönüşür |
+| `test_the_referees_lateness_is_measured_in_every_tracking_source` | Hakemin gecikmesi ve "hakemi sonradan gelen" kilitsiz model kareleri her takip kaynağında sayılır |
+
+**Kırmızı:** eski davranış (karenin protobuf ile baştan sona çözülmesi) aynı arayüzün arkasındayken zaman testi
+başarısız oldu: 20 000 girdili kare **108.5 ms** (sınır 5 ms). **Yeşil:** düzeltmeden sonra 5/5; bütün testler 270 → 275.
+
+**Düzeltme (`kayit.py`):**
+- `read_image(raw)` protobuf modülü olmadan ham baytlardan yalnız gerekenleri okur: başlığın damgası, genişlik, yükseklik
+  ve pikseller (kopyasız `memoryview`). Gazebo (C++) damgayı başlığın girdilerinden önce yazar; okuyucu damgayı bulunca
+  başlığın geri kalanını uzunluğuyla atlar, girdilere hiç bakmaz. `label_channel` etiket kanalını verir.
+- `Recorder` segmentasyona `subscribe_raw` ile abone olur (yalnız kayıtta, eskisi gibi); okunamayan kare koşunun
+  hatalarına yazılır (olmadı). Testler için `node` parametresi.
+- Aynı sensörü dinleyen `dogrulama.py` (tepe kamerası, F1) ve `onizleme.py` (`--etiket`) de ham okur.
+- **Görünürlük:** `takip.Tracker` her koşuda `ozet.json` → `tez_los.hakem_akisi`'ni yazar: hakemin gecikmesi
+  (`gecikme_ms_p50/p95/maks`, 100 ms'den geç kare `gec_kare`), hakemi bulamayan kilitsiz model karesi
+  (`hakem_yok_kare`) ve bunlardan hakemin karesi sonradan gelenler (`hakem_sonradan_gelen_kare`: hakem eksik değil
+  geç). `senaryo.py` bunu günlüğe yazar; sonradan gelen 5'ten fazlaysa raporda olay olur. Bu sayılar o zaman olsaydı
+  hata ilk koşuda görünürdü.
+- **Değişmeyenler:** Gazebo düzeltilmedi (sürümler kilitli, `apt-mark hold`); başlık büyümeye devam ediyor, ama artık
+  kimse onu çözmüyor (11 dakikalık bir koşuda mesaj ≈ 1 MB büyür, aktarım için önemsiz). Araçların saf Python
+  protobuf seçimi değişmedi: bu bilgisayarda sistemin protobuf'u (4.21.12, C++) Gazebo mesajlarını açıyor ama seçim
+  `~/.local`'daki protobuf 7.x yüzünden yapılmıştı ve takım arkadaşlarının ortamı farklı olabilir; ham okuma
+  ortamdan bağımsız. Hedef seçiminin kuralı (yeniden kilit hakemden) değişmedi.
+
+### 16.4 Doğrulama
+
+**Ölçümlü koşu 3** (`sonuclar/gorev17b_teshis/sonra_1`; ölçümlü koşu 1'in aynısı, düzeltilmiş kodla):
+
+| | Önce (`once_1`) | Sonra (`sonra_1`) |
+|---|---|---|
+| gz-transport iş parçacığının CPU'su (kayıt boyunca) | 0.15 → 0.87 çekirdek, doğrusal büyüyor | ≈ 0.19 çekirdek, sabit |
+| Tam (2. kuşak) GC | 122 kez, toplam 9.1 s (her biri 70–84 ms) | 1 kez, 34 ms |
+| Kısa GC (0. / 1. kuşak) | 16 717 / 1 519 | 368 / 33 |
+| GIL sondası, %95 | 0.3 → 6.5 ms | ≈ 0.5 ms, sabit |
+| Hakem karesi hazır (yakalamadan sonra), ortanca / %95 / en çok | 35 / 40 / 47 ms (bu koşu 89 s'de bitti, iş parçacığı henüz 1 çekirdeğe ulaşmadı) | 36 / 42 / 46 ms, kayıt boyunca sabit |
+| `ozet.json` → `hakem_akisi` (yeni) | – | 1935 kare, p50 44 / p95 49 / en çok 203 ms, 1 kare > 100 ms; hakemi sonradan gelen kilitsiz kare 1 (kaydın ilk karesi) |
+| RTF (kayıt penceresi) | 0.918 | 0.932 |
+
+**Kıvrımlı yolun yeniden koşuları** (`sonuclar/gorev10on_tarama/asama3_kivrimli/`, düzeltilmiş kod, videolu, 3'er koşu, 13.11 22:25–22:48;
+13.11'deki aşama 2 kıvrımlı koşularıyla aynı senaryolar):
+
+| Bileşim (kıvrımlı yol, 3 koşu) | 13.11, düzeltmeden önce: kişi izlendi / en az mesafe / engellenen kilit karesi | düzeltmeden sonra (13.11, 22:25–22:48): kişi izlendi / en az mesafe / hakem %95, en çok / engellenen | Düzeltmeden sonraki kaybın nedeni |
+|---|---|---|---|
+| 35° · 7 m / 10 m | 1/3 / 5.4–6.4 m / 64 kare (koşu 2) | **2/3** / 4.0–5.7 m / 42–49 ms, ≤ 210 ms / 0 | koşu 2: 164° dönüşte kişi kadrajın altından çıktı (son kayıptan sonra %83 alttan), `hedef_gorunmuyor` |
+| 30° · 6 m / 10.4 m | 1/3 / 3.0–6.6 m / 45 kare (koşu 1) + 1 (koşu 3) | **2/3** / 5.5–6.5 m / 49 ms, ≤ 208 ms / 0 | koşu 3: kişi kadrajın altından çıktı (%86) |
+| 35° · 8 m / 11.4 m | 3/3 / 6.0–8.1 m / 1 kare (koşu 2, sonuç değişmedi) | **2/3** / 6.0–7.5 m / 49 ms, ≤ 205 ms / 0 | koşu 2: dönüşten sonra kişi kadrajın yanından çıktı (%100 yandan) |
+
+- Düzeltmeden sonra 9 koşunun hiçbirinde kayıt içinde hakemi bulamayan kilitsiz kare yok (yalnız kaydın ilk karesi,
+  hakem zaten o an başlıyor); engellenen kilit 0; hakem %95'i 42–49 ms, en çok 205–210 ms (her koşuda en çok 1 kare
+  > 100 ms). RTF 0.91–0.97 (13.11'de 0.86–0.96).
+- **Belirsiz iki kayıp hataymış:** 35° 7/10 ve 30° 6/10.4 artık üç koşunun ikisinde kişiyi izliyor (13.11'de birinde).
+  Kalan kayıplar gerçek: hakem zamanında, kişi kadrajdan çıkmış, model kutusu yok.
+- **35° 8/11.4 bu kez üç koşunun birinde kişiyi kaybetti** (164° dönüşten sonra yandan). İki günün altı koşusunda: 35°
+  8/11.4 **5/6**, 35° 7/10 3/6, 30° 6/10.4 3/6. Sıralama aynı kaldı ama 13.11'deki "kıvrımlı yolda 3/3 geçen tek
+  ayar" sonucu yeniden koşuda tutmadı: kıvrımlı yolun sert geri dönüşü bu ayarların hepsi için sınırda. Bu, İş 2'nin
+  son seçiminde (bölüm 18) bütün koşularla birlikte değerlendirildi.
+
+### 16.5 Gerçekte karşılığı var mı?
+
+- **Bu hata simde kalır.** Hakem (segmentasyon kamerası ve yeniden kilitte operatörün yerine geçmesi) yalnız simde var;
+  Gazebo'nun başlık hatası gerçek kamerada yok. Gerçek sistemde yeniden kilidi m11'in kendi kuralı ya da QGC'deki
+  operatör yapar.
+- **Benzeri gerçekte de olabilir (ayrım):** bu bir görüntü akışı *kesilmesi* değil, *geride kalmasıydı*: mesajlar
+  geliyordu ama giderek eskiyordu. Pi'deki Python süreci de kareleri bir geri çağrıda işliyorsa, kare başına iş zamanla
+  büyürse (birikmiş durum, büyüyen mesaj) ya da çöp toplama / başka bir iş parçacığı GIL'i tutarsa kareler aynı biçimde
+  giderek geç işlenir. Bunu yakalayacak olan, ICD'nin (m05) zaman damgası, Pi'nin kare yaşı kontrolü ("eski veriyi
+  tekrar gönderme", hata yönetimi standardı) ve PX4 tarafının zaman aşımıdır. Vision için öneri (Ortatepe / m10–m12,
+  karar onların): kare başına işlem süresini ve kare yaşını koşu boyunca logla; bu bölümdeki gibi bir "sabit mi,
+  büyüyor mu" grafiği ilk uzun bench denemesinde bakılacak ilk şey olsun.
+- Gerçek operatörün yeniden kilidi (QGC videosu üzerinden) Wi-Fi gecikmesiyle gecikebilir: o, Görev Grubu 16'nın (Wi-Fi
+  benzetimi) konusu.
+
+### 16.6 Dosyalar (İş 1, ayrı commit)
+
+| Dosya | Değişiklik |
+|---|---|
+| `tez/sim/araclar/kayit.py` | `ImageFrame`, `read_image`, `label_channel` (ham okuma); `Recorder` segmentasyonu `subscribe_raw` ile dinler, `node` parametresi; modül metni |
+| `tez/sim/araclar/takip.py` | `REFEREE_LATE_MS`, `referee_stream`; Tracker hakemin gecikmesini ve hakemi sonradan gelen kilitsiz kareleri sayar (`summary()["hakem_akisi"]`) |
+| `tez/sim/araclar/senaryo.py` | Hakem akışı günlük satırı ve olayı (`REFEREE_LATE_EVENT_FRAMES`) |
+| `tez/sim/araclar/dogrulama.py`, `onizleme.py` | Segmentasyon karesi ham okunur |
+| `tez/sim/testler/test_hakem_akisi.py` | Yeni (5 test) |
+| `tez/sim/README.md` | "Canlı hakem akışı ve Gazebo'nun büyüyen başlığı" |
+| `agent-os/specs/2026-11-10-m06-sim-ortami/spec.md` | "Kamera parametreleri" → Konular satırı; Test Planı (`test_hakem_akisi.py`) |
+| `agent-os/specs/2026-11-10-m06-sim-ortami/tasks.md` | 17.9 |
+| `implementation/gorev-grubu-17-on-kamera-acisi.md` | Bu bölüm; bölüm 5, 12 ve 15'teki açık hata notları |
+| `implementation/kabul-kosulari.md` | Ölçümlü koşular ve kıvrımlı yolun yeniden koşuları |
+
+Yama: `~/Desktop/Follow/3_m06_Simulasyon/Deneme/hakem_akisi_duzeltme.patch` (temiz HEAD `b6b299aff9`'a uygulanır).
+Temiz HEAD'in ayrı, paylaşımlı bir klonunda (kullanıcının deposu ve index'i değişmedi) `git apply` ile uygulandı: 275 test geçti (HEAD'in 270'i + 5 yeni), `ruff format --check` ve `ruff check` temiz; insan modelinin mesh'leri (`kur.sh` ile indirilen, git dışı) klona bağlantıyla verildi.
+
+Görsel: `~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_hakem_akisi_once_sonra.png` (A: Gazebo'nun başlığı, B: kare
+başına iş, C: gz-transport iş parçacığının CPU'su, D: tam GC, E: hakemin gecikmesi, F: kıvrımlı yolda engellenen
+yeniden kilitler). Betikler `~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_betikler/` (`olcumlu_kosu*.py`,
+`teshis_coz*.py`, `seg_baslik.py`, `engellenen_kilit.py`, `hakem_akisi_grafik.py`).
 
 ---
 
@@ -1028,4 +1196,26 @@ cd ~/Desktop/Projects/Auto-Follow/Autopilot && ~/Desktop/Projects/Auto-Follow/.v
 cd ~/Desktop/Projects/Auto-Follow/Autopilot && tez/pin/verify_pin.sh --worktree
 ```
 
-Beklenen: `270 passed`; `KILIT SAGLAM (v1.17.0)`.
+Beklenen: `275 passed`; `KILIT SAGLAM (v1.17.0)`.
+
+### 10. Canlı hakem akışı: önce / sonra (İş 1, bölüm 16)
+
+Altı panel: Gazebo'nun büyüyen başlığı, hakemin kare başına işi, gz-transport iş parçacığının CPU'su (önce kırmızı
+çizgi 1 çekirdeğe doğru tırmanıyor, sonra yeşil düz), tam çöp toplama, hakemin gecikmesi, kıvrımlı yolda engellenen
+yeniden kilitler:
+
+```bash
+xdg-open /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_hakem_akisi_once_sonra.png
+```
+
+Hatayı yakalayan testler (yaklaşık 1 saniye):
+
+```bash
+cd /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot && /home/ahmet/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pytest tez/sim/testler/test_hakem_akisi.py -v
+```
+
+Bir koşunun hakem akışı sayıları (`gecikme_ms_p95` 50 ms civarı, `hakem_sonradan_gelen_kare` 1 olmalı):
+
+```bash
+grep -A 9 '"hakem_akisi"' /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot/tez/sim/sonuclar/gorev10on_tarama/asama3_kivrimli/kivrimli_yuruyus_e35_h8_d11.4/kosu_1/ozet.json
+```

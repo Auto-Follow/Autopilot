@@ -60,6 +60,10 @@ LOCK_MIN_IOU = 0.3
 MOUNT_PITCH_DOWN = konumlama.MOUNT_PITCH_DOWN  # nominal camera mount (spec "Kamera parametreleri"; the Pi: measured)
 NOMINAL_MOUNT = konumlama.NOMINAL_MOUNT  # C_cb, optical -> body FRD
 REFEREE_KEEP_S = 3.0  # [s sim] referee frames kept for the lock of a model frame (a model result is ~0.15 s late)
+# [ms sim] a referee frame later than this after its capture can miss the model result of the same frame (the result
+# is ready ~120-150 ms after the capture: spec "Model dosyası"): an unlocked frame then finds no referee (hakem_yok)
+# and the re-lock waits. Normally the referee is ~35 ms late (gorev-grubu-17-on-kamera-acisi.md, "Canlı hakem akışı").
+REFEREE_LATE_MS = 100.0
 SOURCES = ("model", "hakem")
 
 
@@ -332,6 +336,9 @@ class Tracker:
         self._lock = threading.Lock()
         self._referees: dict[int, Referee] = {}
         self._newest_referee = 0
+        self._referee_late_ms: list[float] = []  # [ms sim] capture -> the referee's frame known, every recorded frame
+        self._referee_keys: set[int] = set()  # every referee frame of the run (time_key)
+        self._no_referee: list[int] = []  # model frames that found no referee to lock with (hakem_yok)
         self._file = None
         self._writer = None
         self.attempts: list[dict] = []  # tez_los.csv rows
@@ -372,6 +379,9 @@ class Tracker:
         with self._lock:
             referee = self._referees.get(key)
         choice = self.selection.step(r.kutular, referee)
+        if choice.reason == "hakem_yok":
+            with self._lock:
+                self._no_referee.append(key)
         camera = self._camera()
         los = los_of_box(camera, choice.box, self.mount) if choice.box is not None and camera is not None else None
         self._note(choice, r.t)
@@ -399,6 +409,9 @@ class Tracker:
                 referee = Referee.from_row(row, ready) if row is not None else None
                 if referee is not None:
                     self._keep(referee)
+                    late = (self._clock.to_sim(ready) - t) * 1000.0
+                    with self._lock:
+                        self._referee_late_ms.append(late)
                 if self.source == "hakem" and not self._closed:
                     seen = referee is not None and referee.visible
                     los = np.array(referee.los_body) if seen else None
@@ -416,6 +429,7 @@ class Tracker:
         key = algilama.time_key(referee.t)
         with self._lock:
             self._referees[key] = referee
+            self._referee_keys.add(key)
             self._newest_referee = max(self._newest_referee, key)
             oldest = self._newest_referee - round(REFEREE_KEEP_S * 1e6)
             for k in [k for k in self._referees if k < oldest]:
@@ -627,6 +641,9 @@ class Tracker:
         with self._lock:
             attempts, events, errors = list(self.attempts), list(self.events), list(self.errors)
             follow, fixes = list(self.follow_attempts), dict(self.fixes)
+            late = [v for v in self._referee_late_ms if math.isfinite(v)]
+            missed = list(self._no_referee)
+            came_later = sum(1 for k in missed if k in self._referee_keys)
         sent = [a for a in attempts if a["sonuc"] == "gonderildi"]
         ft_sent = [a for a in follow if a["sonuc"] == "gonderildi"]
         poses = self.poses
@@ -643,6 +660,8 @@ class Tracker:
                 "olaylar": events,
             },
             "hatalar": errors,
+            "hakem_akisi": referee_stream(late)
+            | {"hakem_yok_kare": len(missed), "hakem_sonradan_gelen_kare": came_later},
             "follow_target": {
                 "etkin": self.follow,
                 "kaynak": self.source if self.follow else None,
@@ -669,6 +688,25 @@ class Tracker:
             mean = f", konum hatası ort. {statistics.fmean(errors):.2f} m" if errors else ""
             text += f"FOLLOW_TARGET: {len(follow)} gönderildi{mean}; "
         return text + state
+
+
+def referee_stream(late_ms: Sequence[float]) -> dict:
+    """ozet.json "tez_los" "hakem_akisi": how late the referee's frames reached the tracking side [ms sim after the
+    capture]: frames, p50, p95, max and how many were later than REFEREE_LATE_MS. Tracker.summary adds the model
+    frames that found no referee to lock with (hakem_yok_kare; before the recording there is none) and how many of
+    those got their referee frame later (hakem_sonradan_gelen_kare: the referee was late, not missing)."""
+    values = np.asarray(late_ms, dtype=float)
+    if values.size == 0:
+        stats = dict.fromkeys(("gecikme_ms_p50", "gecikme_ms_p95", "gecikme_ms_maks"), math.nan)
+    else:
+        p50, p95 = np.percentile(values, [50, 95])
+        stats = {"gecikme_ms_p50": float(p50), "gecikme_ms_p95": float(p95), "gecikme_ms_maks": float(values.max())}
+    return {
+        "kare": int(values.size),
+        **stats,
+        "gec_kare": int((values > REFEREE_LATE_MS).sum()),
+        "gec_esik_ms": REFEREE_LATE_MS,
+    }
 
 
 def _vector(los: np.ndarray | None) -> tuple[float, float, float]:

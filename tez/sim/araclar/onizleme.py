@@ -32,12 +32,12 @@ os.environ.setdefault("GZ_IP", "127.0.0.1")
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 from gz.msgs10.image_pb2 import Image  # noqa: E402
-from gz.transport13 import Node  # noqa: E402
+from gz.transport13 import Node, SubscribeOptions  # noqa: E402
 from PIL import Image as PilImage  # noqa: E402
 
 import hedef  # noqa: E402
 import video  # noqa: E402
-from kayit import SEG_SCALE, visible_parts  # noqa: E402
+from kayit import IMAGE_TYPE, SEG_SCALE, label_channel, read_image, visible_parts  # noqa: E402
 from simulasyon import REPO, SIM_DIR, running  # noqa: E402
 
 TOPIC = "/onizleme/image"
@@ -116,15 +116,14 @@ class Frames:
         self.lock = threading.Lock()
         self.node = Node()
         self.node.subscribe(Image, TOPIC, self.on_image)
-        if people:
-            self.node.subscribe(Image, SEG_TOPIC + "/labels_map", self.on_labels)
+        if people:  # raw (kayit.read_image): Gazebo's segmentation frames carry a header that grows every frame
+            self.node.subscribe_raw(SEG_TOPIC + "/labels_map", self.on_labels, IMAGE_TYPE, SubscribeOptions())
 
-    def on_labels(self, msg: Image) -> None:
-        t = msg.header.stamp.sec + msg.header.stamp.nsec * 1e-9
-        labels = np.frombuffer(msg.data, np.uint8).reshape(msg.height, msg.width, 3)[:, :, 2]
-        parts = visible_parts(labels, self.people)
+    def on_labels(self, raw: bytes, _info: object) -> None:
+        frame = read_image(raw)
+        parts = visible_parts(label_channel(frame), self.people)
         with self.lock:
-            self.boxes[round(t * 1e6)] = parts
+            self.boxes[round(frame.t * 1e6)] = parts
 
     def annotate(self, t: float, bgr: np.ndarray) -> np.ndarray:
         """Draw the people's boxes of the segmentation frame taken at the same time on a BGR frame of any size
