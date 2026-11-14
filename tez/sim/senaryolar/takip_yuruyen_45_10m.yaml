@@ -1,0 +1,48 @@
+# Takip eden yürüyüş, 45° montaj, 10 m / 10 m: 14.11'e kadarki takip_yuruyen (kullanıcı kararı 14.11, iş A), kamera
+# 45° aşağı (kamera raporunun montajı; "çim alanın açık kısmı" ayarı: 45° kamerada yükseklik = geride durma).
+#
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo takip_yuruyen_45_10m
+#
+# Simin varsayılanı 35° · 9 m / 12.9 m oldu (takip_yuruyen); bu senaryo karşılaştırma için 45° montajı tutar: eğim
+# dosyada yazılı (varsayılan değişse de bu senaryo 45°'de kalır; koşu klasörüne modelin 45° kopyası yazılır).
+# Ölçülen (stok Follow Me, v0.2, FLW_TGT_RS 0.3): takip yolunda 11 koşuda 8'inde kişi sonuna kadar izlendi, köşede en
+# az mesafe 2.2–6.4 m; kıvrımlı yolun 164° geri dönüşünde 6 koşunun hiçbirinde izlenemedi (Görev Grubu 17 belgesi,
+# bölüm 17-18; 9. grup ve iş A: gorev-grubu-09.md bölüm 4 ve 13).
+# 45° kamera 10 m'de yeri ≈ 4.9 m'den (yakın görüş sınırı) ≈ 21.7 m'ye kadar görür; kişi ≈ 170 px boyunda.
+# Kişinin yolu ve zamanlaması yuruyen_insan'ınki (kişi dronun 10 m önünde başlar), 14.11'e kadarki koşularla aynı.
+
+ad: takip_yuruyen_45_10m
+aciklama: >
+  İnsan dronun 10 m önünde durur; 60. saniyede doğuya yürür, 3 s durur, kuzeye koşar, sonra batıya yürür
+  (yuruyen_insan'ın yolu). Kamera 45° aşağı; dron 10 m yükseklikten stok PX4 Follow Me ile hedefi 10 m geriden
+  izler; hedefin konumu model kutusundan düz zemin hesabıyla bulunur.
+
+dunya: duz_alan
+
+drone:
+  yukseklik_m: 10           # FLW_TGT_HT verilmediği için Follow Me yüksekliği de 10 m
+
+takip:
+  kaynak: follow_me
+  los: model
+  px4_parametreleri:
+    FLW_TGT_DST: 10         # kamera raporu, çim alan 10/10 (45° kamerada yükseklik = geride durma)
+    FLW_TGT_RS: 0.3         # takip_yuruyen ile aynı sim seçimi (karar 1, 13.11; gerçek dronda 0.1)
+
+kamera:
+  egim_deg: 45              # 45° montaj (karşılaştırma); simin varsayılanı 35° (kamera.NOMINAL_TILT_DEG)
+
+hedef:
+  tur: insan
+  baslangic: [10, 0]
+  yol:
+    - {nokta: [22, 0], hiz_mps: 1.4}
+    - {dur_s: 3}
+    - {nokta: [22, 10], hiz_mps: 3.0}
+    - {nokta: [12, 10], hiz_mps: 1.4}
+
+zamanlama:
+  baslama_s: 60
+  son_bekleme_s: 5
+
+basari: {}

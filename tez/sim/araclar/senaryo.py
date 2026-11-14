@@ -5,7 +5,7 @@
     ... --ekransiz          no Gazebo window
     ... --dogrula           overhead camera checks that the rendered target is where the ground truth says
     ... --param AD=DEĞER    one more PX4 start parameter after the scenario's takip.px4_parametreleri (repeatable)
-    ... --kamera-egim 30    camera tilt below the nose for this run (kamera.egim_deg; the real mount: 45)
+    ... --kamera-egim 30    camera tilt below the nose for this run (kamera.egim_deg; default kamera.NOMINAL_TILT_DEG)
     ... --help              every option: model (--model, --imgsz, --conf, --sinif, --modelsiz), tracking (--takip,
                             --mod-adi, --los, --px4-baslat), delay and video (--gecikme-ms, --qgc, --videosuz,
                             --kareleri-sakla); each replaces the scenario's value
@@ -17,9 +17,10 @@ from PX4, take off, switch by name to the mode of the scenario's tracking source
 stop the model process and the TEZ_LOS / FOLLOW_TARGET streams, land, shut down, collect the ULog, write the report
 to tez/sim/sonuclar/<date>_<scenario>/.
 ozet.json "ayarlar" holds every setting of the run (scenario + command line).
-The camera tilt (kamera.egim_deg / --kamera-egim, nominal 45 deg) is one setting for everything: a tilt other than
-models/x500_tez's own gives the run a tilted copy of the model (hedef.camera_model), LOS (i), the flat-ground position,
-the camera's near limit and the video use it, and the tilt Gazebo reports is compared with it after the run.
+The camera tilt (kamera.egim_deg / --kamera-egim, default kamera.NOMINAL_TILT_DEG) is one setting for everything: a
+tilt other than models/x500_tez's own gives the run a tilted copy of the model (hedef.camera_model), LOS (i), the
+flat-ground position, the camera's near limit and the video use it, and the tilt Gazebo reports is compared with it
+after the run.
 A setting that a later task group of spec 2026-11-10-m06-sim-ortami wires in, or a mode name PX4 does not offer,
 stops the run before anything starts.
 
@@ -608,7 +609,7 @@ def run(
     tracker = None
     world = konumlama.world_geo(hedef.SIM_DIR / "worlds" / f"{sc.world}.sdf")  # the drone's GPS comes from it
     mount = kamera.camera_to_body(math.radians(sc.camera.tilt_deg))  # C_cb of LOS (i) and the flat-ground position
-    log(f"Kamera eğimi {sc.camera.tilt_deg:g}° (kamera.egim_deg; gerçek montaj {kamera.NOMINAL_TILT_DEG:g}°)")
+    log(f"Kamera eğimi {sc.camera.tilt_deg:g}° (kamera.egim_deg; varsayılan montaj {kamera.NOMINAL_TILT_DEG:g}°)")
     if t.los is not None:  # the tracking threads: selection, LOS, position, delay line, TEZ_LOS (+ FOLLOW_TARGET)
         tracker = takip.Tracker(
             t.los,

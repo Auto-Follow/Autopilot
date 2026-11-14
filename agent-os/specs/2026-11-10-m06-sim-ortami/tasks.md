@@ -43,7 +43,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 | Hüseyin (onay bekliyor) | Ortak model depolama yeri; m06/m08 sınırı | 3, 13 | Varsayılan `~/auto-follow-modeller/` + `--model`. `modeller.yaml`'daki `kaynak` alanı karar gelince güncellenir. |
 | Hüseyin (onay bekliyor) | Çatı `tech-stack.md` / `docs/02` güncellemesi; Gazebo standardında AMD ifadesi | 14 | Metin hazırlanır; çatı PR'ı açılmadan önce kullanıcıya ve Hüseyin'e sorulur. |
 | Yusuf Ortatepe | v0.2 üst verisinin teyidi (sınıf, imgsz, önerilen `conf`/`iou`, eğitim sürümleri) | 3, 4 | Spec'teki bayt taramasıyla okunan üst veri kullanılır; sınıf adı `.pt`'den okunur, `--imgsz`/`--conf`/`--sinif` ile değiştirilebilir. Teyit gelince spec "Model dosyası" tablosu güncellenir. |
-| Yusuf Kurt / Yusuf Algan | m15 modunun adı, modülün yeri, parametre öneki, `TEZ_LOS` biçiminin uygunluğu | 5, 10, 13 | `tez_los` mekanizması stok "Hold" adıyla ve iskelet modülle (`c4b4abf342`, ağaç dışında açılır) denenir. `m06_kabul.sh`'taki 3. koşu modül hazır olunca koşulur. |
+| Yusuf Kurt / Yusuf Algan | Modülün yeri ve başlatma komutu, `TEZ_LOS` biçiminin uygunluğu. Ekipten gelen bilgi (09.11, Yusuf Algan; kesinleşmiş değil, m15/m16 spec'inde yazılınca o geçerli): mod adı **"AUTO FOLLOW"** (QGC'de böyle görünecek), parametre öneki **`AF_`** (`AF_XXX`); m15/m16 spec'inde kesinleşmesi | 5, 10, 13 | `tez_los` mekanizması stok "Hold" adıyla ve iskelet modülle (`c4b4abf342`, ağaç dışında açılır) denenir; modül gelince `--mod-adi "AUTO FOLLOW"` (kod değişmez, mod adla seçilir). `m06_kabul.sh`'taki 3. koşu modül hazır olunca koşulur. |
 
 ---
 
@@ -416,7 +416,7 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 ### Takım Arkadaşı Entegrasyonu
 
 #### Görev Grubu 10: Kendi PX4 modülünü takmak — `derle.sh --harici`, `--px4-baslat`, kılavuz
-**Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.5 gün · **Bekleyen:** Kurt/Algan modülü (o arada iskelet modül ağaç dışında)
+**Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.5 gün · **Bekleyen:** Kurt/Algan modülü (o arada iskelet modül ağaç dışında). Ekipten gelen bilgi (09.11, Yusuf Algan; kesinleşmiş değil, m15/m16 spec'inde yazılınca o geçerli): mod adı **"AUTO FOLLOW"** (QGC'de böyle görünecek), parametre öneki **`AF_`** (`AF_XXX`).
 
 - [ ] 10.0 m15 modunun sime kolayca takılıp aynı senaryo, ölçüt ve videoyla denenebilmesi
   - [ ] 10.1 Testleri yaz (2–4 test): `calistir.sh`'a giden argüman listesinin oluşturulması (`takip.px4_baslat` + `--px4-baslat`, `takip.px4_parametreleri` + `--param` sırası); "unresponsive" kontrolünün yalnız harici modlu koşuda açılması. (`takip.px4_parametreleri` + `--param` sırası 2. grupta `test_hedef.py`'de sınandı.)
@@ -439,6 +439,12 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
     ```
 
     Kurt'un modülü hazır olduğunda aynı komut onun adı ve başlatma komutuyla koşulur ve `implementation/`'a yazılır.
+    Ekipten gelen bilgiye göre (09.11, kesinleşmiş değil) o koşu şöyle olur; başlatma komutu henüz bilinmiyor:
+
+    ```bash
+    $P $S/senaryo.py --senaryo takip_yuruyen --ekransiz --takip tez_los --mod-adi "AUTO FOLLOW" \
+        --px4-baslat "<modülün başlatma komutu>" --los hakem
+    ```
 
 **Kabul Ölçütleri:**
 - 10.1'deki testler geçer
@@ -592,7 +598,9 @@ Kullanıcının isteği (14.11): kamera raporundaki modelsiz 30–45° × mesafe
 stok Follow Me) yeniden yapmak ve "hangi seçenek benim için daha iyi" sorusuna gerekçeli bir öneri vermek; ek istekler:
 düşük yükseklik bandı 4–7 m (30° / 4 m / 8 m dahil), modelin hangi koşullarda iyi algıladığı, düşük yüksekliğin gerçek
 bedeli, "30°'de yaklaşınca kişiyi kaçırma artıya döner mi?" sorusu. Varsayılan 45° montaj ve senaryo varsayılanları
-değişmez; karar kullanıcının ve ekibin. (Faz B'deki asıl tanım: aşağıdaki 17.2'nin ayarları; ızgara bunları kapsıyor,
+değişmez; karar kullanıcının ve ekibin. **14.11 (İş 2–3):** kullanıcı 37.5°'nin ve genişletilmiş taramanın
+denenmesini istedi, seçimi bize bıraktı ve seçilen ayarın simin varsayılanı olmasını istedi; gerçek uçuş için de bir
+değer önerilmesi istendi (17.10–17.12). (Faz B'deki asıl tanım: aşağıdaki 17.2'nin ayarları; ızgara bunları kapsıyor,
 `cayir` dünyası ve olumsuz kontrol 6/8 aşama 1'de `duz_alan`'da.)
 
 - [ ] 17.0 Kamera eğimi ayarı, tarama ve öneri (13.11: 17.8'deki Ahmet'in VLC kontrolü dışında tamam)
@@ -608,11 +616,17 @@ değişmez; karar kullanıcının ve ekibin. (Faz B'deki asıl tanım: aşağıd
     (Uygulamada: öneri 35° · 8 m / 11.4 m, kuralın birincisi 35° · 7 m / 10 m, ikinci seçenek 30° · 6 m / 10.4 m, 45°'de kalınacaksa 10 m / 10 m; köşe yaklaşması ≈ 6.2 m mutlak, mesafeyle ölçeklenmiyor; algılamayı piksel boyu belirliyor. Belge bölüm 4–9.)
   - [x] 17.7 Belgeler: spec "Yaklaşma mesafesi", "Kamera parametreleri", senaryo alanları, Dosya / Test Planı, README, `kabul-kosulari.md`; gerçeklik farkları (montaj parçası, CM3 FOV, Hailo, rüzgâr, SHGM, alan) ve düşük yüksekliğin bedeli; repo dışında görseller, iki video, özet PDF
   - [ ] 17.8 Doğrulama: pytest + ruff + `verify_pin.sh --worktree`; F0 / F1; videoların `ffprobe`'u; Ahmet'in VLC kontrolü (önerilen ayar ve 45° 10/10)
-    (13.11: 270 test geçti, ruff temiz, KILIT SAGLAM, F0 ve F1 GEÇTİ; videolar h264 / yuv420p / 2000×720. Ahmet'in VLC kontrolü bekleniyor: "Kendin dene" 4.)
+    (13.11: 270 test geçti, ruff temiz, KILIT SAGLAM, F0 ve F1 GEÇTİ; videolar h264 / yuv420p / 2000×720. 14.11: 281 test geçti, ruff temiz, KILIT SAGLAM; F0 ve F1 yeni varsayılanla GEÇTİ. Ahmet'in VLC kontrolü bekleniyor: "Kendin dene" 4 ve 11 (seçilen 35° · 9/12.9, 37.5°'nin kayıp koşusu, yeni varsayılanla demo).)
   - [x] 17.9 Canlı hakem akışının "≈ 7 s durması" (İş 1, ayrı commit): kök nedeni kanıtla, önce hatayı yakalayan test, düzelt, etkilenen kıvrımlı yol koşularını yeniden koş
     (Uygulamada: Gazebo'nun segmentasyon kamerası (gz-sensors 8.2.2) başlığa her karede bir `frame_id` ekliyor; saf Python protobuf ile çözülen kare koşu boyunca yavaşladı, tam GC 0.3 s'de bir, ≈ 70 s sonra gz-transport iş parçacığı geride kaldı ve yeniden kilit olamadı. Kare artık ham okunuyor (`kayit.read_image`), hakemin gecikmesi her koşuda `ozet.json` → `tez_los.hakem_akisi`. `test_hakem_akisi.py` 5 test (eski yolda 20 000 girdili kare 108.5 ms, sınır 5 ms); 275 test. Ölçümlü koşuda iş parçacığı CPU'su 0.15 → 0.87 yerine ≈ 0.19 sabit, tam GC 122 yerine 1. Kıvrımlı yol 3 ayar × 3 yeniden koşuldu: hakem %95 ≤ 49 ms, engellenen kilit 0; 35° 7/10 ve 30° 6/10.4 2/3 (belirsiz kayıplar hataymış), 35° 8/11.4 2/3. Belge bölüm 16, yama `~/Desktop/Follow/3_m06_Simulasyon/Deneme/hakem_akisi_duzeltme.patch`.)
+  - [x] 17.10 İş 2: 37.5° ve genişletilmiş tarama (37.5° × 6–12 m, 35° ve 40°'ye 9 m; aşama 1 ekleri 1'er koşu, 35° / 37.5° / 40° adayları + önceki öneri + rakipler + 45° 10/10 iki yolda 3'er koşu; montaj toleransı ±2.5°; kıvrımlı yolun gürültüsü için ek koşular); kapılar ve son seçim kuralı koşulardan önce yazıldı; son karar
+    (Uygulamada: aşama 1 ekleri 19 bileşim, 13'ü kapıdan geçti (37.5°'de 7–10 m'nin hepsi; 12 m'de model kişiyi bulamıyor); aşama 2 (takip yolu) 9 × 3: kapıyı 3/3 geçen 30° 6/10.4, 35° 8/11.4, 35° 9/12.9, 37.5° 8/11.4, 37.5° 9/12.9; kural puanıyla birinci 37.5° 9/12.9 (0.540, 35° 8/11.4 ile berabere). Kıvrımlı yol 9 × 3: 3/3 yalnız 35° 9/12.9; 37.5° 9/12.9 1/3, 45° 10/10 0/3 (yarıda kesilen koşu yeniden koşuldu). **Son karar 35° · 9 m / 12.9 m** (son seçimin 3. adımı: iki yolda 3/3). Ek koşular: kıvrımlı yolda 35° toplam 5/6, 37.5° 1/6; montaj toleransı 32.5° takip 3/3, kıvrımlı 2/3 (yatık tarafa sorun yok, dik tarafa ani geri dönüş belirgin kötü). Belge bölüm 17–18.)
+  - [x] 17.11 Gerçek uçuş için önerilen ayar (doğrulanmamış): montaj açısı ve toleransı, uçuş yüksekliği, geride durma mesafesi ve aralıkları, simdeki dayanağı, simin temsil etmediği yanlar (rüzgâr, GPS / baro yükseklik, zemin eğimi, gerçek kamera, Hailo, stok Follow Me yerine m15), ilk saha uçuşunda adım adım doğrulama planı
+    (Uygulamada: 35° (hedef 35°, en çok +1°; 32.5°'ye kadar yatık olabilir), 9 m (8–9 m), 12.9 m (= yükseklik / tan 35°; 11.4–12.9 m, stok Follow Me ile 11.4 m'nin altına inilmez); belge bölüm 19, spec "Yaklaşma mesafesi", PDF. İlk uçuşta doğrulanacak.)
+  - [x] 17.12 İş 3: seçilen ayar simin varsayılanı: `kamera.NOMINAL_TILT_DEG` 35° ve `models/x500_tez` (tek kaynak, test karşılaştırır), `takip_yuruyen` 9 m / 12.9 m (`FLW_TGT_RS 0.3` kalır), 45° senaryoları `takip_yuruyen_45_10m` / `takip_yuruyen_45_8m`, `kalabalik_park` 9 m, eski koşuların videosu kaydedilen montajla; `gercek_dron.params` değişmedi; önce testler; F0 / F1; `takip_yuruyen` ×3 ve `kalabalik_park` ×3
+    (Uygulamada: `test_varsayilan_montaj.py` 5 test (6 durum), önce 5 durum kırmızı; 281 test geçti (275 + 6), ruff temiz, KILIT SAGLAM. F0 ve F1 GEÇTİ; `takip_yuruyen` ×3: kişi 3/3 izlendi, en az 6.63 (5.68–7.12) m, bulma %62 (58–65); `kalabalik_park` ×3: hedef %99 (98–100) kadrajda, yanlış kişi %16 (12–19) (45° / 10 m'de %6–12). Belge bölüm 20, `gorev-grubu-09.md` bölüm 14.)
 
-**Kabul Ölçütleri:** Spec'teki yaklaşma mesafesi bölümü yeni ölçümlerle güncellenmiştir; öneri ölçütlere dayanır ve bedeliyle birlikte yazılıdır; varsayılanlar değişmemiştir.
+**Kabul Ölçütleri:** Spec'teki yaklaşma mesafesi bölümü yeni ölçümlerle güncellenmiştir; öneri ölçütlere dayanır ve bedeliyle birlikte yazılıdır; 17.0–17.9'da varsayılanlar değişmemiştir. 17.10–17.12 (14.11, kullanıcının isteği): son karar kuralla ve gerekçesiyle yazılıdır; seçilen ayar simin varsayılanıdır (tek kaynak, testli), F0 / F1 ve demo senaryoları yeni varsayılanla geçer; gerçek uçuş önerisi "doğrulanmamış" olarak yazılıdır.
 
 ---
 

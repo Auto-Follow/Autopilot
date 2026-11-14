@@ -4,7 +4,8 @@
     P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
     $P tez/sim/araclar/onizleme.py --dunya cayir                         # photo from the hover point (0, 0, 10 m)
     $P tez/sim/araclar/onizleme.py --senaryo kivrimli_yuruyus --video 60:90
-    ... --kamera 0,0,10,45,0      camera x, y, z [m], pitch down [deg], yaw [deg, 0 = east, 90 = north]
+    ... --kamera 0,0,10,35,0      camera x, y, z [m], pitch down [deg], yaw [deg, 0 = east, 90 = north];
+                                  default pitch: the drone's default mount (kamera.NOMINAL_TILT_DEG)
     ... --zaman 5,20,40           sim times of the photos [s]
     ... --tepe                    camera straight down from above the middle of the scene instead
     ... --etiket                  draw the referee's boxes (segmentation): target blue, other people orange
@@ -36,6 +37,7 @@ from gz.transport13 import Node, SubscribeOptions  # noqa: E402
 from PIL import Image as PilImage  # noqa: E402
 
 import hedef  # noqa: E402
+import kamera  # noqa: E402
 import video  # noqa: E402
 from kayit import IMAGE_TYPE, SEG_SCALE, label_channel, read_image, visible_parts  # noqa: E402
 from simulasyon import REPO, SIM_DIR, running  # noqa: E402
@@ -216,7 +218,8 @@ def main() -> int:
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--dunya", help="tez/sim/worlds/<ad>.sdf")
     src.add_argument("--senaryo", help="senaryo adı veya .yaml yolu (dünyası + hedefi)")
-    ap.add_argument("--kamera", default="0,0,10,45,0", help="x,y,z,eğim_derece,yön_derece (varsayılan 0,0,10,45,0)")
+    camera = f"0,0,10,{kamera.NOMINAL_TILT_DEG:g},0"  # the drone camera over the take-off point, default mount
+    ap.add_argument("--kamera", default=camera, help=f"x,y,z,eğim_derece,yön_derece (varsayılan {camera})")
     ap.add_argument("--tepe", action="store_true", help="sahnenin ortasının üstünden dik aşağı bak")
     ap.add_argument("--zaman", default="3", help="fotoğraf zamanları [s], virgülle")
     ap.add_argument("--video", help="başlangıç:bitiş [s] arası MP4 video (10 kare/s, VLC)")

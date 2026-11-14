@@ -827,6 +827,19 @@ class Run:
     same_clothes: frozenset[int] = frozenset()  # the other people dressed like the target (1-based)
 
 
+def run_tilt_deg(settings: dict, mount_info: dict, sc: hedef.Scenario) -> float:
+    """[deg] the run's camera tilt: ozet.json "ayarlar" (command line included). A run flown before kamera.egim_deg
+    existed has none and its scenario copy no kamera block, so the default would be today's, not the mount it flew
+    with: then the tilt of the mount Gazebo recorded (ozet.json "kamera_montaji"); without either the scenario's."""
+    given = (settings.get("kamera") or {}).get("egim_deg")
+    if given is not None:
+        return float(given)
+    dcm = mount_info.get("dcm_optik_govde")
+    if dcm is not None:
+        return kamera.tilt_of_mount(np.asarray(dcm, dtype=float))
+    return float(sc.camera.tilt_deg)
+
+
 def load(folder: Path) -> Run:
     """Everything the video needs from a run folder (FileNotFoundError without ozet.json or dogru_cevap.csv)."""
     summary = json.loads((folder / "ozet.json").read_text(encoding="utf-8"))
@@ -840,7 +853,7 @@ def load(folder: Path) -> Run:
     mount = np.asarray(mount_info.get("dcm_optik_govde") or konumlama.NOMINAL_MOUNT, dtype=float)
     settings = summary.get("ayarlar") or {}
     source = (settings.get("takip") or {}).get("kaynak", sc.tracking_source)
-    tilt = float((settings.get("kamera") or {}).get("egim_deg", sc.camera.tilt_deg))  # --kamera-egim is in ayarlar
+    tilt = run_tilt_deg(settings, mount_info, sc)
     mode = summary.get("mod") or {}
     if mode.get("ulog"):
         modes = [(float(s["baslangic_s"]), str(s["ad"])) for s in mode["ulog"]]

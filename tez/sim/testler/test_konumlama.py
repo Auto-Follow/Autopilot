@@ -63,7 +63,7 @@ def standing_on(foot: tuple[float, float], height: float = 190.0) -> algilama.Ku
 @pytest.mark.parametrize("camera", [CM3, DISTORTED], ids=["cm3", "bozulmali"])
 @pytest.mark.parametrize(
     "attitude, ahead, left",
-    [((0, 0, 0), 8.0, 0.0), ((4, -11, 35), 9.5, 2.5), ((-7, 12, 210), 7.0, -2.0), ((2, -20, -60), 5.0, 1.0)],
+    [((0, 0, 0), 8.0, 0.0), ((4, -11, 35), 9.5, 2.5), ((-7, 12, 210), 10.0, -2.0), ((2, -20, -60), 5.0, 1.0)],
 )
 def test_a_ground_point_seen_from_a_known_pose_comes_back_within_a_centimetre(
     camera: kamera.Camera, attitude: tuple[float, float, float], ahead: float, left: float

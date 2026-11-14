@@ -12,8 +12,8 @@ Selection (Selection.step, once per processed model frame):
 
 Line of sight, from the camera to the target in body FRD (x nose, y right, z down), unit vectors:
   (i)  model: the chosen box's centre -> Camera.pixel_to_los (camera_info, distortion) -> camera_to_body(tilt), the
-       scenario's kamera.egim_deg (nominal 45 deg). The nominal mount, like the Pi would use its measured one, not
-       the mount Gazebo reports: a mount error can be put in on purpose later.
+       scenario's kamera.egim_deg (default kamera.NOMINAL_TILT_DEG). The nominal mount, like the Pi would use its
+       measured one, not the mount Gazebo reports: a mount error can be put in on purpose later.
   (ii) hakem: the referee's los_govde of the frame while the target is visible, NaN while it is not; every camera
        frame (30 Hz), once the referee's row and segmentation frame are both in (that delay is measured too).
 

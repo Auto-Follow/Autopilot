@@ -505,8 +505,8 @@ def frame_limits(
 ) -> tuple[np.ndarray, np.ndarray]:
     """[m] horizontal distance from base_link to the nearest and farthest ground point the camera sees straight ahead
     (bottom and top edge of the image), level flight, the camera `tilt_deg` below the nose (the scenario's
-    kamera.egim_deg; nominal 45 deg): h / tan(tilt +- vfov / 2) + the camera's 0.151 m ahead of base_link. A person's
-    feet nearer than the first one are below the image."""
+    kamera.egim_deg; default kamera.NOMINAL_TILT_DEG): h / tan(tilt +- vfov / 2) + the camera's 0.151 m ahead of
+    base_link. A person's feet nearer than the first one are below the image."""
     if camera is None:
         nan = np.full(camera_height.shape, math.nan)
         return nan, nan

@@ -241,7 +241,7 @@ def walk(t0: float = 50.0, t1: float = 80.0, rate: float = 30.0) -> list[dict]:
 
 def test_distance_frame_and_behind_angle_of_a_follow_run() -> None:
     rows = walk()
-    m, events = olcum.tracking_metrics(rows, 60.0, 80.0, CM3, following=True, follow_distance=8.0)
+    m, events = olcum.tracking_metrics(rows, 60.0, 80.0, CM3, following=True, follow_distance=8.0, tilt_deg=45.0)
     assert m["en_az_yatay_mesafe_m"] == pytest.approx(2.0) and 70.0 <= m["en_az_yatay_mesafe_t_s"] < 71.0
     assert m["yakin_mesafe_3m_suresi_s"] == pytest.approx(1.0, abs=0.04) and m["yakin_mesafe_3m_olay_sayisi"] == 1
     assert events[0]["baslangic_s"] == pytest.approx(70.0, abs=0.04) and events[0]["en_az_m"] == pytest.approx(2.0)

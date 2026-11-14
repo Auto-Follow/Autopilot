@@ -71,8 +71,9 @@ AMD hibrit GPU'lu laptopta Gazebo penceresini açmadan önce `export DRI_PRIME=1
 - Her açılış temiz parametrelerle başlar (ekip standardı: testler birbirinin parametresini devralmaz).
 
 Kamera: Camera Module 3 Standard (yatay 66°, 2304×1296, 30 fps), gövdenin altında ön kızaklardaki tutucuda
-(X500 V2 "Depth Camera Mount" yeri), 45° aşağı, Gazebo konusu
-`/x500_tez/kamera/image` (+ `/x500_tez/kamera/camera_info`).
+(X500 V2 "Depth Camera Mount" yeri), **35° aşağı** (simin varsayılan montajı, `kamera.NOMINAL_TILT_DEG`; Görev
+Grubu 17'nin kamera eğimi taramasıyla 14.11'de seçildi, öncesinde 45°; gerçek montaj henüz yapılmadı, takılınca açısı
+araçta ölçülür), Gazebo konusu `/x500_tez/kamera/image` (+ `/x500_tez/kamera/camera_info`).
 
 ## F0 kabul testi
 
@@ -114,7 +115,9 @@ koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (�
 `--mod-adi`); numarası koda
 gömülmez, koşuda PX4'ün `AVAILABLE_MODES` listesinden okunur. PX4'ün sunmadığı bir ad simülasyon açılmadan, PX4
 v1.17.0'ın seçilebilir modlarını listeleyen bir hatayla reddedilir (harici bir modun adı ise PX4 açılıp modül
-başladıktan sonra aranır; 10. grup). Örnek duman testi: `--takip tez_los --mod-adi "Hold"`.
+başladıktan sonra aranır; 10. grup). Örnek duman testi: `--takip tez_los --mod-adi "Hold"`. Ekipten gelen bilgi
+(09.11, Yusuf Algan; kesinleşmiş değil): m15'in modu QGC'de **"AUTO FOLLOW"** adıyla görünecek, parametreleri `AF_`
+önekli olacak; modül takılınca `--takip tez_los --mod-adi "AUTO FOLLOW" --px4-baslat "<başlatma komutu>"`.
 
 Senaryo yöneticisi mod adını ve model dosyasını (sha256) kontrol eder, modeli kendi sürecinde yükler, dünyayı (temel
 dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve takip kaynağının moduna adıyla alır, hedef yürürken
@@ -148,7 +151,7 @@ takip iş parçacığı (`araclar/takip.py`) hedefin kutusunu seçer. İlk kilit
 seçmesinin yerine): hakemin hedef kutusuyla IoU'su en yüksek kutu (en az 0.3). Sonra merkezi bir önceki seçime en
 yakın kutu izlenir; en çok önceki kutunun köşegeninin 1.5 katı uzaktaki bir kutu kabul edilir. 10 işlenen karede
 eşleşme olmazsa kilit düşer ve hakemle yeniden kilitlenilir (sayılır). Seçilen kutunun merkezi `kamera.py` zinciriyle
-(camera_info iç parametreleri, nominal 45° montaj) gövde FRD birim vektörüne (LOS i) çevrilir ve PX4'e
+(camera_info iç parametreleri, koşunun montajı: varsayılan 35°) gövde FRD birim vektörüne (LOS i) çevrilir ve PX4'e
 `DEBUG_VECT` adı `TEZ_LOS` olarak gönderilir: işlenen kare başına bir mesaj, `time_usec` = karenin yakalama anı,
 kutu yoksa `x = y = z = NaN` (hedef yok; eski veri tekrarlanmaz). `--los hakem` ile model yerine hakemin `los_govde`'si
 (LOS ii) her kamera karesinde gider ("mükemmel algılayıcı"). Gönderim kuralları: aynı kare iki kez gitmez, kareler
@@ -159,7 +162,7 @@ PX4'le bağlantı kurulunca başlar, kayıt bitince kapanır. Kayıt penceresini
 `tez_los_px4_sayisi`), bütün koşununki `ozet.json` → `tez_los`'ta.
 
 **Konum hesabı ve stok Follow Me (`follow_me`; geçici, asıl çözüm m10, biçim ortak ICD'ye kadar varsayım):** Her
-işlenen karede seçilen kutunun alt ortası (ayak noktası) `kamera.py` zinciriyle (camera_info, nominal 45° montaj) ve
+işlenen karede seçilen kutunun alt ortası (ayak noktası) `kamera.py` zinciriyle (camera_info, koşunun montajı) ve
 **karenin yakalandığı andaki EKF pozuyla** (PX4'ün `ATTITUDE_QUATERNION` 50 Hz + `LOCAL_POSITION_NED` 30 Hz akışı,
 pymavlink `message_hooks` ile toplanır, kare anına ara değerlenir) bir ışına çevrilir ve ev noktasının 0.227 m
 altındaki düz zeminle kesiştirilir (`araclar/konumlama.py`). Nokta PX4'ün kendi izdüşümüyle `GPS_GLOBAL_ORIGIN`'e göre
@@ -196,7 +199,7 @@ için öne çıkanlar:
 | Anahtar | Ne |
 |---|---|
 | `en_az_yatay_mesafe_m`, `yakin_mesafe_3m_suresi_s`, `yakin_mesafe_3m_olay_sayisi` | Dron–hedef yatay mesafenin en azı; 3 m'nin altında kalınan süre ve kaç kez. Her olay raporda **uyarı**dır (başarı eşiği değil; kesin eşiği m01 belirler) |
-| `kadraj_yakin_sinir_m`, `kadraj_yakin_sinir_alti_s` | 45° kameranın yerde gördüğü en yakın nokta (8 m'de ≈ 3.9 m) ve dronun bundan yakın kaldığı süre: o sırada kişinin ayakları kadrajın altındadır |
+| `kadraj_yakin_sinir_m`, `kadraj_yakin_sinir_alti_s` | Kameranın (koşunun eğimiyle) yerde gördüğü en yakın nokta (35° / 9 m'de ≈ 6.6 m, 45° / 8 m'de ≈ 3.9 m) ve dronun bundan yakın kaldığı süre: o sırada kişinin ayakları kadrajın altındadır |
 | `hedef_kadrajda_orani`, `ayak_kadrajda_orani` | Hakeme göre kişinin tamamı (ayak + baş) / ayakları görüntüde |
 | `arkada_kalma_hatasi_{ort,p95,maks}_deg`, `arkada_kalma_hatasi_90_ustu_s` | Kişi yürürken dronun "arkasında" olmaktan sapması (0° arkasında, 90° yanında, 180° önünde); 90°'yi aştığı süre (köşede aşma) |
 | `baslangic_yorunge_donusu_deg`, `yuruyus_basi_yorunge_donusu_deg` | Dronun kişi etrafında döndüğü toplam açı: kişi dururken ve yürümeye başladığı ilk 10 s |
@@ -213,7 +216,7 @@ Stok Follow Me'nin takip başında hedefin etrafında dönmesi ve köşede hedef
 Stok ayarlarla ne kadar düzeldiği (9.8 ön işi ve 9. grup, her ayar 3 koşu): `FLW_TGT_RS 0.3` duran kişideki salınımı
 her koşuda gideriyor (sahte hız 0.53 → 0.14 m/s; 0.2 üç koşunun ikisinde gidermedi), bedeli köşelerde PX4'ün yeni yöne
 0.5–1 s geç yetişmesi ve köşede daha yakın geçiş; 0.5 ve üstünde PX4 köşelere yetişemiyor. **Kullanıcı kararı (13.11):
-Follow Me senaryoları (`takip_yuruyen`, `takip_yuruyen_8m`) `FLW_TGT_RS 0.3` ile koşar** (senaryonun
+Follow Me senaryoları (`takip_yuruyen`, `takip_yuruyen_45_10m`, `takip_yuruyen_45_8m`) `FLW_TGT_RS 0.3` ile koşar** (senaryonun
 `takip.px4_parametreleri`'nde; sim seçimidir, gerçek dronun parametre dosyasında 0.1'dir ve `gercek_dron.params`
 değişmedi). PX4'ün varsayılanıyla koşmak: `--param FLW_TGT_RS=0.1`. Ayrıntı:
 `agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09.md` (ve `-09-on-followme-ayar.md`).
@@ -237,12 +240,16 @@ $P tez/sim/araclar/toplu.py --ozet tez/sim/sonuclar/A tez/sim/sonuclar/B        
 
 Hazır senaryolar: `yuruyen_insan` (düz bacaklar, bekleme, koşu), `kivrimli_yuruyus` (kıvrımlı yol, yavaş yürüme,
 kısa koşu, sert geri dönüş) — ikisi düz alanda — ve `kalabalik_park` (çayırda hedef + dört kişi: patikada yürüyen,
-çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır). `takip_yuruyen`:
-`yuruyen_insan`'ın yolu, dron 10 m'den stok Follow Me ile 10 m geriden izler (takip kaynağı `follow_me`; kamera
-raporunun "çim alan" ayarı; kullanıcı kararı 14.11: 9. grupta 8/8'den belirgin olarak güvenli, kişi köşeden sonra
-kaybedilmedi). `takip_yuruyen_8m`: aynı yol, 8 m / 8 m (raporun stad ayarı, 6–9. grupların `takip_yuruyen`'i; köşede
-dron kişiye 0.5–2 m yaklaşıyor). Gerçek uçuşta hangi ayarın kullanılacağı ekip kararıdır (gerçek dronun parametre
-dosyasında 8/8). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
+çapraz koşan, duran, hedefle aynı kıyafetli; hedef bir süre çamın arkasında kalır; dron 9 m'de bekler, hedef yolunun
+her yerinde kadrajdadır). `takip_yuruyen`: `yuruyen_insan`'ın yolu 2.9 m doğuya kaydırılmış (kişi dronun 12.9 m
+önünde başlar), dron **9 m'den stok Follow Me ile 12.9 m geriden** izler, kamera varsayılan 35° (takip kaynağı
+`follow_me`; karar 14.11: kamera eğimi taramasında kuralın üçer koşusunda takip yolunda ve kıvrımlı yolda kapıyı
+geçen tek ayar, ek koşularla 10 koşunun 9'unda; Görev Grubu 17 belgesi bölüm 18). **45° montajla karşılaştırma** (eğim dosyada yazılı, varsayılan değişse de 45°'de
+kalır; yol `yuruyen_insan`'ınki): `takip_yuruyen_45_10m` (14.11'e kadarki `takip_yuruyen`, 10 m / 10 m; takip yolunda
+11 koşuda 8'inde kişi izlendi, kıvrımlı yolda 0/6) ve `takip_yuruyen_45_8m` (eski adı `takip_yuruyen_8m`, 8 m / 8 m,
+6–9. grupların `takip_yuruyen`'i; köşede dron kişiye 0.5–2 m yaklaşıyor). Gerçek uçuşta hangi ayarın kullanılacağı ekip
+kararıdır (gerçek dronun parametre dosyasında 8/8; önerilen ayar ve ilk uçuşta doğrulama planı Görev Grubu 17
+belgesinin 19. bölümünde, doğrulanmadı). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
 
 - `dunya`: `duz_alan` (tek renk düz alan, hızlı) veya `cayir` (aşağıda "Dünyalar")
 - `drone.yukseklik_m`
@@ -260,11 +267,14 @@ dosyasında 8/8). Yeni senaryo yazmak için birini kopyalayın. Alanlar:
 - `algilama` (varsayılan açık): `etkin`, `model` (yol), `imgsz` (varsayılanı `.pt`'deki), `conf` (0.25), `sinif`
   (ad ya da numara; varsayılan adı `person` olan), `cekirdek` (4)
 - `gecikme` (hepsi 0): `ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm`
-- `kamera` (varsayılan `{egim_deg: 45}`): `egim_deg` kameranın burnun altındaki eğimi, 0–60° (komut satırında
-  `--kamera-egim`). Gerçek montaj ve `models/x500_tez` 45°'dir; başka bir eğimde koşu klasörüne modelin eğimli bir
-  kopyası yazılır (`x500_tez_egim<eğim>/`, git dışında), LOS (i), düz zemin konum hesabı, kameranın yakın görüş
-  sınırı ve video aynı eğimi kullanır; Gazebo'nun bildirdiği eğim koşu sonunda senaryonunkiyle karşılaştırılır
-  (`ozet.json` → `ayarlar.kamera`, `kamera_montaji.egim_deg`). Gerçek araçta eğim bir montaj parçasıdır.
+- `kamera` (varsayılan `{egim_deg: 35}`): `egim_deg` kameranın burnun altındaki eğimi, 0–60° (komut satırında
+  `--kamera-egim`). Varsayılan tek bir yerden gelir (`araclar/kamera.py` → `NOMINAL_TILT_DEG`; `models/x500_tez` de
+  35°, test ikisini karşılaştırır); varsayılanla uçan senaryo bu alanı yazmaz. Başka bir eğimde koşu klasörüne modelin
+  eğimli bir kopyası yazılır (`x500_tez_egim<eğim>/`, git dışında), LOS (i), düz zemin konum hesabı, kameranın yakın
+  görüş sınırı ve video aynı eğimi kullanır; Gazebo'nun bildirdiği eğim koşu sonunda senaryonunkiyle karşılaştırılır
+  (`ozet.json` → `ayarlar.kamera`, `kamera_montaji.egim_deg`). 14.11'den önceki koşuların hepsi 45° ile uçtu; videoları
+  yeniden çizilirken eğim Gazebo'nun kaydettiği montajdan alınır (`video.run_tilt_deg`). Gerçek araçta eğim bir montaj
+  parçasıdır (henüz yapılmadı).
 - `kusurlar` (varsayılan `{}`, kapalı): Faz A'da kamera kusurları kapalıdır, kare modele değişmeden gider. Ayrılmış
   alanlar (`gurultu`, `bulaniklik`, `rolling_shutter`, `pozlama`) yazılırsa "Faz B'de uygulanacak" hatası verilir
 - `video`: `mp4` (true), `qgc` (false)
@@ -353,6 +363,12 @@ $P tez/sim/araclar/tarama.py kos --cikti tez/sim/sonuclar/T --asama asama2_kivri
 grup puanları, sırası; geometrik paylar: kameranın yakın/uzak sınırı, yaklaşma payı, kişinin mesafesinde görüş
 genişliği; ölçülen köşe ve duruş yaklaşması, kişinin kadrajdan hangi kenardan çıktığı).
 
+**Sonuç (14.11):** 30–45° × 4–15 m (100 bileşim), adaylar iki yolda 3'er koşu: simin varsayılanı **35° · 9 m /
+12.9 m** oldu (takip yolunda ve kıvrımlı yolun 164° geri dönüşünde kapıyı üçer koşunun hepsinde geçen tek ayar; 37.5° aynı
+yükseklik ve mesafede takip yolunda eşit, kıvrımlı yolda 6 koşunun 5'inde kişiyi kaybetti; 35° 1'inde). Hiçbir 45°
+ayarı geçmedi.
+Gerçek uçuş için öneri ve ilk uçuşta doğrulama planı (doğrulanmadı): belgenin 19. bölümü.
+
 ### Video (`kosu.mp4`)
 
 Her koşu kendi videosunu üretir (toplu koşular dahil; `toplu.html` her koşunun `kosu.mp4`'ünü bağlar):
@@ -398,7 +414,7 @@ karışmaz; ağaç altında kalan anlar sayılmaz); yürürken gövde merkezi yo
 Bir dünyaya veya senaryoya dron kamerasının gözünden bakmak için (kamera sabit, dron yerde durur):
 
 ```bash
-$P tez/sim/araclar/onizleme.py --dunya cayir                                  # (0, 0, 10 m)'den 45° fotoğraf
+$P tez/sim/araclar/onizleme.py --dunya cayir                                  # (0, 0, 10 m)'den varsayılan montaj açısıyla
 $P tez/sim/araclar/onizleme.py --senaryo kalabalik_park --video 58:88 --etiket   # MP4 + hakemin kutuları
 $P tez/sim/araclar/onizleme.py --dunya cayir --kamera 5,0,12,25,40            # x,y,z,eğim,yön (derece)
 ```
@@ -460,7 +476,7 @@ okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modü
 | `tez/sim/derle.sh` | Stok PX4 SITL + Gazebo eklentileri → `build/px4_sitl_tez` |
 | `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır (stok 4001, başlangıç parametreleri) |
 | `tez/sim/parametreler/gercek_dron.params`, `sim.params` | Başlangıç parametreleri (`AD DEĞER  # kaynak`); `araclar/parametreler.py` okur |
-| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 45° Camera Module 3 (tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası; başka bir eğim (`kamera.egim_deg`) koşu klasörüne kopyalanır, bu dosya değişmez |
+| `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 35° Camera Module 3 (simin varsayılan montajı, `kamera.NOMINAL_TILT_DEG`; tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası; başka bir eğim (`kamera.egim_deg`) koşu klasörüne kopyalanır, bu dosya değişmez |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |
 | `tez/sim/worlds/cayir.sdf`, `cayir.yaml` | Dokulu çayır: zemin ve ağaçlar `cayir.yaml`'dan üretilir (`araclar/dunya.py`) |
 | `tez/sim/server.config` | Gazebo sistemleri (PX4'ünkinin GStreamer kamerasız ve manyetometresiz hali) |

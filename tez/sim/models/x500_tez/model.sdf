@@ -40,10 +40,15 @@
       <child>camera_mount</child>
     </joint>
 
-    <!-- Raspberry Pi Camera Module 3, Standard lens, on the front face of the mount, pitched 45 deg down
-         (0.785398 rad; positive pitch turns the optical axis +X towards -Z). -->
+    <!-- Raspberry Pi Camera Module 3, Standard lens, on the front face of the mount, pitched 35 deg down
+         (0.610865 rad; positive pitch turns the optical axis +X towards -Z). The sim's default mount (kamera.py
+         NOMINAL_TILT_DEG): decision 14.11 from the camera tilt x height x distance scan with the model
+         (agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-17-on-kamera-acisi.md, sections 17-18;
+         before it 45 deg). The real mount is not built yet; measure its tilt on the vehicle when it is fitted and
+         give the measured value to the Pi. Another tilt per run: kamera.egim_deg or the kamera-egim option of
+         senaryo.py (the run gets a tilted copy; this file does not change). -->
     <link name="camera_link">
-      <pose relative_to="base_link">0.151 0 -0.035 0 0.785398 0</pose>
+      <pose relative_to="base_link">0.151 0 -0.035 0 0.610865 0</pose>
       <inertial>
         <mass>0.010</mass>
         <inertia>

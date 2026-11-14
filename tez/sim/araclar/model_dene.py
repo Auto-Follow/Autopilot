@@ -4,7 +4,8 @@
     P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
     $P tez/sim/araclar/model_dene.py --kare foto.jpg                         # any PNG/JPG; repeat --kare for more
     $P tez/sim/araclar/model_dene.py --senaryo kalabalik_park --zaman 66,73   # renders the scenario first (~1 min)
-    ... --kamera 0,0,10,45,0      with --senaryo: camera x, y, z [m], pitch down [deg], yaw [deg] (as onizleme.py)
+    ... --kamera 0,0,10,35,0      with --senaryo: camera x, y, z [m], pitch down [deg], yaw [deg] (as onizleme.py;
+                                  default pitch: the drone's default mount, kamera.NOMINAL_TILT_DEG)
     ... --model YOL --imgsz PX --conf 0.25 --sinif AD|NO --cekirdek 4      the algilama settings of a scenario
     ... --tekrar N                run the model N times on every frame (model_ms: mean, min, max)
     ... --cikti KLASOR
@@ -30,6 +31,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 import algilama
 import hedef
+import kamera
 
 MODEL_BOX = (230, 25, 25)  # red; the referee's boxes are blue (target) and orange (others), as in onizleme.py
 TEXT_SIZE = 34  # [px] on the 2304 x 1296 frames
@@ -177,7 +179,8 @@ def parser() -> argparse.ArgumentParser:
     src.add_argument("--kare", action="append", type=Path, metavar="RESİM", help="PNG/JPG dosyası (birden çok)")
     src.add_argument("--senaryo", help="senaryo adı veya .yaml yolu: kareleri Gazebo'da çekilir (PX4 yok)")
     ap.add_argument("--zaman", default="3", help="--senaryo: kare zamanları [s], virgülle (varsayılan 3)")
-    ap.add_argument("--kamera", default="0,0,10,45,0", help="--senaryo: x,y,z,eğim_derece,yön_derece (onizleme.py)")
+    camera = f"0,0,10,{kamera.NOMINAL_TILT_DEG:g},0"  # as onizleme.py: the default mount over the take-off point
+    ap.add_argument("--kamera", default=camera, help=f"--senaryo: x,y,z,eğim_derece,yön_derece (varsayılan {camera})")
     g = ap.add_argument_group("algılama (senaryodaki algilama bloğunun kurallarıyla)")
     g.add_argument(
         "--model", metavar="YOL", help="model dosyası, .pt; varsayılan ~/auto-follow-modeller/ içindeki v0.2"

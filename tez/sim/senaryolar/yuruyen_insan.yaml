@@ -3,7 +3,8 @@
 #   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo yuruyen_insan
 #
 # Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
-# 45° kamera + 10 m yükseklikte kamera ekseni yere ~10 m ileride değer: hedef başta kadrajın ortasındadır.
+# Varsayılan 35° kamera (kamera.NOMINAL_TILT_DEG) 10 m'de yeri ≈ 7.3 m'den ≈ 38 m'ye kadar görür: hedef başta
+# görüntünün alt yarısındadır (45° kamerada ortasındaydı).
 
 ad: yuruyen_insan
 aciklama: >

@@ -17,10 +17,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# [deg] camera below the nose on the real mount (X500 V2 Depth Camera Mount position) and in models/x500_tez
-# (camera_link pitch 0.785398; test_kamera_egimi checks the SDF). A scenario may fly another tilt (hedef.py
+# [deg] camera below the nose: the sim's default mount (X500 V2 Depth Camera Mount position) and models/x500_tez
+# (camera_link pitch 0.610865; test_varsayilan_montaj checks the SDF), chosen by the camera tilt scan with the model
+# (spec 2026-11-10-m06-sim-ortami, implementation/gorev-grubu-17-on-kamera-acisi.md section 18). The real mount is
+# not built yet: its tilt is measured on the vehicle and given to the Pi. A scenario may fly another tilt (hedef.py
 # kamera.egim_deg, --kamera-egim): its run then gets a tilted copy of the model and every computation uses that tilt.
-NOMINAL_TILT_DEG = 45.0
+# Runs flown before kamera.egim_deg existed were all 45 deg (their ozet.json "kamera_montaji" says so).
+NOMINAL_TILT_DEG = 35.0
 
 # Fixed axis changes (rows: new axes in old coordinates)
 GZ_CAMERA_TO_OPTICAL = np.array([[0.0, -1.0, 0.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0]])

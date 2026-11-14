@@ -585,6 +585,43 @@ Ortak dosyalarda (`video.py`, `olcum.py`, `test_hedef.py`, README, spec, tasks, 
 parçalardadır; A'nın yaması B'li çalışma ağacına da temiz uygulanır (çalışma ağacında A + B: bütün testler geçiyor; sayı Görev Grubu 17 belgesinde test).
 
 
+## 14. Yeni varsayılanla demo koşuları (14.11, Görev Grubu 17 İş 3): 35° · 9 m / 12.9 m
+
+Görev Grubu 17'nin son kararıyla (kamera eğimi × yükseklik × mesafe taraması, `gorev-grubu-17-on-kamera-acisi.md`
+bölüm 18 ve 20) simin varsayılanı değişti: kamera 35° aşağı (`kamera.NOMINAL_TILT_DEG`, `models/x500_tez`),
+`takip_yuruyen` 9 m / 12.9 m (yol 2.9 m doğuya kaydırıldı, kişi dronun 12.9 m önünde başlar; `FLW_TGT_RS 0.3` kaldı),
+`kalabalik_park` 9 m'de bekler (35° kamerayla 10 m'de hedef başta görüntünün altında kalıyordu). Bölüm 13'ün 45°
+ayarları karşılaştırma için `takip_yuruyen_45_10m` (10 m / 10 m) ve `takip_yuruyen_45_8m` (eski `takip_yuruyen_8m`,
+8 m / 8 m) adıyla, 45° dosyada yazılı olarak duruyor. `gercek_dron.params` değişmedi. 15.11 demosunun iki senaryosu ve
+F0 / F1 yeni varsayılanla yeniden koşuldu (her senaryo 3 kez, `toplu.py`, videolu):
+
+| Koşu | Sonuç | Sayılar |
+|---|---|---|
+| `tez/sim/araclar/f0_kabul.sh` | GEÇTİ | 21/21 başlangıç parametresi PX4'te dosyadaki değerde; kamera 2304×1296, 30.3 kare/sim-s, fx 1773.9, RTF 1.00; `SYS_AUTOSTART` 4001; "Hold" + "Follow Target" listede; 10 m'ye kalkış; Hold'da 15 s, sapma yatay 0.06 / dikey 0.09 m |
+| `tez/sim/araclar/f1_kabul.sh` (`yuruyen_insan` ×2, `--modelsiz`, `--dogrula`, `yok`) | GEÇTİ | hedef doğrulama farkı en çok 0.13 / 0.13 m (sınır 0.30); iki koşu arası 10 ortak anda 0.000 m (sınır 0.15); RTF 0.946 / 0.946; kameranın yakın görüş sınırı 7.3 m (35°, 10 m). Not: kişinin gövde merkezi kadrajda %100 / %81: kişi yürüyüşün son 6 s'sinde görüntünün sol kenarında (merkez +18 / −18 px) ve dronun Hold'daki yönü iki koşuda 0.9° farklı; F1'in kapılarını etkilemez (45°'de kişi bu bölümde zaten kadraj dışındaydı) |
+| `toplu.py --senaryo takip_yuruyen --tekrar 3` (`sonuclar/gorev17_varsayilan_takip_yuruyen_x3`) | GEÇTİ 3 | PX4'ten geri okunan `FLW_TGT_HT` 9, `FLW_TGT_DST` 12.9, `FLW_TGT_RS` 0.3; kişi sonuna kadar izlendi **3/3**, kapı (≥ 3 m ve izlendi) 3/3; en az yatay mesafe 6.63 (5.68–7.12) m; yatay mesafe ort. 12.08 (11.58–12.35) m; kaydın 6 m altı %1 (0–2); kişinin tamamı kadrajda %95 (92–96); en uzun kayıp 0.54 (0.00–0.86) s; modelin bulma oranı %62 (58–65); kilit kaybı 4.00 (3.00–5.00); konum hatası 0.36 (0.30–0.39) m; dron yüksekliği 8.97 (8.93–9.00) m; yakın sınır 6.55 (6.53–6.58) m; RTF 0.95 (0.92–1.00) |
+| `toplu.py --senaryo kalabalik_park --tekrar 3` (`sonuclar/gorev17_varsayilan_kalabalik_park_x3`) | GEÇTİ 3 | dron yüksekliği 8.95 (8.92–9.01) m; hedefin tamamı kadrajda %99 (98–100), gövde merkezi %100 (100–100); gerçekten görünür %89 (84–93); bulma %64 (61–66); seçim doğru %49 (46–53); yanlış kişi %16 (12–19) (aynı kıyafetli %5 (0–7)); kilit kaybı 1.67 (1.00–3.00); `model_ms` 87.95 (87.08–89.43); RTF 0.85 (0.85–0.86) |
+
+Hepsinde model dosyası doğrudan `models/x500_tez/model.sdf` (kopya yok), Gazebo'nun bildirdiği eğim 34.99999°;
+`TEZ_LOS` ULog / gönderilen 353/352, 312/312, 347/347, 388/388, 382/382, 378/378; hakem %95 ≤ 52 ms, hakemi sonradan gelen kilitsiz kare en çok 1 (kaydın ilk
+karesi). Videolar h264 / yuv420p / 2000×720 (`ffprobe`).
+
+**Okuma:**
+- `takip_yuruyen` yeni varsayılanla taramanın `e35_h9_d12.9` bileşiminin aynısı ve sonuç da aynı çıktı (17.3'te en az
+  6.2 (5.8–7.0) m, bulma %62, kadrajda %95, kişi 3/3 izlendi); takip yolunda bu ayar artık 7 koşunun 7'sinde kapıyı
+  geçti. 14.11'e kadarki 45° 10/10 takip yolunda 11 koşuda 8'inde kişiyi izlemişti (en az 2.2–6.4 m).
+- `kalabalik_park` (45° / 10 m'deki koşular, 9. grup ×3 + iş A: bulma %71–73, seçim doğru %61–66, yanlış kişi %6–12,
+  aynı kıyafetli %0–8, görünür %80–81): 35° / 9 m'de hedef yine hep kadrajda ve ağacın arkasında daha az kalıyor
+  (görünür %89), ama **yanlış kişiye geçme arttı** (%16; seçim doğru %49): daha yatık bakışta kişiler görüntüde daha
+  çok üst üste biniyor. Karışma anları 78.7–85.5 s (çoğu `insan3`, sarı üstlü, hedefin yanında duran / yavaş yürüyen;
+  bir kısmı `insan4`, hedefle aynı kıyafetli). Senaryo amacına (karıştırma ve örtülme ölçümü) hâlâ uygun, sayılar 45°
+  koşularıyla doğrudan karşılaştırılmaz; m11 (hedef seçimi) ve Ortatepe için not: 35° montajda yakın duran kişilerin
+  kutuları daha sık birleşiyor ya da karışıyor.
+
+Temsili videolar (Görev Grubu 17 belgesi, "Kendin dene" 11):
+`~/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_varsayilan_takip_yuruyen_kosu.mp4` (`kosu_2`) ve
+`gorev17b_varsayilan_kalabalik_park_kosu.mp4` (`kosu_2`). Koşu satırları `kabul-kosulari.md`'de.
+
 ---
 
 ## Kendin dene
@@ -797,4 +834,28 @@ Testler (iş A'nın yamasıyla `238 passed`, çalışma ağacında A + B ile dah
 
 ```bash
 cd ~/Desktop/Projects/Auto-Follow/Autopilot && ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pytest tez/sim/testler -q
+```
+
+### 10. Yeni varsayılanla demo (14.11, bölüm 14)
+
+`takip_yuruyen` (35° · 9 m / 12.9 m; **Ctrl+T** ile **0:50**'e git, kişi batıya dönüyor):
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_varsayilan_takip_yuruyen_kosu.mp4 2>/dev/null
+```
+
+`kalabalik_park` (dron 9 m'de, kamera 35°; **0:54–0:59** arasında "YANLIŞ KİŞİ"):
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_varsayilan_kalabalik_park_kosu.mp4 2>/dev/null
+```
+
+Üç koşunun toplu sayfaları (koşu koşu ölçütler ve her koşunun raporu):
+
+```bash
+xdg-open /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot/tez/sim/sonuclar/gorev17_varsayilan_takip_yuruyen_x3/toplu.html
+```
+
+```bash
+xdg-open /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot/tez/sim/sonuclar/gorev17_varsayilan_kalabalik_park_x3/toplu.html
 ```

@@ -46,19 +46,20 @@ DELAY_FIELDS = {"ek_ms": "extra_ms", "titresim_ms": "jitter_ms", "saat_ofset_ms"
 DELAY_FIELDS |= {"saat_kayma_ppm": "clock_drift_ppm"}
 FLAGS = {"algilama.model": "--model", "algilama.imgsz": "--imgsz", "algilama.conf": "--conf"}
 FLAGS |= {"algilama.sinif": "--sinif", "gecikme.ek_ms": "--gecikme-ms", "kamera.egim_deg": "--kamera-egim"}
-# kamera.egim_deg [deg]: the camera's tilt below the nose for this run (nominal: the real mount, kamera.py). The range
+# kamera.egim_deg [deg]: the camera's tilt below the nose for this run (default: the sim's mount, kamera.py). The range
 # is the camera report's scan (0-60 deg): above it the bottom edge of the image nears the nadir (60 + 20.1 deg), below
 # 0 the camera would look up; frame_limits and the flat-ground position assume a camera that looks ahead and down.
 TILT_RANGE_DEG = (0.0, 60.0)
-DRONE_MODEL_DIR = SIM_DIR / "models" / "x500_tez"  # the real mount (45 deg); a run with another tilt gets a copy
+DRONE_MODEL_DIR = SIM_DIR / "models" / "x500_tez"  # the default mount (kamera.py); another tilt gets a copy
 # camera_link pose of models/x500_tez relative to base_link: x y z [m] roll pitch yaw [rad]; only the pitch changes
 CAMERA_POSE = re.compile(
     r'(<link name="camera_link">\s*<pose relative_to="base_link">)(\S+ \S+ \S+ \S+) (\S+) (\S+)(</pose>)'
 )
 DRONE_INCLUDE = "<uri>model://x500_tez</uri>"  # how worlds/*.sdf include the drone
 TAKEOFF_PARAM = "MIS_TAKEOFF_ALT"  # px4_baglanti.takeoff sets it from drone.yukseklik_m
-# Follow Me's height above home (spec 6): drone.yukseklik_m unless the scenario or --param gives it; the 45 deg camera
-# keeps the person in view only if height and distance change together (camera report, 6/8 failed every time)
+# Follow Me's height above home (spec 6): drone.yukseklik_m unless the scenario or --param gives it; a fixed camera
+# keeps the person in view only if height and distance change together (camera report, 6/8 failed every time; the
+# tilt scan: distance = height / tan(tilt) keeps the person in the middle of the image)
 FOLLOW_HEIGHT_PARAM = "FLW_TGT_HT"
 FOLLOW_HEIGHT_SOURCE = "drone.yukseklik_m (follow_me)"
 BEHAVIOUR_KEYS = {"dogal", "tohum", "hiz_dalgalanma", "yol_sapmasi_m"}
@@ -347,7 +348,7 @@ def load(name_or_path: str, command_line: CommandLine | None = None) -> Scenario
         delay=_delay(_block(d, "gecikme", "{ek_ms: 0}")),
         defects=_defects(_block(d, "kusurlar", "{}")),
         video=_video(_block(d, "video", "{mp4: true, qgc: false}"), cli.keep_frames),
-        camera=_camera(_block(d, "kamera", "{egim_deg: 45}")),
+        camera=_camera(_block(d, "kamera", f"{{egim_deg: {kamera.NOMINAL_TILT_DEG:g}}}")),
     )
     sc.track, sc.walk_end = yuruyus.plan(
         sc.start, sc.start_time, _steps(sc.start, target.get("yol"), "hedef.yol"), sc.behaviour
@@ -515,7 +516,7 @@ def _camera(d: dict) -> CameraMount:
     if not lo <= tilt <= hi:
         raise ValueError(
             f"kamera.egim_deg: {lo:g}–{hi:g}° arasında olmalı (--kamera-egim), gelen: {tilt:g} (kameranın burnun "
-            f"altındaki eğimi; gerçek montaj {kamera.NOMINAL_TILT_DEG:g}°)"
+            f"altındaki eğimi; simin varsayılan montajı {kamera.NOMINAL_TILT_DEG:g}°)"
         )
     return CameraMount(tilt)
 
@@ -779,7 +780,7 @@ def make_skin(clothes: Clothes) -> None:
 
 
 def model_tilt_deg(model_sdf: Path = DRONE_MODEL_DIR / "model.sdf") -> float:
-    """[deg] tilt of the camera_link of the drone model (models/x500_tez: the real mount)."""
+    """[deg] tilt of the camera_link of the drone model (models/x500_tez: the sim's default mount)."""
     found = CAMERA_POSE.search(model_sdf.read_text(encoding="utf-8"))
     if found is None:
         raise ValueError(f"{model_sdf}: camera_link pozu bulunamadı")

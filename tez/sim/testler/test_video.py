@@ -97,15 +97,15 @@ def test_the_model_result_px4_had_at_a_moment() -> None:
 
 
 def test_camera_footprint_on_the_ground() -> None:
-    """Level drone at the take-off point looking east, nominal 45 deg mount, camera 8 m above the ground: the image's
-    bottom edge meets the ground 8 / tan(45 + 20.07 deg) ahead of the camera, the top edge 8 / tan(45 - 20.07 deg);
-    rays that miss the ground are cut at the farthest range."""
+    """Level drone at the take-off point looking east, the default mount (tilt kamera.NOMINAL_TILT_DEG), camera 8 m
+    above the ground: the image's bottom edge meets the ground 8 / tan(tilt + 20.07 deg) ahead of the camera, the top
+    edge 8 / tan(tilt - 20.07 deg); rays that miss the ground are cut at the farthest range."""
     r_wo = video.optical_to_world((1.0, 0.0, 0.0, 0.0), konumlama.NOMINAL_MOUNT)
     pts = video.ground_footprint(CM3, (0.151, 0.0, 8.0), r_wo)
-    half = math.atan2(648.0, 1773.9)
+    half, tilt = math.atan2(648.0, 1773.9), math.radians(kamera.NOMINAL_TILT_DEG)
     on_axis = pts[np.abs(pts[:, 1]) < 1e-6]
-    assert on_axis[:, 0].min() == pytest.approx(0.151 + 8.0 / math.tan(math.pi / 4 + half), abs=0.01)
-    assert on_axis[:, 0].max() == pytest.approx(0.151 + 8.0 / math.tan(math.pi / 4 - half), abs=0.01)
+    assert on_axis[:, 0].min() == pytest.approx(0.151 + 8.0 / math.tan(tilt + half), abs=0.01)
+    assert on_axis[:, 0].max() == pytest.approx(0.151 + 8.0 / math.tan(tilt - half), abs=0.01)
     level = video.optical_to_world((1.0, 0.0, 0.0, 0.0), kamera.camera_to_body(0.0))  # looking at the horizon
     far = video.ground_footprint(CM3, (0.0, 0.0, 8.0), level)
     assert np.hypot(far[:, 0], far[:, 1]).max() == pytest.approx(video.FOOTPRINT_MAX_M, abs=0.01)

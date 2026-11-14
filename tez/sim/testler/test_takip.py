@@ -20,7 +20,7 @@ import yuruyus
 CM3 = kamera.Camera(2304, 1296, 1773.9, 1773.9, 1152.0, 648.0)  # models/x500_tez, ideal pinhole
 # a lens with strong barrel distortion and an off-centre principal point: the chain must undo it
 DISTORTED = kamera.Camera(2304, 1296, 1500.0, 1502.0, 1160.0, 640.0, (-0.30, 0.10, 0.001, -0.0005, -0.02))
-TILT = math.radians(45)
+TILT = math.radians(kamera.NOMINAL_TILT_DEG)  # models/x500_tez's camera_link: the default mount
 CAM_POS = np.array([0.151, 0.0, -0.035])  # camera_link in models/x500_tez (Gazebo FLU)
 CAM_R = np.array([[math.cos(TILT), 0, math.sin(TILT)], [0, 1, 0], [-math.sin(TILT), 0, math.cos(TILT)]])
 
@@ -118,7 +118,7 @@ def test_los_of_a_box_round_the_true_centre_matches_the_referee(
     camera: kamera.Camera, attitude: tuple[float, float, float], ahead: float, left: float
 ) -> None:
     """Known pose and target -> the referee projects the body centre into the frame (kamera.project) -> a box round
-    that pixel -> LOS (i) through camera_info + nominal 45 deg mount: the same direction as the referee's los_govde."""
+    that pixel -> LOS (i) through camera_info + the default mount: the same direction as the referee's los_govde."""
     p_model = np.array([3.0, -2.0, 10.0])
     heading = math.radians(attitude[2])  # place the target ahead of the drone's nose
     at = (

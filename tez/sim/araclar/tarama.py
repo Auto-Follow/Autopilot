@@ -45,6 +45,7 @@ import pandas as pd
 import yaml
 
 import hedef
+import kamera
 
 SIM_DIR = hedef.SIM_DIR
 TOPLU = Path(__file__).resolve().parent / "toplu.py"
@@ -365,7 +366,7 @@ def run_numbers(folder: Path, end: float, imgsz: int, start: float = 60.0) -> di
 
 
 def approach_numbers(
-    folder: Path, start: float, distance: float, corners: Sequence[dict], tilt_deg: float = 45.0
+    folder: Path, start: float, distance: float, corners: Sequence[dict], tilt_deg: float = kamera.NOMINAL_TILT_DEG
 ) -> dict:
     """Per run, from dogru_cevap.csv and ozet.json "koseler": how much closer than FLW_TGT_DST the drone came [m]
     from the walk on, in the stop (the corner that starts after a stop: its stop and STOP_AFTER_S into the start) and

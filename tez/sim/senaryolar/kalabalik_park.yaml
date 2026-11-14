@@ -2,8 +2,12 @@
 #
 #   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo kalabalik_park
 #
-# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar; 10 m'den kamera
-# yaklaşık x = 5–21 m arasını görür. (13, 5)'teki çam, arkasından geçen insanları dronun kamerasından gizler.
+# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar; 9 m'den varsayılan
+# 35° kamera (kamera.NOMINAL_TILT_DEG) yaklaşık x = 6.6–35 m arasını görür ve hedef yolunun her yerinde kadrajdadır.
+# 14.11'e kadar 10 m ve 45°'ydi (x = 5–21 m); 35° kamerayla 10 m'de hedef başta durduğu yerde (7, -1) görüntünün
+# altında kalırdı, bu yüzden yükseklik simin uçuş yüksekliğine (9 m) indi (Görev Grubu 17 belgesi, bölüm 20). Kişiler
+# 45° / 10 m'ye göre biraz daha yakın ve daha yandan görünür: sayılar 13.11'in koşularıyla doğrudan karşılaştırılmaz.
+# (13, 5)'teki çam, arkasından geçen insanları dronun kamerasından gizler.
 # Doğru cevapta hedef "hedef_*", diğerleri "insan1_*" ... sütunlarındadır; "gorunur" hedefin gerçekten görünüp
 # görünmediğini (ağaç arkasında değil) söyler, "hedef_kutu_*" görüntüdeki kutusudur.
 
@@ -16,7 +20,7 @@ aciklama: >
 dunya: cayir
 
 drone:
-  yukseklik_m: 10
+  yukseklik_m: 9            # simin uçuş yüksekliği (takip_yuruyen); varsayılan 35° kamerayla hedef hep kadrajda
 
 takip:
   kaynak: yok
