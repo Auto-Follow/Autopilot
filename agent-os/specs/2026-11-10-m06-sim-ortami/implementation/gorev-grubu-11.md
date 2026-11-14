@@ -308,6 +308,24 @@ olduğu için tek commit önerilir. Repo dışı: görseller (aşağıda), koşu
 
 ---
 
+## 10. Ek düzeltme (15.11): Gazebo penceresi senaryodan açılmıyordu
+
+- **Belirti (Ahmet):** `senaryo.py` pencereli koşulunca Gazebo penceresi hiç açılmıyordu; bir kez Ubuntu'nun "ruby3.2 has
+  stopped unexpectedly" uyarısı çıktı (`/var/crash`: `gz sim -g`, signal 6). Koşunun kendisi etkilenmiyordu (sunucu ayrı
+  süreç). Daha önce de olmuştu.
+- **Neden:** `senaryo.py` OpenCV'yi (`cv2`) içe aktarıyor; opencv-python içe aktarılırken süreç ortamına kendi Qt
+  eklentilerinin yolunu yazıyor (`QT_QPA_PLATFORM_PLUGIN_PATH`, `QT_QPA_FONTDIR`). Bu değişkenler `calistir.sh` üzerinden
+  Gazebo penceresine geçiyor; pencere sistemin Qt5'i yerine uyumsuz eklentiyi yüklemeye çalışıp
+  `QGuiApplicationPrivate::createPlatformIntegration` içinde duruyordu (abort). `calistir.sh` pencerenin çıktısını
+  `/dev/null`'a attığı için hata görünmüyordu. Değişkenler elle verilerek aynı çökme yeniden üretildi; değişkenlersiz
+  pencere aynı dünyayla 40 s hatasız çalıştı.
+- **Düzeltme:** `calistir.sh` pencereyi `env -u QT_QPA_PLATFORM_PLUGIN_PATH -u QT_QPA_FONTDIR -u QT_PLUGIN_PATH` ile
+  başlatır; dünya hazır olduğunda pencere süreci ölmüşse sim günlüğüne "UYARI: Gazebo penceresi açılamadı" ve nedenini
+  görmek için komut yazılır. Test: `testler/test_calistir_pencere.py` (3 test; düzeltmesiz betikte 2'si kırmızı).
+- **Doğrulama:** aynı komutla (`DRI_PRIME=1 ... senaryo.py --senaryo takip_yuruyen --qgc`) pencereli koşu
+  (`sonuclar/pencere_duzeltme_dogrulama`): pencere açıldı (Ahmet ekranda gördü), koşu boyunca `gz sim -g` süreci canlı,
+  uyarı yok, GEÇTİ. 298 test, ruff temiz, KILIT SAGLAM.
+
 ## Kendin dene
 
 **Başlamadan:** Terminal açmak için **Ctrl+Alt+T**. Aşağıdaki gri kutulardaki satırları **tek tek** kopyala, terminale

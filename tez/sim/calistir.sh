@@ -112,9 +112,14 @@ trap cleanup EXIT INT TERM
 
 gz sim --verbose=1 -r -s "$WORLD_FILE" &
 GZ_PIDS+=($!)
+GUI_PID=""
 if [ "$EKRANSIZ" -eq 0 ]; then
-	gz sim -g > /dev/null 2>&1 &
-	GZ_PIDS+=($!)
+	# The Gazebo window uses the system Qt. A caller's Python packages can leave Qt variables in the environment:
+	# opencv-python sets QT_QPA_PLATFORM_PLUGIN_PATH (and QT_QPA_FONTDIR) to its own Qt plugins when cv2 is imported,
+	# which senaryo.py does, and the window then aborts at start ("ruby3.2 has stopped", no window; 15.11.2026).
+	env -u QT_QPA_PLATFORM_PLUGIN_PATH -u QT_QPA_FONTDIR -u QT_PLUGIN_PATH gz sim -g > /dev/null 2>&1 &
+	GUI_PID=$!
+	GZ_PIDS+=("$GUI_PID")
 fi
 
 # PX4 must find this world already running; otherwise its startup script would launch a second Gazebo.
@@ -123,6 +128,10 @@ for _ in $(seq 60); do
 	sleep 1
 done
 gz topic -l 2> /dev/null | grep -q "^/world/$DUNYA/clock" || { echo "Gazebo dünyası açılmadı: $DUNYA" >&2; exit 1; }
+if [ -n "$GUI_PID" ] && ! kill -0 "$GUI_PID" 2> /dev/null; then
+	echo "UYARI: Gazebo penceresi açılamadı; sim penceresiz sürüyor. Nedenini görmek için ayrı bir terminalde:" \
+		"GZ_IP=127.0.0.1 gz sim -g --verbose=4" >&2
+fi
 
 # The --px4-baslat commands, in the background while PX4 runs (in a terminal PX4 keeps the foreground for pxh>).
 run_start_commands() {
