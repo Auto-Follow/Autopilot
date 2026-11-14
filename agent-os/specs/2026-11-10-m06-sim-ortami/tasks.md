@@ -505,12 +505,16 @@ SAGLAM, F0 GEÇTİ; doğrulama koşusu GEÇTİ (yayın kayıpsız alındı, kutu
 #### Görev Grubu 12: Yapay gecikme, saat modeli ve `karsilastir.py`
 **Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.3 gün
 
-- [ ] 12.0 Yakalama → PX4 yoluna ayarlanabilir gecikme eklemek ve koşuları yan yana koymak
-  - [ ] 12.1 Testleri yaz (4–6 test): `test_gecikme.py` (sıra korunur; `ek_ms`; tohumlu titreşim aynı tohumla aynı; `saat_ofset_ms` ve `saat_kayma_ppm` ile `time_usec`); `karsilastir.py` iki `ozet.json`'dan tablo; `test_takip.py`'ye yeniden kilit bekleme süresi (12.4: kilit düştükten sonra süre dolana kadar yeniden kilit yok, 0 s'de bugünkü davranış)
-  - [ ] 12.2 (5. gruptan hazır: `gecikme.DelayLine.put(item, hazir, extra_ms)` öğe başına gecikme alır ve sırayı korur; `Tracker` hattı `sc.delay.extra_ms` ile kurar; `time_usec` bugün yakalama anıdır, saat modeli `takip.Tracker._attempt`'teki `time_usec` alanına girer.) `gecikme.py`, 2. kısım: `ek_ms` + `titresim_ms` (düzgün dağılım, tohumlu), saat modeli; `ek_gecikme_ms` loglanır. `gecikme` bloğu ve `--gecikme-ms` bağlanır; ara hata kaldırılır. Faz A varsayılanları 0'dır.
-  - [ ] 12.3 `araclar/karsilastir.py`: birden çok koşunun `ozet.json`'unu (ölçütler + `ayarlar`) tek tabloda yan yana koyar
-  - [ ] 12.4 Yeniden kilit için operatör/kod tepki süresi (kullanıcı kararı, 12.11, 5. grubun açık kararı): senaryo alanı `takip.yeniden_kilit_bekleme_s` (sim saniyesi, ≥ 0, varsayılan **0** = bugünkü davranış, bir sonraki işlenen karede yeniden kilit). Kilit düştükten sonra bu süre dolmadan hakemle yeniden kilitlenilmez (gerçekte operatör QGC'de ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi çalışır). `algilama.csv`'de bekleme sırasında `kilitsiz_neden = tepki_bekleniyor`; değer `ozet.json` → `ayarlar.takip` ve raporda görünür. `hedef.py` alan doğrulaması (`_number`, en az 0) ve `--yeniden-kilit-bekleme-s` bayrağı bu alt görevde eklenir.
-  - [ ] 12.5 Doğrulama
+- [ ] 12.0 Yakalama → PX4 yoluna ayarlanabilir gecikme eklemek ve koşuları yan yana koymak (15.11: görsel kontrol dışında tamam; Ahmet'in 200 ms videosu kontrolü bekleniyor)
+  - [x] 12.1 Testleri yaz (4–6 test): `test_gecikme.py` (sıra korunur; `ek_ms`; tohumlu titreşim aynı tohumla aynı; `saat_ofset_ms` ve `saat_kayma_ppm` ile `time_usec`); `karsilastir.py` iki `ozet.json`'dan tablo; `test_takip.py`'ye yeniden kilit bekleme süresi (12.4: kilit düştükten sonra süre dolana kadar yeniden kilit yok, 0 s'de bugünkü davranış)
+    (Uygulamada: `test_gecikme.py` +4 (titreşim: aralık, düzgünlük, aynı tohumla aynı, 0'da kesilme; gecikmenin hattın saatinde, RTF 0.5'te sayılması; saat modeliyle `time_usec`; `Tracker`'da 80 sim ms ve gönderilen `time_usec` = `tez_los.csv`), `test_karsilastir.py` 1 (iki koşu + bir `toplu.py` klasörü, `--hepsi`, `--html`, ret), `test_takip.py` +3 (1.5 s beklemede `tepki_bekleniyor` ve 62.5 s'de yeniden kilit; 0 s'de eski seçimle seçim seçim aynı; `Tracker`'ın `algilama.csv` satırları), `test_hedef.py` güncellendi (+3 hata durumu, alan, bayrak, ara hata kalktı). Yenilerin ve değişenlerin hepsi 12. grup öncesi kodda kırmızı. 298 → 309.)
+  - [x] 12.2 (5. gruptan hazır: `gecikme.DelayLine.put(item, hazir, extra_ms)` öğe başına gecikme alır ve sırayı korur; `Tracker` hattı `sc.delay.extra_ms` ile kurar; `time_usec` bugün yakalama anıdır, saat modeli `takip.Tracker._attempt`'teki `time_usec` alanına girer.) `gecikme.py`, 2. kısım: `ek_ms` + `titresim_ms` (düzgün dağılım, tohumlu), saat modeli; `ek_gecikme_ms` loglanır. `gecikme` bloğu ve `--gecikme-ms` bağlanır; ara hata kaldırılır. Faz A varsayılanları 0'dır.
+    (Uygulamada: `gecikme.LinkDelay` (`ek_ms` ± `titresim_ms` düzgün, netem kuralı, 0'ın altına inmez, sabit tohum `JITTER_SEED = 0`), `gecikme.ClockModel` (`time_usec` = t + ofset + kayma × t, en az 0; `px4_baglanti.LosSender(stamp=)` ile giden damga = `tez_los.csv`). **Gecikme sim saatinde sayılır** (hat `Tracker`'da sim saatiyle kurulur; gerekçe: gerçek sistemin gecikmesi, PX4 lockstep'te sim zamanında; duvar saatinde RTF kadar kısalırdı); `ek_gecikme_ms` artık sim ms. `FOLLOW_TARGET` aynı hattan gittiği için aynı gecikmeyi alır; saat modeli yalnız `TEZ_LOS`'ta. `hedef.unwired` boş: Faz A'da ara hata kalmadı. Ayrıntı: `implementation/gorev-grubu-12.md`.)
+  - [x] 12.3 `araclar/karsilastir.py`: birden çok koşunun `ozet.json`'unu (ölçütler + `ayarlar`) tek tabloda yan yana koyar
+    (Uygulamada: klasör tek koşu (`ozet.json`) ya da `toplu.py` klasörü (`toplu.json`; ortalama, parantezde en az–en çok); satırlar koşu bilgisi, farklı ayarlar (takip / gecikme / eğim / model sha256 her zaman), ana ölçütler (önce gecikmeler, sonra `toplu.MAIN_KEYS`), Δ (ilk sütuna göre, oranlarda yüzde puan); `--hepsi`, `--html DOSYA` (`toplu.html` düzeni, `rapor.html` / `kosu.mp4` bağlantıları).)
+  - [x] 12.4 Yeniden kilit için operatör/kod tepki süresi (kullanıcı kararı, 12.11, 5. grubun açık kararı): senaryo alanı `takip.yeniden_kilit_bekleme_s` (sim saniyesi, ≥ 0, varsayılan **0** = bugünkü davranış, bir sonraki işlenen karede yeniden kilit). Kilit düştükten sonra bu süre dolmadan hakemle yeniden kilitlenilmez (gerçekte operatör QGC'de ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi çalışır). `algilama.csv`'de bekleme sırasında `kilitsiz_neden = tepki_bekleniyor`; değer `ozet.json` → `ayarlar.takip` ve raporda görünür. `hedef.py` alan doğrulaması (`_number`, en az 0) ve `--yeniden-kilit-bekleme-s` bayrağı bu alt görevde eklenir.
+    (Uygulamada: `takip.Selection(relock_wait_s=)`, `step(kutular, hakem, t)`: kilidin düştüğü karenin zamanından bekleme dolana kadar `kilitsiz` / `tepki_bekleniyor` (hakem olsun olmasın), ilk kilit beklemez; `Tracker(relock_wait_s=)`; `ayarlar.takip.yeniden_kilit_bekleme_s`, raporun "Ayarlar" tablosu.)
+  - [ ] 12.5 Doğrulama (15.11: komutların hepsi koşuldu ve geçti; açık olan yalnız Ahmet'in görsel kontrolü)
 
     ```bash
     $P -m pytest tez/sim/testler/test_gecikme.py -q
@@ -524,9 +528,16 @@ SAGLAM, F0 GEÇTİ; doğrulama koşusu GEÇTİ (yayın kayıpsız alındı, kutu
 
     **Görsel kontrol (Ahmet):** 200 ms'lik koşuda model kutusu hedefin gerisinde, 0 ms'liğe göre belirgin biçimde.
 
+    (Uygulamada 15.11: `test_gecikme.py` 5 passed; 309 test geçti; ruff temiz; KILIT SAGLAM. Aynı kodla `takip_yuruyen` 0 ms (`sonuclar/gorev12_gecikme0`) ve 200 ms (`sonuclar/gorev12_gecikme200`), ikisi de GEÇTİ: `karsilastir.py` ile `uctan_uca_ms_ort` 138.75 → 340.44 sim ms (**Δ +201.69**; p50 Δ +200.01, PX4 varış damgasıyla Δ +202.25), hattaki süre ort. 200.30 (en az 200.00, p95 200.94); doğal titreşim std 13.5 → 17.3 ms. 200 ms'de kişi sonuna kadar izlendi (en az 6.93 m), bulma %61.4 (0 ms %62.9), kilit kaybı 3 (1), RTF 0.98 (0.89); 17. grubun üç koşusu üçüncü sütun (`sonuclar/gorev12_gecikme200/karsilastirma.html`). PX4'teki son model sonucunun yaşı p50 196 → 396 ms, kutu–hakem farkı ort. 65 → 126 px; üç kare (0 ms üstte, 200 ms altta) `sonuclar/gorev12_gecikme200/gorev12_kare_*.jpg`. `kalabalik_park --yeniden-kilit-bekleme-s 1.5` (`sonuclar/gorev12_kilit_bekleme1.5`) GEÇTİ: kayıp 69.50 s, 19 kare `tepki_bekleniyor` (69.568–70.952 s), 71.020 s'de olağan nedene döndü. Videolar h264 / yuv420p / 2000×720 (958 / 944 / 957 kare). VLC'deki görsel kontrol Ahmet'te: `implementation/gorev-grubu-12.md` "Kendin dene" 1–2.)
+
 **Kabul Ölçütleri:**
 - 12.1'deki testler geçer; ölçülen ek gecikme ayarlananla tutarlıdır
 - `karsilastir.py` aynı senaryonun iki koşusunu tek tabloda verir
+
+**Durum (15.11):** uygulandı, test edildi, koşuldu; görsel kontrol Ahmet'te. 309 test (298 + 11), ruff temiz, KILIT
+SAGLAM; 0 / 200 ms koşuları ve 1.5 s bekleme koşusu GEÇTİ; ölçülen ek gecikme +201.69 sim ms (ayarlanan 200). Kararlar:
+gecikme sim saatinde (`ek_gecikme_ms` artık sim ms), titreşim netem kuralı ve sabit tohum, saat modeli yalnız
+`TEZ_LOS`'ta. Ayrıntı: `implementation/gorev-grubu-12.md`.
 
 ### Kabul, Kurulum ve Belgeler
 

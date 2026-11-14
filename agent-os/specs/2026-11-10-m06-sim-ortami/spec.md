@@ -143,7 +143,25 @@
     Gecikme yokken ve hatta bekleyen yokken mesaj çağıranın iş parçacığında hemen çıkar (ölçülen yola fazladan bir
     iş parçacığı geçişi eklenmez; ölçülen `ek_gecikme_ms` ort. ≈ 0.03 ms). Gecikme varken hattın kendi iş parçacığı
     sırayı korur (testli). `ek_ms` ≠ 0, titreşim ve saat modeli 12. grupta bağlanır.
+  - Uygulamada (12. grup, 2. kısım): `gecikme.LinkDelay` her mesajın gecikmesini çeker: `ek_ms + U(−titresim_ms,
+    +titresim_ms)`, 0'ın altına inmez (Linux netem'in "delay ZAMAN TİTREŞİM" kuralı; ortalama `ek_ms`), üreteç sabit
+    tohumla (`gecikme.JITTER_SEED = 0`) kurulur: aynı senaryo aynı gecikmeleri aynı sırayla çeker. Senaryoya tohum
+    alanı eklenmedi (spec'te yok; gerekirse `gecikme.tohum` önerilir). **Gecikme sim saatinde sayılır:** hat
+    `takip.Tracker`'da sim saatiyle (`SimClock.to_sim(monotonic)`) kurulur, mesaj hazır olduktan `ek_ms` sim ms sonra
+    çıkar (hattın iş parçacığı kalan süre kadar duvar saniyesi uyur ve yeniden bakar; RTF < 1'de aşmaz). Gerekçe:
+    gecikme gerçek sistemin (Pi, Hailo, seri hat) gecikmesini temsil eder ve dron (lockstep'teki PX4 dahil) sim
+    zamanında yaşar; duvar saatinde bir gecikme PX4'e RTF kadar kısalmış ulaşırdı (RTF ≈ 0.85–0.95). Bu yüzden
+    `ek_gecikme_ms` (`algilama.csv`, `tez_los.csv`) 12. gruptan beri **sim ms**'dir (`serbest_sim − hazir_sim`;
+    öncesinde duvar ms, 0 gecikmede ikisi de ≈ 0.02 ms). `FOLLOW_TARGET` karesinin `TEZ_LOS`'unun arkasından aynı
+    hattan gittiği için aynı gecikmeyi alır. `--gecikme-ms` yalnız `ek_ms`'i ezer; titreşim ve saat ayarları
+    senaryonun `gecikme` bloğundandır. 2. grubun ara hatası kaldırıldı.
 - Saat modeli: gönderilen `time_usec = t_kare + saat_ofset_ms + saat_kayma_ppm × geçen süre`.
+  - Uygulamada (12. grup): `gecikme.ClockModel`; "geçen süre" karenin kendi sim zamanıdır (sim saati simle başlar,
+    PX4 lockstep'te onunla açılır, ±4 ms): açılışta doğru olup o andan beri kayan bir saat. Alan işaretsiz olduğu için
+    0'ın altına düşen damga 0 gider. Saat modeli yalnız `TEZ_LOS`'un `time_usec`'ine uygulanır (tasks.md 12.2;
+    formül `time_usec`'i anar); `FOLLOW_TARGET.timestamp` yakalama anı olarak kalır (PX4 v1.17.0 ikisini de
+    kullanmaz). Gönderilen damga ile `tez_los.csv` → `time_usec` aynı işlevden gelir (`px4_baglanti.LosSender(stamp=)`,
+    testli). Ofset ve kayma 0 iken damga bit bit eskisiyle aynıdır (`round(t × 1e6)`).
   - PX4 v1.17.0 bu alanı `DEBUG_VECT` ve `FOLLOW_TARGET` için kullanmaz; uORB damgası mesajın varış anıdır.
   - Bu yüzden saat kaymasının stok PX4 tüketicileri üzerinde etkisi yoktur. Ortak ICD zaman damgalı bir mesaj seçerse anlam kazanır (bkz. "Varsayımlar").
 - Gerçek zaman oranı (RTF) koşu boyunca ölçülür. 0.9'un altına düşerse raporda uyarı çıkar; model CPU'yu Gazebo'dan alıyor olabilir.
@@ -181,6 +199,12 @@
       kaçırılan karelerde büyümez.
     - Kilit 10. kaçırmada düşer; yeniden kilit en erken **bir sonraki işlenen karede** denenir (operatörün tepki süresi
       0, iyimser; bkz. "Açık Konular").
+    - 12. grupta (kullanıcı kararı 12.11): `takip.yeniden_kilit_bekleme_s` (sim s, ≥ 0, varsayılan 0;
+      `--yeniden-kilit-bekleme-s`). Kilit düştükten sonra, karelerin yakalama zamanı kilidin düştüğü karenin
+      zamanından bu kadar ileri olmadan hakemle yeniden kilitlenilmez; bu karelerde `secim = kilitsiz`, `kilitsiz_neden
+      = tepki_bekleniyor` (hakem olsun olmasın). İlk kilit beklemez. 0'da seçim, kare zamanı verilmeyen eski seçimle
+      seçim seçim aynıdır (testli). Değer `ozet.json` → `ayarlar.takip.yeniden_kilit_bekleme_s` ve raporun "Ayarlar"
+      tablosunda.
     - Kutu merkezi `((u0 + u1) / 2, (v0 + v1) / 2)`: piksel kenarı kuralında sürekli koordinat; Gazebo'nun asal
       noktası `cx = W/2 = 1152` iki orta pikselin sınırıdır, `Camera.project` ile aynı kural (testte gidiş-dönüş
       < 0.01°, bozulmalı bir kamerayla da).
@@ -326,6 +350,14 @@
     (`srcComponent 1`) `ATTITUDE_QUATERNION`, `LOCAL_POSITION_NED`, `GPS_GLOBAL_ORIGIN`, `HOME_POSITION`'ını
     `konumlama.PoseHistory`'ye yazar (kilitli; takip iş parçacığı okur); hiç istisna fırlatmaz.
 - Her takip kaynağı aynı ölçütleri ve aynı MP4'ü üretir. `araclar/karsilastir.py` birden çok koşunun `ozet.json` dosyalarını tek tabloda yan yana koyar.
+  - Uygulamada (12. grup): her klasör bir sütundur: tek koşu (`ozet.json`) ya da bir `toplu.py` klasörü (`toplu.json`
+    ve koşularının `ozet.json`'u; sütun `toplu.aggregate`'in ortalaması, parantezde en az–en çok; koşular arasında
+    farklı ayar "farklı: a / b"). Satırlar: koşu (senaryo, sonuç, commit, tarih, koşu sayısı), ayarlar (`ayarlar`
+    noktalı adlarla; farklı olanlar ve her zaman takip / gecikme / eğim / model sha256; koşunun ölçümü olan
+    `model_bilgisi.isinma_ms`, `pid` ve koşuya özel `kamera.gazebo_modeli` ayar sayılmaz), ölçütler (önce uçtan uca ve
+    hattaki gecikme, sonra `toplu.MAIN_KEYS`; `--hepsi` ile bütün sayısal ölçütler ve ayarlar), her sütunun ilk
+    sütundan farkı (Δ; oranlarda yüzde puan). Terminal tablosu; `--html DOSYA` aynı tabloları `toplu.html`
+    düzeninde, her koşunun `rapor.html` / `kosu.mp4` bağlantılarıyla yazar.
 
 **7. Takım arkadaşı için kurulum ve PX4 modülü takma**
 - `derle.sh --harici <klasör>` verilen klasörü `EXTERNAL_MODULES_LOCATION` olarak kullanır.
@@ -413,9 +445,9 @@
     grup numarasıyla listelenir (5. gruptan sonra yalnız `{"video.mp4": 8}`, 8. gruptan sonra boş; 4. grup `algilama.etkin` satırını ve
     `algilama.*` / `kusurlar` ara hatalarını, 5. grup `takip.kaynak: tez_los`, `takip.los: hakem` ara hatalarını ve
     `henuz_bagli_degil["takip.los"]`'u, 6. grup `takip.kaynak: follow_me` ara hatasını, 10. grup
-    `takip.px4_baslat / --px4-baslat` ara hatasını, 11. grup `video.qgc / --qgc` ara hatasını sildi; geriye yalnız
-    12. grubun `gecikme.*` / `--gecikme-ms`'i kaldı). Her grup kendi satırlarını `hedef.unwired` /
-    `hedef.not_in_effect`'ten siler.
+    `takip.px4_baslat / --px4-baslat` ara hatasını, 11. grup `video.qgc / --qgc` ara hatasını, 12. grup
+    `gecikme.*` / `--gecikme-ms` ara hatasını sildi; 12. gruptan beri Faz A'da ara hata yoktur, `hedef.unwired` boş
+    döner). Her grup kendi satırlarını `hedef.unwired` / `hedef.not_in_effect`'ten siler.
   - `ozet.json`'daki eski `takip_kaynagi` alanı `ayarlar.takip.kaynak`'a taşındı (`ayarlar.takip.mod`: seçilen PX4
     modunun adı).
 - `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` (`calistir.sh`) ve `--temiz` (`derle.sh`) aynen kalır. `calistir.sh` her açılışta parametreleri zaten sıfırlar.
@@ -779,7 +811,7 @@ flowchart LR
 | `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv`. 6. grupta: `konumlama.py` (konum, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `takip.py`'ye konum + FOLLOW_TARGET, `follow_target.csv`; `px4_baglanti.py`'ye `FrameStream`, `FollowTargetSender`, `pose_hook`; `simulasyon.py`'ye `restart_logger` |
 | `araclar/goruntu_yayini.py`, `yayin.sdp`, `video.py` | yeni | 15 fps kare kaydı + QGC RTP; MP4 birleştirme. 8. grupta: `goruntu_yayini.py` kayıt kısmı (`FrameRecorder`, `FrameSink`, `GridPicker`), `video.py` (çevrimdışı birleştirme, kamera paneli, kuşbakışı, durum satırı, ffmpeg borusu); `yayin.sdp` ve RTP 11. grupta. 9. grupta `video.py`: kuşbakışında PX4'ün süzülmüş hedefi ve dronu gönderdiği yer PX4'ün kendi ayar noktasından (`px4_marks`; 8. grupta kestirimden hesaplanıyordu, köşede metrelerce kayıktı), durum satırında 6 m altı geçişin sebebi. 11. grupta `goruntu_yayini.py`: yayın (`LiveStream`, `pipeline_description`, `gst`), kutu mesajı (`BoxMessage`, `pack`/`unpack`/`check`, `BoxSender`, `BoxListener`, `LatestBoxes`), kayıt ve yayının tek işçisi (`FrameSink(stream=...)`), sürecin CPU defteri, tek başına mod (`main`, `standalone_message`); 11.6: kareler model sürecinden (`FrameShare`, `FrameTap`, `ShareReader`; `goruntu.FrameReader(also=...)`, `algilama.ModelProcess(tap=...)`), kopyasız okuma (`frame_pixels`), tamponlu küçültme (`Scaler`); `yayin.sdp`; `video.py`: `draw_live`, `draw_model_boxes`, `draw_legend`, etiketin kendi kutusunda çizimi (`render_labels`); `takip.Tracker(overlay=...)`; `senaryo.py`: `--qgc` / `video.qgc`, `ozet.json` → `yayin` |
-| `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti). 9.8 ön işinde: `olcum.follow_start_metrics` (takip başında konum titreşimi ve PX4'ün sahte hızı). 9. grupta: köşeler (`legs`, `corner_metrics`; 9.8'in repo dışı betiğinden taşındı), 6 m altı geçişler ve sebepleri (`near_passes`, `decompose`), PX4'ün Follow Target iç durumu dünyada (`Px4Follow`: kestirim, görevin süzülmüş hedefi, ayar noktası) |
+| `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 12. grupta: `karsilastir.py` (koşu ve `toplu.py` klasörleri, terminal + `--html`). 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti). 9.8 ön işinde: `olcum.follow_start_metrics` (takip başında konum titreşimi ve PX4'ün sahte hızı). 9. grupta: köşeler (`legs`, `corner_metrics`; 9.8'in repo dışı betiğinden taşındı), 6 m altı geçişler ve sebepleri (`near_passes`, `decompose`), PX4'ün Follow Target iç durumu dünyada (`Px4Follow`: kestirim, görevin süzülmüş hedefi, ayar noktası) |
 | `araclar/tarama.py` | yeni (Görev Grubu 17 öne alındı, 14.11) | Kamera eğimi × yükseklik × mesafe taraması: ızgara ve her bileşimin senaryosu (kaydırılmış yol), `toplu.py` ile koşma ve kaldığı yerden sürme (`durum.json`), kapılar, grup puanları, aşama 2 adayları, geometrik paylar ve ölçülen yaklaşma; `hedef.py`'ye `kamera.egim_deg` ve modelin eğimli kopyası, `kamera.py`'ye `NOMINAL_TILT_DEG` ve `tilt_of_mount`, `takip.py` / `konumlama.py` / `olcum.py` / `rapor.py` / `video.py` / `senaryo.py`'ye eğim |
 | `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html`. 9. grupta: köşelerin koşu koşu tablosu, her koşunun 6 m altı geçişleri ve sebepleri |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
@@ -831,9 +863,10 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 | `takip.los` | `model` \| `hakem`; `model` (algılama kapalı + `yok`: LOS yok) | LOS kaynağı (i) / (ii); algılama kapalıyken `model` olamaz; `--los` | 5 (bağlandı) |
 | `takip.px4_baslat` | metin listesi; boş | PX4 açıldıktan sonraki komutlar; `--px4-baslat` sona eklenir; verilirse koşu harici modludur ("unresponsive" aranır) | 10 (bağlandı) |
 | `takip.px4_parametreleri` | {AD: sayı}; boş | Dosyalardan sonra, `--param`'dan önce yüklenir; koşuda PX4'ten geri okunur; `MIS_TAKEOFF_ALT` yazılmaz | 2 |
+| `takip.yeniden_kilit_bekleme_s` (kullanıcı kararı 12.11) | sayı ≥ 0 (sim s); 0 | Kilit düştükten sonra hakemle yeniden kilide kadar bekleme; bekleme sırasında `kilitsiz_neden = tepki_bekleniyor`; `--yeniden-kilit-bekleme-s` | 12 (bağlandı) |
 | `algilama.etkin` | `true` | `false` / `--modelsiz`: model süreci yok | `false`: 2 (model zaten yok) · `true`: 4 |
 | `algilama.model`, `imgsz`, `conf`, `sinif`, `cekirdek` | yol (`~` açılır); `.pt`'deki (tam sayı ≥ 32); 0.25 ((0, 1]); adı `person` olan (ad ya da numara ≥ 0); 4 (≥ 1) | Komut satırı ezer (`--model`, `--imgsz`, `--conf`, `--sinif`) | 4 |
-| `gecikme.ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm` | hepsi 0 (ilk ikisi ≥ 0) | Yakalama → PX4 yolu; `--gecikme-ms` = `ek_ms` | 12 |
+| `gecikme.ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm` | hepsi 0 (ilk ikisi ≥ 0) | Yakalama → PX4 yolu, sim ms; `ek_ms` ± `titresim_ms` düzgün, sabit tohum; saat: `TEZ_LOS` `time_usec`; `--gecikme-ms` = `ek_ms` | 12 (bağlandı) |
 | `kusurlar` | `{}` | Faz A: kapalı; Faz B alanları ayrılmış (yazılırsa senaryo yüklenirken "Faz B'de uygulanacak"); alanları `kusurlar.check` denetler | 4 |
 | `video.mp4`, `video.qgc` | `true`, `false` | `--videosuz`, `--qgc`; `--kareleri-sakla` yalnız komut satırında | `mp4: false`: 2 (video zaten yok) · `mp4`, `--kareleri-sakla`: 8 (bağlandı) · `qgc`: 11 (bağlandı) |
 | `drone.mod` | kaldırılır | Yerine `takip.kaynak` | 1 |
@@ -1321,10 +1354,11 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
 |---|---|
 | `test_parametreler.py` | `.params` ayrıştırma (yorum, boş satır, ad kuralı, sayı), hatalı satırın reddi, `PX4_PARAM_*` listesinin üretimi, yükleme sırası |
 | `test_algilama.py` | Sahte algılayıcı; sınıf adı çözümü (`Person`/`person` → 0, numara, yoksa hata); taklit Ultralytics sonucundan `Kutu`'ya dönüşüm ve kırpma |
-| `test_takip.py` | İlk kilit, izleme, kapı, kilit kaybı (10 kare); LOS (i) gidiş-dönüş: bilinen poz ve hedef → `project` → piksel → LOS, `los_govde` ile açı farkı < 0.01° |
+| `test_takip.py` | İlk kilit, izleme, kapı, kilit kaybı (10 kare); LOS (i) gidiş-dönüş: bilinen poz ve hedef → `project` → piksel → LOS, `los_govde` ile açı farkı < 0.01°. 12. grupta: yeniden kilit beklemesi (süre dolmadan `tepki_bekleniyor`, hakemsiz de; 1.5 s'de yeniden kilit), 0 s'de eski seçimle seçim seçim aynılık, `Tracker`'ın `algilama.csv` satırları ve kilit olayları |
 | `test_konumlama.py` | Bilinen pozda zemin noktası → piksel → konum, hata < 1 cm; `u_D` eşiği, kenar reddi, poz aralığı reddi; NED ↔ enlem/boylam gidiş-dönüş |
 | `test_mesajlar.py` | `DEBUG_VECT` paketleme/çözme (ad, birim norm, NaN = hedef yok); `FOLLOW_TARGET` (1e7 tamsayı enlem/boylam, NaN hız, `est_capabilities`); doğrulamanın geçersiz vektörü durdurması. 5. grupta ayrıca: akış kuralları (aynı / eski kare, hız sınırı, bağlantı yok), tek gönderim kilidi, `AVAILABLE_MODES` adları ve stok mod listesinin PX4 kaynağıyla aynılığı |
-| `test_gecikme.py` | Sıra korunması, ek gecikme, tohumlu titreşim, saat ofseti/kayması (5. grupta: sıra korunması ve `serbest`; geri kalanı 12. grupta) |
+| `test_gecikme.py` | Sıra korunması, ek gecikme, tohumlu titreşim, saat ofseti/kayması (5. grupta: sıra korunması ve `serbest`; geri kalanı 12. grupta: titreşimin aralığı, düzgünlüğü, aynı tohumla aynılığı ve 0'da kesilmesi; gecikmenin RTF 0.5'teki bir saatte o saatin süresiyle sayılması ve aşılmaması; saat modeliyle `time_usec`; `Tracker`'da 80 sim ms gecikme ve gönderilen `time_usec` = `tez_los.csv`) |
+| `test_karsilastir.py` (12. grup) | İki koşu ve bir `toplu.py` klasörünün yan yana tablosu (değerler, Δ, yüzde puan, farklı ayarlar, toplu sütunun ortalama ve aralığı, koşular arasında farklı ayar), ayar sayılmayan koşu sayıları, `--hepsi`, `--html` (etiket, `rapor.html` bağlantısı), `ozet.json`'suz klasörün reddi |
 | `test_kusurlar.py` | Boş ayarda karenin bit bit aynı kalması; Faz B alanının ve bilinmeyen alanın reddi |
 | `test_olcum.py` | IoU, kaçırma, yanlış kişi (aynı kıyafet dahil), yanlış pozitif, LOS açı hatası, gecikme istatistikleri, atlanan kare oranı (elle hazırlanmış tablolarla). 7. grupta ayrıca: spec tablosundaki bütün anahtarlar, mesafe / kadraj sınırı / arkada kalma / yörünge dönüşü, PX4 `follow_target_status`, mod zaman çizelgesi, ULog sayımları, EKF yaw. 9.8 ön işinde: takip başında gönderilen konumun titreşimi, drona doğru kayma, PX4'ün sahte hızı ve rota değişimi |
 | `test_yakin_gecis.py` (9. grup) | Kişinin yolunun bacakları ve köşeleri (dönüş, duruş, hafif kıvrımın köşe sayılmaması); PX4'ün köşeye yetişmesi (yetişmeme dahil) ve aşma; 6 m altı geçişlerin sebebi (takip başı, diğer, durma, köşe, kilit kaybı; `yok`'ta "takip etmiyor") ve mesafe payları; en az mesafe anında ayrıştırmanın beş payı (elle hesaplanan vektörlerle, konum kayması sınıfı); ULog'dan dünyaya dönüşüm (`Px4Follow`: kestirim enlem/boylamdan, süzülmüş hedef ve ayar noktası EKF kökeninden, < 1 cm). Ayrıca `test_rapor.py`, `test_toplu.py`, `test_video.py` (ayar noktası halkası, durum satırında sebep), `test_olcum.py` (`measure` bölümleri, günlük satırı) |
@@ -1409,7 +1443,7 @@ commander'ın "unresponsive" kuralı (300 ms'de bir istek, 50 ms cevap süresi, 
 ve ULog'da harici modun yuva numarasıyla durduğu; C3'e `--harici` klasörünün `src/`'nin üstü olduğu ve bayraksız
 derlemenin stoka döndüğü; C4'e komutun derlemede olduğunun sim açılmadan denetlendiği ve sim log'undaki satırlar;
 C6'ya koşu sonundaki "unresponsive" araması ve `ozet.json` → `harici_mod`; C7'de `karsilastir.py` 12. grupta gelene
-kadar `ozet.json`/`rapor.html`'lerin yan yana konması; iskelet modülün ağaç dışında açılıp denenmesi (komutlarıyla).
+kadar `ozet.json`/`rapor.html`'lerin yan yana konması (12. grupta geldi: README C7 artık `karsilastir.py`'yi gösterir); iskelet modülün ağaç dışında açılıp denenmesi (komutlarıyla).
 
 ## Faz B (15.11'den sonra, aynı spec'e bağlı ikinci PR)
 
@@ -1513,7 +1547,7 @@ mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Ya
   kaybından 70–200 ms sonra yeniden kilit görüldü. Gerçekte operatör ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi devreye girer.
   Bir tepki süresi alanı (`takip.*`) gerekirse m11'le birlikte eklenir.
   **Karar (12.11, kullanıcı):** 12. grupta `takip.yeniden_kilit_bekleme_s` alanı eklenir, varsayılan 0 s (tasks.md
-  12.4). İlk kilidin en az IoU'su 0.3 kalır.
+  12.4). İlk kilidin en az IoU'su 0.3 kalır. **Uygulandı (12. grup):** 5. madde, `implementation/gorev-grubu-12.md`.
 - **Ana sürecin yükü (5. grupta ölçüldü):** hedef yürürken `senaryo.py` bir çekirdeğin ≈ %90'ını kullanıyor (hakemin
   segmentasyon çözümü, MAVLink alımı, takip); model 4 çekirdek, Gazebo ≈ 1.8 çekirdek. Sonucun FIFO'dan ana sürece
   geçişi (`teslim_ms`, en çok ≈ 75 ms) ve gönderim anının titremesi bundan; uçtan uca gecikmeye girer ve ölçülür.

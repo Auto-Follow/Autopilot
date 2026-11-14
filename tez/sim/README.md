@@ -110,16 +110,23 @@ $P tez/sim/araclar/senaryo.py --help                               # bütün bay
 ```
 
 Bayraklar senaryodaki değeri ezer: `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz` (algılama), `--takip`,
-`--mod-adi`, `--los`, `--param AD=DEĞER` ve `--px4-baslat KOMUT` (ikisi de birden çok verilebilir), `--gecikme-ms`,
-`--qgc`, `--videosuz`, `--kareleri-sakla`. Koşunun geçerli ayarlarının hepsi `ozet.json` → `ayarlar`'a yazılır.
+`--mod-adi`, `--los`, `--param AD=DEĞER` ve `--px4-baslat KOMUT` (ikisi de birden çok verilebilir),
+`--yeniden-kilit-bekleme-s`, `--gecikme-ms`, `--qgc`, `--videosuz`, `--kareleri-sakla`. Koşunun geçerli ayarlarının
+hepsi `ozet.json` → `ayarlar`'a yazılır.
+
+```bash
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --gecikme-ms 200   # PX4'e her şey 200 sim ms geç
+$P tez/sim/araclar/senaryo.py --senaryo kalabalik_park --ekransiz --yeniden-kilit-bekleme-s 1.5   # operatör 1.5 s sonra
+```
 
 **Ara durum (m06 sürerken):** m06'nın sonraki görev gruplarında bağlanacak bir ayar varsayılan dışında verilirse
-koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (ör. `gecikme.ek_ms: 200.0 (--gecikme-ms):
-Görev grubu 12'de bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok`,
-`follow_me` ve `tez_los` (`--mod-adi`), `takip.los: model | hakem` (`--los`), algılama (`algilama.*`, `--model`,
-`--imgsz`, `--conf`, `--sinif`, `--modelsiz`), `kusurlar` (Faz A: boş), `video.mp4` / `--videosuz`,
-`--kareleri-sakla`, `takip.px4_parametreleri` ve `--param`, `takip.px4_baslat` ve `--px4-baslat` (10. grup),
-`video.qgc` / `--qgc` (11. grup). `ozet.json` → `ayarlar.henuz_bagli_degil` 8. gruptan beri boştur.
+koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler; hiçbir ayar sessizce yok sayılmaz. 12. gruptan
+beri Faz A'nın bütün ayarları bağlıdır: `takip.kaynak: yok`, `follow_me` ve `tez_los` (`--mod-adi`), `takip.los:
+model | hakem` (`--los`), algılama (`algilama.*`, `--model`, `--imgsz`, `--conf`, `--sinif`, `--modelsiz`),
+`kusurlar` (Faz A: boş), `video.mp4` / `--videosuz`, `--kareleri-sakla`, `takip.px4_parametreleri` ve `--param`,
+`takip.px4_baslat` ve `--px4-baslat` (10. grup), `video.qgc` / `--qgc` (11. grup), `gecikme.*` / `--gecikme-ms` ve
+`takip.yeniden_kilit_bekleme_s` / `--yeniden-kilit-bekleme-s` (12. grup). `ozet.json` → `ayarlar.henuz_bagli_degil`
+8. gruptan beri boştur.
 
 **Mod her zaman adıyla seçilir** (`yok` → "Hold", `follow_me` → "Follow Target", `tez_los` → `takip.mod_adi` /
 `--mod-adi`); numarası koda
@@ -245,6 +252,17 @@ $P tez/sim/araclar/toplu.py --senaryo kalabalik_park --tekrar 3 -- --los hakem  
 $P tez/sim/araclar/toplu.py --ozet tez/sim/sonuclar/A tez/sim/sonuclar/B        # var olan koşuları özetle
 ```
 
+Farklı ayarlarla koşulmuş koşuları yan yana koymak (`karsilastir.py`, 12. grup): her klasör bir sütun; klasör tek bir
+koşu (`ozet.json`) ya da bir `toplu.py` klasörü (`toplu.json`: sütun koşuların ortalaması, parantezde en az–en çok)
+olabilir. Tabloda koşu bilgisi, farklı olan ayarlar (gecikme ve takip ayarları her zaman), ana ölçütler (önce uçtan uca
+gecikme) ve her sütunun ilk sütundan farkı (Δ; oranlarda yüzde puan) vardır:
+
+```bash
+$P tez/sim/araclar/karsilastir.py tez/sim/sonuclar/A tez/sim/sonuclar/B                    # terminalde tablo
+$P tez/sim/araclar/karsilastir.py tez/sim/sonuclar/A tez/sim/sonuclar/B_x3 --html tez/sim/sonuclar/AB.html   # + HTML
+$P tez/sim/araclar/karsilastir.py tez/sim/sonuclar/A tez/sim/sonuclar/B --hepsi            # bütün ölçüt ve ayarlar
+```
+
 Çıktı `tez/sim/sonuclar/<tarih>_<ad>_x<N>/`: her koşunun klasörü (`kosu_<i>/`, kendi `rapor.html`'iyle), `toplu.html`
 (ana ölçütler: koşu koşu, ortalama, en az, en çok; nokta grafiği), `toplu.json`, `toplu.csv`. Başlayamayan bir koşu
 (ör. PX4'ten heartbeat gelmedi) altyapı hatası sayılır, en çok 2 kez yeniden denenir ve "Denemeler"de listelenir.
@@ -271,6 +289,9 @@ belgesinin 19. bölümünde, doğrulanmadı). Yeni senaryo yazmak için birini k
   - `los`: PX4'e `TEZ_LOS` olarak giden görüş vektörünün kaynağı: `model` (model kutusu, LOS i, varsayılan) veya
     `hakem` (doğru cevap `los_govde`, LOS ii, her kamera karesinde). Algılama kapalıyken `model` olamaz;
     `follow_me`/`tez_los` o zaman `hakem` ister.
+  - `yeniden_kilit_bekleme_s` (varsayılan 0, `--yeniden-kilit-bekleme-s`): kilit düştükten sonra hakemin (operatörün)
+    yeniden kilitlemesi için geçmesi gereken sim saniyesi; bekleme sırasında `algilama.csv` → `kilitsiz_neden =
+    tepki_bekleniyor`. 0: bir sonraki işlenen karede yeniden kilit (iyimser)
   - `px4_baslat`: PX4 açıldıktan sonra, kalkıştan önce çalışacak PX4 komutları (liste, ör. `[tez_auto_follow start]`;
     `--px4-baslat` sona eklenir). Verilirse koşu "harici modlu"dur: sonunda `sim.log`'da "unresponsive" aranır
     ("C" bölümü)
@@ -279,7 +300,12 @@ belgesinin 19. bölümünde, doğrulanmadı). Yeni senaryo yazmak için birini k
     okunur; PX4 istenen değeri tutmuyorsa koşu kalkıştan önce durur.
 - `algilama` (varsayılan açık): `etkin`, `model` (yol), `imgsz` (varsayılanı `.pt`'deki), `conf` (0.25), `sinif`
   (ad ya da numara; varsayılan adı `person` olan), `cekirdek` (4)
-- `gecikme` (hepsi 0): `ek_ms`, `titresim_ms`, `saat_ofset_ms`, `saat_kayma_ppm`
+- `gecikme` (hepsi 0): `ek_ms` (`--gecikme-ms`) ve `titresim_ms`: yakalama → PX4 yoluna her `TEZ_LOS` /
+  `FOLLOW_TARGET` için `ek_ms` ± `titresim_ms` (düzgün dağılım, sabit tohum, 0'ın altına inmez) **sim milisaniyesi**
+  gecikme, sıra korunur; ölçülen gecikme `algilama.csv` / `tez_los.csv` → `ek_gecikme_ms`, `ozet.json` →
+  `ek_gecikme_ms_ort/maks`. `saat_ofset_ms`, `saat_kayma_ppm`: `TEZ_LOS` `time_usec`'ini damgalayan saatin ofseti ve
+  kayması (yakalama + ofset + kayma × geçen sim süresi; `tez_los.csv` → `time_usec`). PX4 v1.17.0 `time_usec`'i
+  kullanmaz (varış zamanını kullanır); saat ayarı yalnız giden ve kaydedilen damgayı değiştirir
 - `kamera` (varsayılan `{egim_deg: 35}`): `egim_deg` kameranın burnun altındaki eğimi, 0–60° (komut satırında
   `--kamera-egim`). Varsayılan tek bir yerden gelir (`araclar/kamera.py` → `NOMINAL_TILT_DEG`; `models/x500_tez` de
   35°, test ikisini karşılaştırır); varsayılanla uçan senaryo bu alanı yazmaz. Başka bir eğimde koşu klasörüne modelin
@@ -568,8 +594,8 @@ kesinleşmiş değil, m15/m16 spec'inde kesinleşecek): mod adı **"AUTO FOLLOW"
    modlarını listeleyerek durur. Koşu sonunda `sim.log`'da "unresponsive" aranır; bulunursa koşu "TAMAMLANMADI"
    olur (commander modu düşürmüş, ölçütler modu ölçmüyor). `ozet.json` → `harici_mod`: başlatma komutlarının çıkış
    kodları ve "unresponsive" satırları; `ayarlar.takip.px4_modlari`: PX4'ün koşudaki mod listesi.
-7. **Karşılaştır.** Aynı senaryoyu `--takip follow_me` ile de koş; `ozet.json` / `rapor.html`'leri yan yana koy
-   (`karsilastir.py` m06 Görev grubu 12'de gelecek).
+7. **Karşılaştır.** Aynı senaryoyu `--takip follow_me` ile de koş; iki koşuyu yan yana koy:
+   `$P tez/sim/araclar/karsilastir.py tez/sim/sonuclar/<A> tez/sim/sonuclar/<B>` (yukarıda "Ölçütler, rapor ve çok koşu").
 8. **Gerçek kart.** `make px4_fmu-v6c_default EXTERNAL_MODULES_LOCATION=$PWD/tez/px4`. Flash ~%98 dolu (iskelet
    `c4b4abf342`'de +2.8 KB ölçülmüştü); taşarsa (`region FLASH overflowed`) repo sorumlusuna haber ver. Kartta
    başlatma (`etc/extras.txt`) m15/m16'nın işidir.
@@ -606,7 +632,7 @@ Elle (Gazebo penceresi + QGC): `tez/sim/derle.sh --harici ...` sonrası `tez/sim
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
 | `tez/sim/modeller.yaml` | Bilinen model dosyaları (ad, sha256, boyut, kaynak); dosyalar repo dışında, `~/auto-follow-modeller/` |
 | `tez/env/model-requirements.txt` | Model paketleri (ultralytics, CPU torch/torchvision) ve bağımlılıkları, sabit sürümle |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, konum, takip iş parçacığı, `tez_los.csv`, `follow_target.csv`), `konumlama.py` (düz zemin konum hesabı, EKF poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `gecikme.py` (sıra koruyan gecikme hattı), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor: kontroller, gruplu ölçümler, grafikler), `olcum.py` (bütün ölçütler, ULog özeti), `toplu.py` (aynı senaryonun N koşusu ve dağılımı), `tarama.py` (kamera eğimi × yükseklik × mesafe taraması, karar kuralı), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, `FOLLOW_TARGET`, poz kancası, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/MP4), `goruntu_yayini.py` (videonun kamera karelerini koşu sırasında ayrı süreçte kaydeder; `--qgc`: QGC'ye canlı H.264 RTP, kutular UDP 5610'dan; tek başına `--qgc --model`), `yayin.sdp` (yayını QGC'siz ffplay'de açmak için), `video.py` (`kosu.mp4`: kamera + kuşbakışı, çevrimdışı), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, konum, takip iş parçacığı, `tez_los.csv`, `follow_target.csv`), `konumlama.py` (düz zemin konum hesabı, EKF poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `gecikme.py` (sıra koruyan, sim saatli gecikme hattı, titreşim ve `TEZ_LOS` saat modeli), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor: kontroller, gruplu ölçümler, grafikler), `olcum.py` (bütün ölçütler, ULog özeti), `toplu.py` (aynı senaryonun N koşusu ve dağılımı), `karsilastir.py` (koşuları ve `toplu.py` klasörlerini yan yana koyar), `tarama.py` (kamera eğimi × yükseklik × mesafe taraması, karar kuralı), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, `FOLLOW_TARGET`, poz kancası, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/MP4), `goruntu_yayini.py` (videonun kamera karelerini koşu sırasında ayrı süreçte kaydeder; `--qgc`: QGC'ye canlı H.264 RTP, kutular UDP 5610'dan; tek başına `--qgc --model`), `yayin.sdp` (yayını QGC'siz ffplay'de açmak için), `video.py` (`kosu.mp4`: kamera + kuşbakışı, çevrimdışı), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 

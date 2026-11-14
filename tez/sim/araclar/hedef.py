@@ -38,7 +38,7 @@ SUCCESS_KEYS = {
 # (ii) the referee (kayit.py los_govde).
 TRACKING_SOURCES = ("yok", "follow_me", "tez_los")
 LOS_SOURCES = ("model", "hakem")
-TRACKING_KEYS = {"kaynak", "mod_adi", "los", "px4_baslat", "px4_parametreleri"}
+TRACKING_KEYS = {"kaynak", "mod_adi", "los", "px4_baslat", "px4_parametreleri", "yeniden_kilit_bekleme_s"}
 # YAML key -> attribute of Detection / Delay; the command line flag that replaces it, if there is one
 DETECTION_FIELDS = {"etkin": "enabled", "model": "model", "imgsz": "imgsz", "conf": "conf", "sinif": "class_name"}
 DETECTION_FIELDS |= {"cekirdek": "cores"}
@@ -46,6 +46,7 @@ DELAY_FIELDS = {"ek_ms": "extra_ms", "titresim_ms": "jitter_ms", "saat_ofset_ms"
 DELAY_FIELDS |= {"saat_kayma_ppm": "clock_drift_ppm"}
 FLAGS = {"algilama.model": "--model", "algilama.imgsz": "--imgsz", "algilama.conf": "--conf"}
 FLAGS |= {"algilama.sinif": "--sinif", "gecikme.ek_ms": "--gecikme-ms", "kamera.egim_deg": "--kamera-egim"}
+FLAGS |= {"takip.yeniden_kilit_bekleme_s": "--yeniden-kilit-bekleme-s"}
 # kamera.egim_deg [deg]: the camera's tilt below the nose for this run (default: the sim's mount, kamera.py). The range
 # is the camera report's scan (0-60 deg): above it the bottom edge of the image nears the nadir (60 + 20.1 deg), below
 # 0 the camera would look up; frame_limits and the flat-ground position assume a camera that looks ahead and down.
@@ -125,6 +126,9 @@ class Tracking:
     los: str | None = "model"  # LOS_SOURCES; None = no LOS (model off and nothing to steer, source "yok")
     px4_start: tuple[str, ...] = ()  # PX4 commands after start: takip.px4_baslat, then --px4-baslat
     px4_params: tuple[parametreler.Param, ...] = ()  # takip.px4_parametreleri, then --param (load order)
+    # [s sim] after a lost lock the referee locks again only this much later (the operator's / m11's reaction; 0 = the
+    # next processed frame, the optimistic case of task group 5)
+    relock_wait_s: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -148,12 +152,13 @@ class CameraMount:
 
 @dataclass(frozen=True)
 class Delay:
-    """gecikme: artificial delay on the capture -> PX4 path and the clock model of the sent time stamps."""
+    """gecikme: artificial delay on the capture -> PX4 path and the clock model of the sent time stamps (gecikme.py:
+    the delay counts in sim time)."""
 
-    extra_ms: float = 0.0  # [ms]
-    jitter_ms: float = 0.0  # [ms] uniform, seeded
-    clock_offset_ms: float = 0.0  # [ms]
-    clock_drift_ppm: float = 0.0  # [ppm]
+    extra_ms: float = 0.0  # [ms sim]
+    jitter_ms: float = 0.0  # [ms sim] uniform in [-jitter, +jitter] around extra_ms, never below 0, seeded
+    clock_offset_ms: float = 0.0  # [ms] TEZ_LOS time_usec ahead (+) or behind (-) the capture time
+    clock_drift_ppm: float = 0.0  # [ppm] of the elapsed sim time, fast (+) or slow (-)
 
 
 @dataclass(frozen=True)
@@ -178,6 +183,7 @@ class CommandLine:
     params: tuple[str, ...] = ()  # --param NAME=VALUE, loaded after takip.px4_parametreleri
     px4_start: tuple[str, ...] = ()  # --px4-baslat, run after takip.px4_baslat
     delay_ms: float | None = None  # --gecikme-ms (gecikme.ek_ms)
+    relock_wait_s: float | None = None  # --yeniden-kilit-bekleme-s (takip.yeniden_kilit_bekleme_s)
     camera_tilt_deg: float | None = None  # --kamera-egim (kamera.egim_deg)
     qgc: bool = False  # --qgc
     no_video: bool = False  # --videosuz
@@ -369,6 +375,7 @@ def _with_command_line(d: dict, cli: CommandLine) -> dict:
         ("takip", "kaynak"): cli.source,
         ("takip", "mod_adi"): cli.mode_name,
         ("takip", "los"): cli.los,
+        ("takip", "yeniden_kilit_bekleme_s"): cli.relock_wait_s,
         ("algilama", "etkin"): False if cli.no_model else None,
         ("algilama", "model"): cli.model,
         ("algilama", "imgsz"): cli.imgsz,
@@ -413,7 +420,8 @@ def _tracking(d: dict, detection_on: bool, cli: CommandLine, altitude: float) ->
     if source == "follow_me" and all(p.name != FOLLOW_HEIGHT_PARAM for p in px4_params):
         # first of the scenario's layer: after the .params files (their 8 m), before nothing that names it
         px4_params.insert(0, parametreler.Param(FOLLOW_HEIGHT_PARAM, altitude, FOLLOW_HEIGHT_SOURCE))
-    return Tracking(source, mode_name, _los(d, source, detection_on), tuple(starts), tuple(px4_params))
+    relock_wait = _number(d, "yeniden_kilit_bekleme_s", "takip", Tracking().relock_wait_s)
+    return Tracking(source, mode_name, _los(d, source, detection_on), tuple(starts), tuple(px4_params), relock_wait)
 
 
 def _los(d: dict, source: str, detection_on: bool) -> str | None:
@@ -533,7 +541,13 @@ def settings(sc: Scenario) -> dict:
     detection = {key: getattr(a, attr) for key, attr in DETECTION_FIELDS.items()}
     detection["model"] = str(a.model) if a.model is not None else None
     return {
-        "takip": {"kaynak": t.source, "mod_adi": t.mode_name, "los": t.los, "px4_baslat": list(t.px4_start)},
+        "takip": {
+            "kaynak": t.source,
+            "mod_adi": t.mode_name,
+            "los": t.los,
+            "px4_baslat": list(t.px4_start),
+            "yeniden_kilit_bekleme_s": t.relock_wait_s,
+        },
         "algilama": detection,
         "gecikme": {key: getattr(sc.delay, attr) for key, attr in DELAY_FIELDS.items()},
         "kusurlar": copy.deepcopy(sc.defects),
@@ -547,10 +561,10 @@ def settings(sc: Scenario) -> dict:
 # Settings that later task groups of spec 2026-11-10-m06-sim-ortami wire in (tasks.md 2.5). unwired() stops a run
 # that gives one of them a value other than its default, before the simulation starts; nothing is silently ignored.
 # not_in_effect() lists the defaults that do not act yet. Each task group deletes its lines when it wires them in.
-def unwired(sc: Scenario) -> list[str]:
-    """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet (the live stream,
-    video.qgc / --qgc, is wired since task group 11)."""
-    found: list[tuple[str, int]] = [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
+def unwired(_sc: Scenario) -> list[str]:
+    """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet. None since task
+    group 12 (gecikme.* / --gecikme-ms); kept for the groups that add settings."""
+    found: list[tuple[str, int]] = []
     return [f"{what}: {in_group(group)} bağlanacak" for what, group in found]
 
 

@@ -227,6 +227,7 @@ FULL = GOOD.replace(
   los: hakem
   px4_baslat: [tez_auto_follow start]
   px4_parametreleri: {FLW_TGT_DST: 9, MPC_XY_VEL_MAX: 0.5}
+  yeniden_kilit_bekleme_s: 1.5
 algilama: {model: ~/modeller/m.pt, imgsz: 960, conf: 0.4, sinif: Person, cekirdek: 2}
 gecikme: {ek_ms: 200, titresim_ms: 20, saat_ofset_ms: -5, saat_kayma_ppm: 50}
 kusurlar: {}
@@ -238,7 +239,9 @@ video: {mp4: false, qgc: true}
 def test_new_blocks_have_defaults_and_are_read(tmp_path: Path) -> None:
     """takip, algilama, gecikme, kusurlar, video: absent = the defaults of the spec table; written = read."""
     sc = hedef.load(write(tmp_path, GOOD.replace("takip: {kaynak: yok}\n", "")))
-    assert sc.tracking == hedef.Tracking(source="yok", mode_name=None, los="model", px4_start=(), px4_params=())
+    assert sc.tracking == hedef.Tracking(
+        source="yok", mode_name=None, los="model", px4_start=(), px4_params=(), relock_wait_s=0.0
+    )
     assert sc.detection == hedef.Detection(enabled=True, model=None, imgsz=None, conf=0.25, class_name=None, cores=4)
     assert sc.delay == hedef.Delay(extra_ms=0.0, jitter_ms=0.0, clock_offset_ms=0.0, clock_drift_ppm=0.0)
     assert sc.defects == {} and sc.video == hedef.Video(mp4=True, qgc=False, keep_frames=False)
@@ -256,6 +259,7 @@ def test_new_blocks_have_defaults_and_are_read(tmp_path: Path) -> None:
         ("FLW_TGT_DST", 9, "takip.px4_parametreleri"),
         ("MPC_XY_VEL_MAX", 0.5, "takip.px4_parametreleri"),
     ]
+    assert t.relock_wait_s == 1.5
     assert sc.detection == hedef.Detection(True, Path.home() / "modeller" / "m.pt", 960, 0.4, "Person", 2)
     assert sc.delay == hedef.Delay(200.0, 20.0, -5.0, 50.0)
     assert sc.defects == {}  # Faz A: every camera defect off (a Faz B field is refused, test_kusurlar.py)
@@ -286,6 +290,9 @@ def test_new_blocks_have_defaults_and_are_read(tmp_path: Path) -> None:
         ("takip: {px4_baslat: modul start}", "takip.px4_baslat: komut listesi"),
         ("takip: {px4_baslat: ['']}", "takip.px4_baslat[0]"),
         ("takip: {kaynak: tez_los, mod_adi: 3}", "takip.mod_adi: PX4 mod adı"),
+        ("takip: {kaynak: yok, yeniden_kilit_bekleme_s: -0.5}", "takip.yeniden_kilit_bekleme_s: en az 0"),
+        ("takip: {kaynak: yok, yeniden_kilit_bekleme_s: iki}", "takip.yeniden_kilit_bekleme_s: sayı olmalı"),
+        ("takip: {kaynak: yok, yeniden_kilit_bekleme_s: .inf}", "takip.yeniden_kilit_bekleme_s: sonlu"),
     ],
 )
 def test_new_block_mistakes_name_the_field(tmp_path: Path, block: str, message: str) -> None:
@@ -359,7 +366,7 @@ def test_command_line_overrides_the_scenario_into_the_settings(tmp_path: Path) -
     argv = ["--senaryo", write(tmp_path, text), "--takip", "tez_los", "--mod-adi", "Tez Auto Follow", "--los", "hakem"]
     argv += ["--model", "~/m.pt", "--imgsz", "960", "--conf", "0.5", "--sinif", "0", "--modelsiz"]
     argv += ["--param", "FLW_TGT_DST=10", "--param", "FLW_TGT_HT=12", "--px4-baslat", "tez_auto_follow start"]
-    argv += ["--gecikme-ms", "200", "--qgc", "--videosuz", "--kareleri-sakla"]
+    argv += ["--gecikme-ms", "200", "--yeniden-kilit-bekleme-s", "1.5", "--qgc", "--videosuz", "--kareleri-sakla"]
     args = senaryo.parser().parse_args(argv)
     s = senaryo.settings(hedef.load(args.senaryo, senaryo.command_line(args)))
 
@@ -382,6 +389,7 @@ def test_command_line_overrides_the_scenario_into_the_settings(tmp_path: Path) -
         "mod_adi": "Tez Auto Follow",
         "los": "hakem",
         "px4_baslat": ["tez_auto_follow start"],
+        "yeniden_kilit_bekleme_s": 1.5,
     }
     assert s["algilama"] == {
         "etkin": False,
@@ -406,20 +414,20 @@ def test_command_line_overrides_the_scenario_into_the_settings(tmp_path: Path) -
 
 def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     """tasks.md 2.5: a setting a later task group wires in, given with a non-default value, stops the run before the
-    simulation starts and names the group; left at its default it is listed as not in effect yet."""
+    simulation starts and names the group; left at its default it is listed as not in effect yet. Since task group 12
+    (gecikme.* / --gecikme-ms, takip.yeniden_kilit_bekleme_s) every Faz A setting is wired: nothing stops a run."""
     good = write(tmp_path, GOOD)
     sc = hedef.load(good)
     hedef.check_wired(sc)  # defaults only: the run may start
     assert hedef.settings(sc)["henuz_bagli_degil"] == {}  # kosu.mp4 is made since group 8
-    later = [
-        (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
-    ]
-    for cli, message in later:
-        with pytest.raises(ValueError, match=re.escape(message)):
-            hedef.check_wired(hedef.load(good, cli))
+    assert hedef.unwired(hedef.load(good, hedef.CommandLine(delay_ms=200.0, relock_wait_s=1.5))) == []
+    (tmp_path / "gecikme").mkdir()
+    delayed = hedef.load(write(tmp_path / "gecikme", FULL))
+    hedef.check_wired(delayed)  # the whole gecikme block: delay, jitter, clock offset and drift (group 12)
+    assert delayed.delay == hedef.Delay(200.0, 20.0, -5.0, 50.0) and delayed.tracking.relock_wait_s == 1.5
     # wired already: start parameters, no model, no video, the model's settings (group 4), TEZ_LOS with an external
     # mode chosen by name and the referee's LOS (group 5), kept video frames (group 8), PX4 start commands (group 10),
-    # the live stream to QGC, also without kosu.mp4 (group 11)
+    # the live stream to QGC, also without kosu.mp4 (group 11), the delay and the re-lock wait (group 12)
     hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(px4_start=("x start",))))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(keep_frames=True)))

@@ -6,9 +6,12 @@
     ... --dogrula           overhead camera checks that the rendered target is where the ground truth says
     ... --param AD=DEĞER    one more PX4 start parameter after the scenario's takip.px4_parametreleri (repeatable)
     ... --kamera-egim 30    camera tilt below the nose for this run (kamera.egim_deg; default kamera.NOMINAL_TILT_DEG)
+    ... --gecikme-ms 200    200 sim ms more on the capture -> PX4 path (gecikme.ek_ms; jitter and clock model: the
+                            scenario's gecikme block)
+    ... --yeniden-kilit-bekleme-s 1.5   after a lost lock the referee locks again 1.5 sim s later at the earliest
     ... --help              every option: model (--model, --imgsz, --conf, --sinif, --modelsiz), tracking (--takip,
-                            --mod-adi, --los, --px4-baslat), delay and video (--gecikme-ms, --qgc, --videosuz,
-                            --kareleri-sakla); each replaces the scenario's value
+                            --mod-adi, --los, --px4-baslat, --yeniden-kilit-bekleme-s), delay and video (--gecikme-ms,
+                            --qgc, --videosuz, --kareleri-sakla); each replaces the scenario's value
 
 Steps: check the mode name and the model file (sha256), start the model process and wait for the loaded model, write
 the scenario world (base world + target), start Gazebo + PX4 (calistir.sh) with the start parameters, read them back
@@ -35,6 +38,11 @@ message per processed frame, NaN = no target), or the referee's (--los hakem, ev
 source, "yok" included. algilama.csv has one row per processed frame (times, model_ms, boxes, selection, LOS,
 TEZ_LOS), kutular.csv every box, tez_los.csv every TEZ_LOS attempt; all join dogru_cevap.csv on round(t * 1e6).
 --modelsiz (algilama.etkin: false) starts no model process at all.
+The scenario's gecikme block (spec 4; all 0 by default) delays every TEZ_LOS / FOLLOW_TARGET by gecikme.ek_ms plus a
+seeded uniform jitter of +-gecikme.titresim_ms in sim milliseconds (gecikme.py) and stamps TEZ_LOS time_usec with a
+clock gecikme.saat_ofset_ms ahead and gecikme.saat_kayma_ppm fast; algilama.csv / tez_los.csv ek_gecikme_ms is the
+measured time in the delay line. takip.yeniden_kilit_bekleme_s (default 0) is the reaction time before the referee
+locks again after a lost lock; meanwhile algilama.csv kilitsiz_neden is tepki_bekleniyor.
 
 follow_me closes the loop with PX4's stock Follow Me: the chosen box's flat-ground position (konumlama.py, the EKF
 pose of the frame) goes to PX4 as FOLLOW_TARGET (at most every third camera frame); with --los hakem the person's
@@ -74,6 +82,7 @@ import pandas as pd
 
 import algilama
 import dogrulama
+import gecikme
 import goruntu
 import goruntu_yayini
 import hedef
@@ -662,14 +671,25 @@ def run(
             out,
             detections,
             lambda: rec.camera if rec is not None else None,
-            sc.delay.extra_ms,
+            delay=gecikme.LinkDelay(sc.delay.extra_ms, sc.delay.jitter_ms),
             follow=t.source == "follow_me",
             locator=konumlama.Locator(mount=mount) if model_file is not None else None,
             world=world,
             truth=lambda s: sc.truth(s)[:2],
             mount=mount,
             overlay=boxes.send if boxes is not None else None,
+            stamp=gecikme.ClockModel(sc.delay.clock_offset_ms, sc.delay.clock_drift_ppm),
+            relock_wait_s=t.relock_wait_s,
         )
+    d = sc.delay
+    if d != hedef.Delay():
+        what = "TEZ_LOS / FOLLOW_TARGET" if tracker is not None else "yok (bu koşuda TEZ_LOS gitmiyor)"
+        log(
+            f"Yapay gecikme: {d.extra_ms:g} ± {d.jitter_ms:g} sim ms (düzgün, tohum {gecikme.JITTER_SEED}), "
+            f"TEZ_LOS saati {d.clock_offset_ms:+g} ms / {d.clock_drift_ppm:+g} ppm; etkilenen: {what}"
+        )
+    if t.relock_wait_s > 0:
+        log(f"Yeniden kilit beklemesi: kilit düştükten {t.relock_wait_s:g} sim s sonra (takip.yeniden_kilit_bekleme_s)")
     model = None
     frames = None
     # the video's frames (kosu.mp4, --qgc) come from the model process' camera subscription when there is a model: a
@@ -968,6 +988,13 @@ def parser() -> argparse.ArgumentParser:
         metavar="KOMUT",
         help="PX4 açıldıktan sonra çalışacak komut, takip.px4_baslat'tan sonra (birden çok)",
     )
+    g.add_argument(
+        "--yeniden-kilit-bekleme-s",
+        type=float,
+        metavar="S",
+        help="kilit düştükten sonra hakemle yeniden kilide kadar beklenen sim saniyesi (takip.yeniden_kilit_bekleme_s, "
+        "varsayılan 0)",
+    )
     g = ap.add_argument_group("kamera (senaryodaki kamera bloğunu ezer)")
     g.add_argument(
         "--kamera-egim",
@@ -976,7 +1003,9 @@ def parser() -> argparse.ArgumentParser:
         help=f"kameranın burnun altındaki eğimi (kamera.egim_deg); varsayılan montaj {kamera.NOMINAL_TILT_DEG:g}",
     )
     g = ap.add_argument_group("gecikme ve video")
-    g.add_argument("--gecikme-ms", type=float, metavar="MS", help="yakalama -> PX4 yoluna ek gecikme (gecikme.ek_ms)")
+    g.add_argument(
+        "--gecikme-ms", type=float, metavar="MS", help="yakalama -> PX4 yoluna ek gecikme, sim ms (gecikme.ek_ms)"
+    )
     g.add_argument("--qgc", action="store_true", help="QGroundControl'e canlı video (video.qgc: true)")
     g.add_argument("--videosuz", action="store_true", help="kosu.mp4 üretilmez (video.mp4: false)")
     g.add_argument("--kareleri-sakla", action="store_true", help="MP4'ün kareleri (kareler/) silinmez")
@@ -996,6 +1025,7 @@ def command_line(args: argparse.Namespace) -> hedef.CommandLine:
         params=tuple(args.param),
         px4_start=tuple(args.px4_baslat),
         delay_ms=args.gecikme_ms,
+        relock_wait_s=args.yeniden_kilit_bekleme_s,
         camera_tilt_deg=args.kamera_egim,
         qgc=args.qgc,
         no_video=args.videosuz,

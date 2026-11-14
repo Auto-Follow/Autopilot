@@ -2,9 +2,10 @@
 
 TEZ_LOS (spec 2026-11-10-m06-sim-ortami, "Varsayımlar" 1; not final until the shared ICD, m05): the line of sight to
 the target as DEBUG_VECT name "TEZ_LOS", x y z = unit vector in body FRD from the camera, time_usec = the frame's
-capture time; x = y = z = NaN means "no target". LosSender keeps the stream's rules (one message per frame, frames
-only forwards, at most one per camera frame interval) and Vehicle.send_los checks every vector before it goes out
-(two-sided validation: PX4 checks again). Every message of the connection goes through one lock (serialize_sends).
+capture time as the sender's clock stamps it (gecikme.ClockModel; no offset or drift by default); x = y = z = NaN
+means "no target". LosSender keeps the stream's rules (one message per frame, frames only forwards, at most one per
+camera frame interval) and Vehicle.send_los checks every vector before it goes out (two-sided validation: PX4 checks
+again). Every message of the connection goes through one lock (serialize_sends).
 
 FOLLOW_TARGET (spec 6, "Varsayımlar" 5): the target's flat-ground position for PX4's stock Follow Me ("Follow
 Target"), at most every third camera frame (~10 Hz; FollowTargetSender, same stream rules). PX4 v1.17.0 takes lat,
@@ -265,17 +266,26 @@ class FrameStream:
         return "gonderildi", at
 
 
-class LosSender(FrameStream):
-    """The TEZ_LOS stream: payload = unit LOS in body FRD or None (no target); at most one per camera frame."""
+def capture_usec(t: float) -> int:
+    """time_usec of a frame captured at sim time t [s] when nothing models the sender's clock: the capture time."""
+    return round(t * 1e6)
 
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+
+class LosSender(FrameStream):
+    """The TEZ_LOS stream: payload = unit LOS in body FRD or None (no target); at most one per camera frame. `stamp`
+    turns the frame's capture time into the sent time_usec (gecikme.ClockModel.time_usec; default the capture time)."""
+
+    def __init__(
+        self, clock: Callable[[], float] = time.monotonic, stamp: Callable[[float], int] = capture_usec
+    ) -> None:
         super().__init__(LOS_MIN_SPACING_S, clock)
+        self.stamp = stamp
 
     def check(self, payload: object) -> str | None:
         return check_los(payload)
 
     def write(self, link: object, t: float, payload: object) -> None:
-        link.send_los(round(t * 1e6), payload)
+        link.send_los(self.stamp(t), payload)
 
 
 class FollowTargetSender(FrameStream):

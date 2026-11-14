@@ -5,7 +5,7 @@
 > *"Autopilot reposundaki `agent-os/specs/2026-11-10-m06-sim-ortami/EKIP_ICIN_OZET.md` dosyasını oku; m06 simülasyonu
 > ve kararları buradadır."* Ayrıntı gerekirse aynı klasördeki `spec.md`, `tasks.md` ve `implementation/` belgeleri.
 >
-> Sahibi: Ahmet (m06, issue #7). Son güncelleme: 14.11.2026. Dal: `ozellik/m06-sim-ortami` (Autopilot).
+> Sahibi: Ahmet (m06, issue #7). Son güncelleme: 15.11.2026. Dal: `ozellik/m06-sim-ortami` (Autopilot).
 > Buradaki frame/mesaj tanımları **varsayımdır**; ortak spec'ler (yol haritası m03 frame, m04 haberleşme, m05 ICD)
 > yazılınca onlara göre güncellenir.
 
@@ -104,7 +104,10 @@ $P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --los hakem   #
 ```
 
 Önemli bayraklar: `--takip yok|tez_los|follow_me`, `--mod-adi`, `--model`, `--imgsz`, `--conf`, `--modelsiz`,
-`--videosuz`, `--kareleri-sakla`, `--qgc`, `--cikti`.
+`--videosuz`, `--kareleri-sakla`, `--qgc`, `--cikti`. Gecikme ve hedef kaybı denemeleri için (m06 görev grubu 12):
+`--gecikme-ms 200` (PX4'e giden her şey 200 **sim** ms geç; titreşim ve `TEZ_LOS` saat ofseti/kayması senaryonun
+`gecikme` bloğunda), `--yeniden-kilit-bekleme-s 1.5` (kilit düşünce operatör 1.5 s sonra yeniden seçer); koşuları yan
+yana koymak: `$P tez/sim/araclar/karsilastir.py <klasör A> <klasör B> [--html dosya.html]`.
 
 **QGC'de canlı görüntü** (m06 görev grubu 11): koşuya `--qgc` ekle; QGC 5.1.4 → Uygulama Ayarları → Video → "UDP h.264
 Video Stream", port 5600 (H.264 RTP, 1280×720, 15 kare/sim-s). Görüntüde modelin kutuları (kırmızı, seçilen kalın) ve

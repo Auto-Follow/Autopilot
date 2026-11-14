@@ -647,6 +647,8 @@ METRIC_GROUPS = (
             ("uctan_uca_ms_p50", "Uçtan uca gecikme, p50 [sim ms]"),
             ("uctan_uca_ms_p95", "Uçtan uca gecikme, p95 [sim ms]"),
             ("uctan_uca_ms_maks", "Uçtan uca gecikme, en çok [sim ms]"),
+            ("ek_gecikme_ms_ort", "Gecikme hattında geçen süre (yapay gecikme, gecikme.ek_ms), ortalama [sim ms]"),
+            ("ek_gecikme_ms_maks", "Gecikme hattında geçen süre, en çok [sim ms]"),
             ("uctan_uca_px4_ms_ort", "Uçtan uca gecikme, PX4'ün varış damgasıyla (yakalama → PX4), ortalama [sim ms]"),
             ("uctan_uca_px4_ms_p95", "Uçtan uca gecikme, PX4'ün varış damgasıyla, p95 [sim ms]"),
             ("px4_varis_eksi_gonderim_ms_ort", "PX4'ün varış damgası − gönderim, ortalama [ms]"),
@@ -946,6 +948,10 @@ def _settings_html(settings: Mapping) -> str:
         ("TEZ_LOS kaynağı (takip.los)", str(t.get("los"))),
         ("PX4'ün seçilebilir modları", ", ".join(t.get("px4_modlari") or []) or "–"),
         ("PX4 başlatma komutları", ", ".join(t.get("px4_baslat") or []) or "–"),
+        (
+            "Yeniden kilit beklemesi (takip.yeniden_kilit_bekleme_s)",
+            f"{t['yeniden_kilit_bekleme_s']:g} sim s" if t.get("yeniden_kilit_bekleme_s") is not None else "–",
+        ),
         ("Algılama", "açık" if d.get("etkin") else "kapalı (--modelsiz)"),
     ]
     if d.get("etkin"):
@@ -961,7 +967,7 @@ def _settings_html(settings: Mapping) -> str:
             ),
         ]
     g = settings.get("gecikme", {})
-    lines.append(("Gecikme", ", ".join(f"{k} {v}" for k, v in g.items()) or "–"))
+    lines.append(("Gecikme (ek_ms, titresim_ms: sim ms)", ", ".join(f"{k} {v}" for k, v in g.items()) or "–"))
     lines.append(("Kamera kusurları", ", ".join(settings.get("kusurlar") or {}) or "kapalı"))
     waiting = settings.get("henuz_bagli_degil") or {}
     if waiting:

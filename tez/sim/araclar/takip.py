@@ -9,6 +9,10 @@ Selection (Selection.step, once per processed model frame):
   - locked: the box whose centre is nearest to the previous choice, at most GATE_FACTOR x the previous box's diagonal
     away; the referee is not asked. LOST_AFTER processed frames in a row without such a box drop the lock, and the
     next processed frame tries the referee again (re-lock, counted).
+  - re-lock wait (takip.yeniden_kilit_bekleme_s, task group 12): after a lost lock the referee may lock again only
+    once the frames are that many sim seconds later than the frame that lost it (the operator clicks on the ground
+    station ~1-2 s later, or m11's own re-acquisition takes its time); meanwhile the frames are unlocked with the
+    reason tepki_bekleniyor. 0 s (default): the next processed frame, as before.
 
 Line of sight, from the camera to the target in body FRD (x nose, y right, z down), unit vectors:
   (i)  model: the chosen box's centre -> Camera.pixel_to_los (camera_info, distortion) -> camera_to_body(tilt), the
@@ -21,6 +25,9 @@ Tracker: model results come in ModelProcess' result thread (on_model), the refer
 thread (on_referee -> its own thread). The chosen source's messages go: DelayLine (gecikme.py) -> LosSender (one per
 frame, NaN = no target, never an invalid vector; px4_baglanti.py) -> Vehicle.send_los. A model frame becomes an
 algilama.csv row once its TEZ_LOS went out (or was refused); every TEZ_LOS attempt is a tez_los.csv row.
+The delay line runs on the sim clock: each message waits its gecikme.LinkDelay draw (gecikme.ek_ms + jitter) in sim
+milliseconds after it is ready, so PX4 gets it that much later in its own (lockstep) time; time_usec is the capture
+time through gecikme.ClockModel (offset, drift). Both are 0 by default.
 
 follow_me (spec 6): every chosen model box also gets its flat-ground position (konumlama.Locator, the EKF pose of the
 frame's capture time from the link's pose history), in every tracking source; with follow=True it goes to PX4 as
@@ -126,13 +133,23 @@ class Selection:
     """Temporary target selection of spec 5 (m11 brings the real one); one step() per processed frame."""
 
     def __init__(
-        self, gate_factor: float = GATE_FACTOR, lost_after: int = LOST_AFTER, lock_min_iou: float = LOCK_MIN_IOU
+        self,
+        gate_factor: float = GATE_FACTOR,
+        lost_after: int = LOST_AFTER,
+        lock_min_iou: float = LOCK_MIN_IOU,
+        relock_wait_s: float = 0.0,
     ) -> None:
+        """relock_wait_s [s sim]: after a lost lock, no lock with the referee before the frames are this much later
+        than the frame that lost it (takip.yeniden_kilit_bekleme_s; 0 = the next processed frame)."""
+        if not (math.isfinite(relock_wait_s) and relock_wait_s >= 0):
+            raise ValueError(f"takip.yeniden_kilit_bekleme_s: sonlu ve en az 0 olmalı, gelen: {relock_wait_s}")
         self.gate_factor = gate_factor
         self.lost_after = lost_after
         self.lock_min_iou = lock_min_iou
+        self.relock_wait_s = relock_wait_s
         self._last: Kutu | None = None  # the last chosen box while locked
         self._misses = 0
+        self._lost_t = math.nan  # [s sim] capture time of the frame that lost the last lock
         self.locks = 0  # first lock + re-locks
         self.losses = 0
 
@@ -144,10 +161,13 @@ class Selection:
     def relocks(self) -> int:
         return max(0, self.locks - 1)
 
-    def step(self, boxes: Sequence[Kutu], referee: Referee | None) -> Choice:
-        """The target's box in this frame's boxes; `referee` is used only to lock (None: no referee for it)."""
+    def step(self, boxes: Sequence[Kutu], referee: Referee | None, t: float = math.nan) -> Choice:
+        """The target's box in this frame's boxes; `referee` is used only to lock (None: no referee for it); t [s sim]:
+        the frame's capture time (for the re-lock wait; not a number: no wait)."""
         if self._last is not None:
-            return self._follow(boxes)
+            return self._follow(boxes, t)
+        if self.relock_wait_s > 0 and t < self._lost_t + self.relock_wait_s:
+            return Choice("kilitsiz", reason="tepki_bekleniyor")
         if referee is None:
             return Choice("kilitsiz", reason="hakem_yok")
         if not referee.visible:
@@ -161,7 +181,7 @@ class Selection:
         state = "ilk_kilit" if self.locks == 1 else "yeniden_kilit"
         return Choice(state, boxes[best], best, self.locks, lock_iou=scores[best])
 
-    def _follow(self, boxes: Sequence[Kutu]) -> Choice:
+    def _follow(self, boxes: Sequence[Kutu], t: float) -> Choice:
         cu, cv = box_centre(self._last)
         gate = (cu, cv, self.gate_factor * box_diagonal(self._last))
         distances = [math.hypot(box_centre(b)[0] - cu, box_centre(b)[1] - cv) for b in boxes]
@@ -173,6 +193,7 @@ class Selection:
         self._misses += 1
         if self._misses >= self.lost_after:
             self._last = None
+            self._lost_t = t
             self.losses += 1
             return Choice("kilit_kaybi", lock_no=self.locks, misses=self._misses, gate=gate, distance=distance)
         return Choice("eslesmedi", lock_no=self.locks, misses=self._misses, gate=gate, distance=distance)
@@ -183,7 +204,7 @@ class Selection:
 # became of it; the send columns stay empty when TEZ_LOS comes from the referee (takip.los: hakem).
 ROW_COLUMNS = (
     "secim",  # Choice.state
-    "kilitsiz_neden",
+    "kilitsiz_neden",  # hakem_yok | hedef_gorunmuyor | kutu_eslesmedi | tepki_bekleniyor (re-lock wait)
     "kilit_no",
     "ardisik_kacirma",
     "secilen_kutu",  # index in kutular.csv (0 = most confident)
@@ -211,7 +232,7 @@ ROW_COLUMNS = (
     "serbest_sim",
     "gonderim_sim",
     "takip_ms",  # [ms] hazir - alinma: selection + LOS in the tracking thread
-    "ek_gecikme_ms",  # [ms] serbest - hazir: time in the delay line (no artificial delay before task group 12)
+    "ek_gecikme_ms",  # [ms sim] serbest_sim - hazir_sim: time in the delay line (gecikme.ek_ms + jitter, and waiting)
     "uctan_uca_ms",  # [ms sim] gonderim - capture
     # flat-ground position of the chosen box (konumlama.py), every tracking source
     "konum",  # konumlama.STATUSES: hesaplandi | kutu_yok | kamera_yok | kenar | poz_yok | referans_yok | ufka_yakin
@@ -252,7 +273,7 @@ LOS_COLUMNS = (
     "x",
     "y",
     "z",
-    "time_usec",  # DEBUG_VECT.time_usec as sent: capture time (no clock model before task group 12)
+    "time_usec",  # DEBUG_VECT.time_usec as sent: capture time through gecikme.ClockModel (offset, drift)
     "sonuc",
     "kaynak_hazir",  # [s monotonic] model: the result reached the main process; hakem: row + segmentation were in
     "hazir",
@@ -261,7 +282,7 @@ LOS_COLUMNS = (
     "gonderim_sim",
     "kaynak_ms",  # [ms sim] kaynak_hazir - capture
     "hazir_ms",  # [ms sim] hazir - capture
-    "ek_gecikme_ms",
+    "ek_gecikme_ms",  # [ms sim] serbest_sim - hazir_sim
     "uctan_uca_ms",
 )
 # follow_target.csv: every FOLLOW_TARGET attempt (follow_me); t_us joins the other files
@@ -300,7 +321,7 @@ class Tracker:
         out: Path,
         detections: algilama.DetectionLog | None,
         camera: Callable[[], kamera.Camera | None],
-        extra_ms: float = 0.0,
+        delay: gecikme.LinkDelay | None = None,
         now: Callable[[], float] = time.monotonic,
         follow: bool = False,
         locator: konumlama.Locator | None = None,
@@ -308,14 +329,19 @@ class Tracker:
         truth: Callable[[float], tuple[float, float]] | None = None,
         mount: np.ndarray = NOMINAL_MOUNT,
         overlay: Callable[[goruntu_yayini.BoxMessage], None] | None = None,
+        stamp: gecikme.ClockModel | None = None,
+        relock_wait_s: float = 0.0,
     ) -> None:
         """clock: sim <-> wall; out: run folder (tez_los.csv, follow_target.csv); detections: algilama.csv (None
-        without a model); camera: the drone camera's camera_info once known (Recorder.camera); extra_ms [ms]:
-        artificial delay (0 until task group 12); now: monotonic clock [s]; follow: send FOLLOW_TARGET (follow_me);
+        without a model); camera: the drone camera's camera_info once known (Recorder.camera); delay: the artificial
+        delay of each message in sim ms (gecikme.ek_ms, titresim_ms; None: none); now: monotonic clock [s]; follow:
+        send FOLLOW_TARGET (follow_me);
         locator: flat-ground positions of the model's boxes (None: none); world: the Gazebo world's geodetic origin
         (evaluation columns; the referee's FOLLOW_TARGET); truth: the target's true (x, y) [m] at a sim time
         (evaluation only); mount: C_cb (optical -> body FRD) of LOS (i), kamera.camera_to_body(the scenario's tilt);
-        overlay: the live stream's boxes (goruntu_yayini.BoxSender.send; None: no stream)."""
+        overlay: the live stream's boxes (goruntu_yayini.BoxSender.send; None: no stream); stamp: the clock that stamps
+        TEZ_LOS time_usec (gecikme.saat_ofset_ms, saat_kayma_ppm; None: the capture time); relock_wait_s [s sim]: the
+        re-lock wait after a lost lock (takip.yeniden_kilit_bekleme_s; 0: the next processed frame)."""
         if source not in SOURCES:
             raise ValueError(f"takip.los: {list(SOURCES)} olmalı, gelen: {source!r}")
         if follow and source == "hakem" and world is None:
@@ -334,14 +360,17 @@ class Tracker:
         self._overlay = overlay
         self._poses: konumlama.PoseHistory | None = None
         self.poses: konumlama.PoseHistory | None = None  # the last link's history, kept after detach (metrics)
-        self.selection = Selection()
-        self.sender = px4_baglanti.LosSender(now)
+        self.delay = delay if delay is not None else gecikme.LinkDelay()
+        self.stamp = stamp if stamp is not None else gecikme.ClockModel()
+        self.selection = Selection(relock_wait_s=relock_wait_s)
+        self.sender = px4_baglanti.LosSender(now, self.stamp.time_usec)
         self.follow_sender = px4_baglanti.FollowTargetSender(now)
         self.fixes: Counter[str] = Counter()  # Locator results of the whole run
         self.follow_attempts: list[dict] = []  # follow_target.csv rows
         self._ft_file = None
         self._ft_writer = None
-        self._line = gecikme.DelayLine(self._deliver, extra_ms, now, name="tez-gecikme-hatti")
+        # in sim time: the delay is the real system's latency, and PX4 lives in sim time (gecikme.py)
+        self._line = gecikme.DelayLine(self._deliver, 0.0, self._sim_now, name="tez-gecikme-hatti")
         self._lock = threading.Lock()
         self._referees: dict[int, Referee] = {}
         self._newest_referee = 0
@@ -387,7 +416,7 @@ class Tracker:
         key = algilama.time_key(r.t)
         with self._lock:
             referee = self._referees.get(key)
-        choice = self.selection.step(r.kutular, referee)
+        choice = self.selection.step(r.kutular, referee, r.t)
         if choice.reason == "hakem_yok":
             with self._lock:
                 self._no_referee.append(key)
@@ -406,9 +435,10 @@ class Tracker:
                 self.fixes[fix.status] += 1
             extra |= self._fix_columns(fix, r.t)
         hazir = self._now()
-        extra |= {"hazir": hazir, "hazir_sim": self._clock.to_sim(hazir), "takip_ms": (hazir - alinma) * 1000.0}
+        hazir_sim = self._clock.to_sim(hazir)
+        extra |= {"hazir": hazir, "hazir_sim": hazir_sim, "takip_ms": (hazir - alinma) * 1000.0}
         if self.source == "model" and not self._closed:
-            self._line.put(("model", r, alinma, extra, los, fix, hazir), hazir)
+            self._line.put(("model", r, alinma, extra, los, fix, hazir, hazir_sim), hazir_sim, self.delay.draw_ms())
         else:
             self._write_row(r, alinma, extra)
 
@@ -434,7 +464,9 @@ class Tracker:
                     if self.follow and seen and all(math.isfinite(c) for c in referee.position):
                         point = konumlama.GeoPoint(*self._world.to_geodetic(*referee.position))  # a perfect GPS
                     hazir = self._now()
-                    self._line.put(("hakem", t, los, point, ready, hazir), hazir)
+                    hazir_sim = self._clock.to_sim(hazir)
+                    message = ("hakem", t, los, point, ready, hazir, hazir_sim)
+                    self._line.put(message, hazir_sim, self.delay.draw_ms())
             except Exception as e:  # noqa: BLE001 - the thread keeps going; the run reports it
                 self._error(f"hakem karesi işlenemedi: {type(e).__name__}: {e}")
             finally:
@@ -479,15 +511,21 @@ class Tracker:
 
     # --- output -------------------------------------------------------------------------------------------------
 
-    def _deliver(self, item: tuple, serbest: float) -> None:
-        """DelayLine: one message leaves the line -> LosSender -> rows. Runs in the producer's or the line's thread."""
+    def _sim_now(self) -> float:
+        """The delay line's clock: sim time now [s] (NaN before the first clock message)."""
+        return self._clock.to_sim(self._now())
+
+    def _deliver(self, item: tuple, serbest_sim: float) -> None:
+        """DelayLine: one message leaves the line (at serbest_sim, sim s) -> LosSender -> rows. Runs in the
+        producer's or the line's thread."""
+        serbest = self._now()
         try:
             if item[0] == "model":
-                _, r, alinma, extra, los, fix, hazir = item
+                _, r, alinma, extra, los, fix, hazir, hazir_sim = item
                 result, at = self.sender.send(r.t, los)
-                sent = self._attempt(r.t, "model", los, result, alinma, hazir, serbest, at)
+                sent = self._attempt(r.t, "model", los, result, alinma, (hazir, hazir_sim), (serbest, serbest_sim), at)
                 extra |= {f"tez_los_{k}": v for k, v in zip("xyz", _vector(los), strict=True)}
-                extra |= {"tez_los_sonuc": result, "serbest": serbest, "serbest_sim": self._clock.to_sim(serbest)}
+                extra |= {"tez_los_sonuc": result, "serbest": serbest, "serbest_sim": serbest_sim}
                 extra |= {"ek_gecikme_ms": sent["ek_gecikme_ms"], "gonderim": sent["gonderim"]}
                 extra |= {"gonderim_sim": sent["gonderim_sim"], "uctan_uca_ms": sent["uctan_uca_ms"]}
                 if self.follow:
@@ -496,9 +534,9 @@ class Tracker:
                     )
                 self._write_row(r, alinma, extra)
             else:
-                _, t, los, point, ready, hazir = item
+                _, t, los, point, ready, hazir, hazir_sim = item
                 result, at = self.sender.send(t, los)
-                self._attempt(t, "hakem", los, result, ready, hazir, serbest, at)
+                self._attempt(t, "hakem", los, result, ready, (hazir, hazir_sim), (serbest, serbest_sim), at)
                 if self.follow and point is not None:
                     self._follow(t, "hakem", point, ready, hazir, serbest)
         except Exception as e:  # noqa: BLE001 - one message lost is reported; the line must keep going
@@ -604,11 +642,13 @@ class Tracker:
         los: np.ndarray | None,
         result: str,
         origin: float,
-        hazir: float,
-        serbest: float,
+        ready: tuple[float, float],
+        released: tuple[float, float],
         at: float,
     ) -> dict:
+        """One tez_los.csv row. ready, released: (monotonic, sim) [s] of entering and leaving the delay line."""
         to_sim = self._clock.to_sim
+        (hazir, hazir_sim), (serbest, serbest_sim) = ready, released
         sent = result == "gonderildi"
         gonderim_sim = to_sim(at) if sent else math.nan
         x, y, z = _vector(los)
@@ -620,7 +660,7 @@ class Tracker:
             "x": x,
             "y": y,
             "z": z,
-            "time_usec": algilama.time_key(t),
+            "time_usec": self.stamp.time_usec(t),
             "sonuc": result,
             "kaynak_hazir": origin,
             "hazir": hazir,
@@ -629,7 +669,7 @@ class Tracker:
             "gonderim_sim": gonderim_sim,
             "kaynak_ms": (to_sim(origin) - t) * 1000.0,
             "hazir_ms": (to_sim(hazir) - t) * 1000.0,
-            "ek_gecikme_ms": (serbest - hazir) * 1000.0,
+            "ek_gecikme_ms": (serbest_sim - hazir_sim) * 1000.0,
             "uctan_uca_ms": (gonderim_sim - t) * 1000.0,
         }
         with self._lock:

@@ -90,6 +90,82 @@ def test_lock_drops_after_ten_processed_frames_without_a_match_and_the_referee_l
     assert s.step([], None).misses == 1 and s.losses == 1
 
 
+def scripted_frames(target: tuple[float, float, float, float]) -> list[tuple[list, takip.Referee | None, float]]:
+    """A lock, its loss after LOST_AFTER empty frames at 61.0 s, then the target's box every 0.1 s again."""
+    far = box(1600, 500, 1660, 680)
+    frames = [([box(*target)], referee(target), 60.0)]
+    frames += [([far] if k % 3 == 0 else [], referee(target), 60.0 + 0.1 * k) for k in range(1, takip.LOST_AFTER + 1)]
+    frames += [([far, box(1002, 498, 1061, 684)], referee(target), 61.0 + 0.1 * k) for k in range(1, 26)]
+    return frames
+
+
+def test_relock_waits_the_reaction_time_after_a_lost_lock() -> None:
+    """takip.yeniden_kilit_bekleme_s (tasks.md 12.4): after the lock drops at 61.0 s the referee may lock again only
+    from 61.0 + 1.5 s on (sim time of the frames); until then every frame is unlocked with the reason
+    tepki_bekleniyor, whatever the referee says. The first lock does not wait."""
+    target = (1000.0, 500.0, 1060.0, 680.0)
+    s = takip.Selection(relock_wait_s=1.5)
+    choices = [(t, s.step(boxes, ref, t)) for boxes, ref, t in scripted_frames(target)]
+    assert choices[0][1].state == "ilk_kilit"
+    lost = [t for t, c in choices if c.state == "kilit_kaybi"]
+    assert lost == [pytest.approx(61.0)]
+    waiting = [t for t, c in choices if c.reason == "tepki_bekleniyor"]
+    assert waiting == pytest.approx([61.0 + 0.1 * k for k in range(1, 15)])  # 61.1 ... 62.4: 14 frames, 1.4 s
+    assert all(c.state == "kilitsiz" and c.box is None for t, c in choices if t in waiting)
+    relock = next((t, c) for t, c in choices if c.state == "yeniden_kilit")
+    assert relock[0] == pytest.approx(62.5) and relock[1].index == 1 and relock[1].lock_no == 2
+    assert (s.locks, s.relocks, s.losses) == (2, 1, 1)
+    # no referee during the wait: still the reaction time, not hakem_yok
+    w = takip.Selection(relock_wait_s=1.5)
+    for boxes, ref, t in scripted_frames(target)[: takip.LOST_AFTER + 1]:
+        w.step(boxes, ref, t)
+    assert w.step([box(*target)], None, 61.2).reason == "tepki_bekleniyor"
+    assert w.step([box(*target)], None, 62.6).reason == "hakem_yok"
+    with pytest.raises(ValueError, match="yeniden_kilit_bekleme_s"):
+        takip.Selection(relock_wait_s=-0.1)
+
+
+def test_relock_without_a_wait_is_the_behaviour_of_before() -> None:
+    """0 s (the default): the next processed frame after the loss locks again, choice for choice the same as the
+    selection without the frame times (task group 5's behaviour)."""
+    target = (1000.0, 500.0, 1060.0, 680.0)
+    before, zero = takip.Selection(), takip.Selection(relock_wait_s=0.0)
+    old = [before.step(boxes, ref) for boxes, ref, _ in scripted_frames(target)]
+    new = [zero.step(boxes, ref, t) for boxes, ref, t in scripted_frames(target)]
+    assert new == old
+    states = [c.state for c in new]
+    k = states.index("kilit_kaybi")
+    assert states[k + 1] == "yeniden_kilit" and "tepki_bekleniyor" not in {c.reason for c in new}
+
+
+def test_the_tracker_writes_the_reaction_time_into_algilama_csv(tmp_path: Path) -> None:
+    """The Tracker passes takip.yeniden_kilit_bekleme_s to the selection: the frames of the wait are rows with
+    kilitsiz_neden tepki_bekleniyor, and the lock events show the loss and the late re-lock."""
+    clock = goruntu.SimClock()
+    for k in range(1001):
+        clock.add(sim=60.0 + k * 0.01, wall=1000.0 + k * 0.01)
+    now = FakeClock(1000.0)
+    detections = algilama.DetectionLog(tmp_path, clock, takip.ROW_COLUMNS)
+    tr = takip.Tracker("model", clock, tmp_path, detections, camera=lambda: CM3, now=now, relock_wait_s=1.5)
+    target = (1000.0, 500.0, 1060.0, 680.0)
+    row = {"gorunur": True, "los_govde_x": 0.7, "los_govde_y": 0.0, "los_govde_z": 0.7}
+    row |= dict(zip(("hedef_kutu_u0", "hedef_kutu_v0", "hedef_kutu_u1", "hedef_kutu_v1"), target, strict=True))
+    for boxes, _, t in scripted_frames(target):
+        tr.on_referee(t, row | {"t": t}, 1000.0 + (t - 60.0) + 0.04)
+        tr.wait_idle()
+        now.t = 1000.0 + (t - 60.0) + 0.12
+        tr.on_model(model_result(t, boxes, now.t), now.t)
+    tr.close()
+    detections.close()
+    with (tmp_path / "algilama.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    waiting = [float(r["t"]) for r in rows if r["kilitsiz_neden"] == "tepki_bekleniyor"]
+    assert waiting == pytest.approx([61.0 + 0.1 * k for k in range(1, 15)], abs=1e-6)
+    assert max(waiting) - min(waiting) == pytest.approx(1.3, abs=1e-6)  # frames 61.1-62.4: the wait is 1.5 s
+    events = [(e["olay"], round(e["t"], 3)) for e in tr.summary()["kilit"]["olaylar"]]
+    assert events == [("ilk_kilit", 60.0), ("kilit_kaybi", 61.0), ("yeniden_kilit", 62.5)]
+
+
 def gazebo_quat(roll: float, pitch: float, yaw: float) -> np.ndarray:
     """Gazebo model orientation (ENU world, FLU body) of Euler angles [deg] (z-y-x)."""
     r, p, y = (math.radians(a) / 2 for a in (roll, pitch, yaw))
