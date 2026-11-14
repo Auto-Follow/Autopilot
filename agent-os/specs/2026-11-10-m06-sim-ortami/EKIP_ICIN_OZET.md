@@ -1,0 +1,114 @@
+# m06 Simülasyon Ortamı — Ekip (ve ekibin Claude'u) için özet
+
+> **Bu dosya kimin için:** Auto-Follow ekibindeki herkesin ve onların Claude / Agent OS oturumlarının, m06
+> simülasyonunu ve ondan çıkan kararları tek yerden öğrenmesi için. Claude'a şöyle söyleyebilirsiniz:
+> *"Autopilot reposundaki `agent-os/specs/2026-11-10-m06-sim-ortami/EKIP_ICIN_OZET.md` dosyasını oku; m06 simülasyonu
+> ve kararları buradadır."* Ayrıntı gerekirse aynı klasördeki `spec.md`, `tasks.md` ve `implementation/` belgeleri.
+>
+> Sahibi: Ahmet (m06, issue #7). Son güncelleme: 14.11.2026. Dal: `ozellik/m06-sim-ortami` (Autopilot).
+> Buradaki frame/mesaj tanımları **varsayımdır**; ortak spec'ler (yol haritası m03 frame, m04 haberleşme, m05 ICD)
+> yazılınca onlara göre güncellenir.
+
+## 1. Sim ne yapıyor? (bir paragraf)
+
+Gazebo Harmonic + PX4 SITL v1.17.0 (stok kod, PX4 dosyası değişmedi) üzerinde, gerçek dronumuza benzeyen bir X500
+(`x500_tez`) ve yürüyen insanlar var. Dronun kamerası (Camera Module 3 benzeri) görüntüyü laptoptaki insan algılama
+modeline (Ortatepe v0.2, YOLOv8s tabanlı, CPU) veriyor; seçilen kişinin yönü (`TEZ_LOS`) ve yerdeki konumu
+(`FOLLOW_TARGET`) PX4'e gidiyor; PX4'ün takip modu dronu hareket ettiriyor; döngü kapalı. Simülasyon kişinin gerçek
+yerini her karede bildiği için ("hakem") modelin, hedef seçiminin ve uçuşun doğruluğu sayıyla ölçülüyor. Her koşu bir
+video (`kosu.mp4`: kamera + kuşbakışı harita), bir rapor (`rapor.html`) ve ~100 ölçütlük `ozet.json` üretiyor.
+
+## 2. Kamera ve montaj (kesinleşen sim varsayılanı, gerçek için öneri)
+
+**Değerler için tek dosya: `tez/sim/kamera_montaji.yaml`** (sim'in kullandığı değerlerle testle eşleşir).
+
+| | Değer |
+|---|---|
+| Kamera | Raspberry Pi Camera Module 3 **Standard**; simde yatay FOV 66.0° (1.151917 rad), düşey 40.1°, 2304×1296, 30 fps, bozulmasız |
+| Montaj | gövdeye sabit (gimbal yok), **35° aşağı** (14.11.2026 kararı; öncesinde 45°), base_link'e göre FLU (0.151, 0, −0.035) m = FRD (0.151, 0, 0.035) m |
+| Gerçek montaj | **henüz yapılmadı.** Öneri 35° (+1° içinde); takılınca açı araçta ±0.5° ölçülüp Pi'ye verilmeli. Öneri: 30–40° arasında 2.5° adımlı ayarlanabilir parça (model değişince en iyi açı değişebilir) |
+| Uçuş önerisi (doğrulanmamış) | **9 m yükseklik, kişinin 12.9 m gerisi** (≈ 1.43 × yükseklik = yükseklik / tan 35°); stok Follow Me ile 11.4 m'nin altına inilmemeli |
+
+Neden 35°: ~180 koşuluk modelli tarama (30–45°, 4–15 m, farklı mesafeler; her aday iki yolda 3–6 koşu). 45°'de dron
+köşelerde kişiye çok yaklaşıp kadrajdan çıkarıyor; 37.5° ani geri dönüşte kişiyi 6 koşunun 5'inde kaybetti; 12–15 m'de
+v0.2 kişiyi neredeyse hiç bulamıyor. Belge: `implementation/gorev-grubu-17-on-kamera-acisi.md` (bölüm 17–19).
+
+## 3. Eksenler (varsayım; m03 yazılınca güncellenir)
+
+- Kamera: OpenCV optik frame — x sağ, y aşağı, z ileri; piksel orijini sol üst (u sağa, v aşağı).
+- Gövde: PX4 FRD — x burun, y sağ kanat, z aşağı.
+- Gazebo: dünya ENU, modeller FLU; FLU → FRD = diag(1, −1, −1).
+- Eğim 0 iken optik → gövde: optik z → x, optik x → y, optik y → z; sonra burun aşağı `egim` kadar döndürülür.
+- Kod: `tez/sim/araclar/kamera.py` (`Camera.pixel_to_los`, `camera_to_body`). Ortatepe'nin m10 requirements'ındaki kurallar bunlarla aynı.
+
+## 4. PX4'e giden mesajlar (varsayım; m05 ICD yazılınca güncellenir)
+
+| Mesaj | İçerik | Sıklık | "Hedef yok" |
+|---|---|---|---|
+| `DEBUG_VECT`, `name = "TEZ_LOS"` | x, y, z = kameradan hedefe **gövde FRD birim vektör** (kutu merkezi; attitude kullanılmaz). Normu 1'den 1e-3'ten fazla sapan ya da sonlu olmayan vektör gönderilmez | işlenen kare başına bir, ≤ 30 Hz, aynı kare iki kez gitmez | x = y = z = NaN |
+| `FOLLOW_TARGET` | kişinin ayak noktasının düz zemin varsayımıyla enlem/boylamı (1e7 tamsayı), `alt` = zemin AMSL, hızlar NaN | ≤ 10 Hz | gönderilmez |
+
+PX4 v1.17.0 notları (kaynaktan doğrulandı): `debug_vect` uORB'a `time_usec`'i taşımaz → alıcı **varış zamanıyla** zaman
+aşımı yapmalı ve `name == "TEZ_LOS"` ile süzmeli. `FOLLOW_TARGET`'ta `est_capabilities` okunmaz; bilinmeyen hız 0 değil
+NaN gönderilmeli. PX4 `FOLLOW_TARGET`'ı en çok 500 ms'de bir füzyonlar. MAVLink: sim yer istasyonu gibi UDP 14540'ta,
+QGC 14550'de. Kod: `tez/sim/araclar/px4_baglanti.py` (`send_los`, `send_follow_target`).
+
+## 5. Takip modu ve kendi modunu takmak (m15 — Yusuf Kurt / Yusuf Algan)
+
+- Sim modu **adıyla** seçer (`AVAILABLE_MODES`); numara koda gömülü değil. Ekipten gelen bilgi (09.11, kesin değil):
+  mod adı **"AUTO FOLLOW"**, parametreler **`AF_XXX`**. Hazır olunca:
+  `senaryo.py --senaryo takip_yuruyen --takip tez_los --mod-adi "AUTO FOLLOW"`. Ad yanlışsa sim açılmadan PX4'ün mod
+  listesiyle hata verir.
+- Ağaç dışı modülü derleyip başlatma (`derle.sh --harici`, `--px4-baslat`): m06 görev grubu 10'da gelecek.
+- **Stok Follow Me ölçümleri = m15 için gereksinim listesi** (spec "PX4 stok Follow Target davranışı"):
+  - Mod açılınca hedefin kuzeye gittiğini varsayar (`FlightTaskAutoFollowTarget.hpp:284`), hedef ≥ 1 m/s olmadan rotayı
+    güncellemez (`.cpp:191`) → başta gereksiz yörünge dönüşü.
+  - Model konumundaki sıçramaları hız sanıp duran kişinin etrafında salınır; simde `FLW_TGT_RS 0.3` ile bastırıldı
+    (gerçek dronda 0.1; bedeli köşede 0.5–0.9 s geç dönüş).
+  - Kişi durunca/dönünce kestirim kişiyi geçer; dron ortalama **≈ 6.2 m** yaklaşır (mesafeden bağımsız). Stok modda en az
+    mesafe koruması yok → **m15'te olmalı.**
+  - Kestirim 3 s güncellenmezse dron son noktada havada bekler; mod değişmez, uyarı yok → kişi kaybında tanımlı davranış gerekli.
+  - Gerçek uçuşta `follow_target*` konuları ULog'a girmiyor (kaydedici açılışında yoklar) — açık konu.
+
+## 6. Model ve görüntü işleme için ölçülenler (m08/m10/m11 — Yusuf Ortatepe)
+
+- Model: `person_detection_model_v0.2.pt` (sha256 `c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440`),
+  imgsz 640, conf 0.25, laptop CPU ≈ 85–100 ms/kare; kameradan PX4'e uçtan uca ≈ 120 ms. Repoda değil; yolu `--model`.
+- Bulma oranı kişinin görüntüdeki boyuna bağlı (~104 000 kare): 150–180 px **%61**, 120–150 px **%25**, < 120 px **%3**.
+  Daha zor: yandan görünen kişi, kısmen örtülen, başka biriyle yan yana (kutu birleşiyor), kadraj kenarında kesik.
+  Aynı boyda 30° bakış 45°'ten iyi. Kalabalıkta 35°'de yanlış kişiye geçme %16 (45°'de %6–12).
+- Veri toplama / eğitim önerileri: 30–40° yukarıdan bakış, kişi 120–200 px, yandan görünüm, yan yana duran kişiler;
+  simin segmentasyon kamerası otomatik etiketli sentetik veri üretebilir (gerçek veriyle karıştırılarak; istenirse m06 aracı yazar).
+- m11 için: kişi bulunamayan kareler %27–47; konum titreşimi PX4'te sahte hız üretiyor; PX4'e süzülmüş hız gönderilirse
+  salınımın kalkması bekleniyor (PX4 kodundan çıkarım, denenmedi).
+- Ayrıntı: `implementation/gorev-grubu-17-on-kamera-acisi.md` ("Model hangi koşullarda iyi algılıyor", Ortatepe'ye öneriler).
+
+## 7. Simi çalıştırmak (Autopilot kökünden)
+
+```bash
+tez/sim/derle.sh && tez/sim/kur.sh                     # bir kere (kurulum betiği 13. grupta tamamlanacak)
+P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz          # tek koşu (~3 dk)
+$P tez/sim/araclar/toplu.py --senaryo takip_yuruyen --tekrar 3            # aynı senaryo 3 kez, dağılım
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --los hakem   # "mükemmel algılayıcı" ile karşılaştırma
+```
+
+Önemli bayraklar: `--takip yok|tez_los|follow_me`, `--mod-adi`, `--model`, `--imgsz`, `--conf`, `--modelsiz`,
+`--videosuz`, `--kareleri-sakla`, `--cikti`. Senaryolar `tez/sim/senaryolar/` (`takip_yuruyen` = 35° montaj, 9 m /
+12.9 m; `takip_yuruyen_45_10m`, `takip_yuruyen_45_8m` = eski 45° karşılaştırma; `kalabalik_park`, `kivrimli_yuruyus`,
+`yuruyen_insan`). Çıktılar `tez/sim/sonuclar/<klasör>/` (git'e girmez). Aynı anda tek sim çalışır.
+
+## 8. Kurallar ve sınırlar
+
+- PX4/ROMFS/submodule değişmez (`tez/pin/verify_pin.sh --worktree` → "KILIT SAGLAM"); başlangıç parametreleri
+  `tez/sim/parametreler/` ve senaryolardan `PX4_PARAM_*` ile.
+- Model, video, ULog repoya girmez. Yeni paketler sabit sürümüyle `tez/env/VERSIONS.md`'de (ultralytics, torch, ffmpeg).
+- Simin gerçeği temsil etmediği yanlar: rüzgâr yok; GPS/baro yüksekliği kusursuz; zemin düz; kamera kusursuz (pozlama,
+  bulanıklık, gürültü yok — Faz B); tek insan modeli, tek ışık; model laptop CPU'sunda (Hailo değil); RTF ≈ 0.8 (sim
+  gerçek zamandan yavaş).
+
+## 9. Karar bekleyenler
+
+Kamera montaj açısı (öneri 35°) · m01'e "en az yatay mesafe" ölçütü (öneri ≥ 3 m) · gerçek uçuşta `follow_target`
+kaydı · ortak model saklama yeri · `TEZ_LOS` biçiminin m05'te kesinleşmesi · yer istasyonunda görüntü/takip gösterim
+yöntemi (öneri: önce QGC video + videoya çizili kutular; gerekirse PySide6 uygulaması; QGC'yi kaynaktan özelleştirmek en son).

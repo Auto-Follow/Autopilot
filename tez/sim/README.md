@@ -12,6 +12,10 @@ Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodl
 > senaryonun N koşusu ve dağılımı (`toplu.py`), her koşunun VLC'de açılan videosu (`kosu.mp4`: dron kamerası +
 > kuşbakışı harita). m06'nın devamı (harici modül, QGC yayını): `agent-os/specs/2026-11-10-m06-sim-ortami/`.
 
+> **Ekip için kısa özet** (kamera ve montaj, eksenler, PX4'e giden mesajlar, kendi modunu takmak, model ölçümleri,
+> karar bekleyenler): [`agent-os/specs/2026-11-10-m06-sim-ortami/EKIP_ICIN_OZET.md`](../../agent-os/specs/2026-11-10-m06-sim-ortami/EKIP_ICIN_OZET.md).
+> Kamera değerlerini kopyalamak için tek dosya: [`kamera_montaji.yaml`](kamera_montaji.yaml).
+
 PX4 kaynağı, ROMFS ve submodule'ler **değişmez** (`tez/pin/verify_pin.sh --worktree` → "KILIT SAGLAM"); dron, dünya
 ve başlangıç parametreleri `tez/sim/` altında durur.
 

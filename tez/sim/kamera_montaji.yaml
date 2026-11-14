@@ -1,0 +1,38 @@
+# Camera of the thesis drone in the simulation (x500_tez) and the proposed real mount — one place to copy values from.
+# Read by people and by teammates' tools (Vision copies the values into its own config; it must not read this file at
+# run time, rule 7). The simulation itself takes the same values from models/x500_tez/model.sdf and
+# araclar/kamera.py (NOMINAL_TILT_DEG); testler/test_kamera_montaji.py fails if this file and those two disagree.
+# Decision and evidence: agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-17-on-kamera-acisi.md
+# (sections 17-19) and ~/Desktop/Follow/3_m06_Simulasyon/Kamera_Acisi_ve_Mesafe_Modelli_Tarama.pdf (outside the repo).
+
+kamera:
+  model: Raspberry Pi Camera Module 3, Standard lens (not Wide)
+  yatay_fov_rad: 1.151917          # 66.0 deg (sim); real CM3 Standard ~66 deg, not calibrated yet (roadmap m09)
+  dikey_fov_deg: 40.1              # derived from the horizontal FOV and 16:9
+  genislik_px: 2304
+  yukseklik_px: 1296
+  fps: 30
+  bozulma: none                    # sim camera is distortion-free; the real lens needs calibration (m09)
+  gazebo_konulari:
+    goruntu: /x500_tez/kamera/image
+    kamera_bilgisi: /x500_tez/kamera/camera_info
+    segmentasyon: /x500_tez/kamera_seg   # ground truth only (the "referee"), not available on the real drone
+
+montaj:
+  egim_asagi_deg: 35.0             # optical axis below the nose; sim default since 14.11.2026 (before: 45)
+  gerceklik: proposed              # the real mount is not built yet; measure the tilt (+/-0.5 deg) when fitted
+  tolerans_deg: 1.0                # keep within +1 deg; 32.5 deg was fine in the sim, 37.5 deg lost the person on sharp turns
+  konum_base_link_flu_m: [0.151, 0.0, -0.035]   # Gazebo model frame FLU (x forward, y left, z up)
+  konum_base_link_frd_m: [0.151, 0.0, 0.035]    # same point in PX4 body FRD
+  gimbal: none                     # fixed to the body
+
+ucus_onerisi:                      # not verified; check on the first field flight (test plan in the PDF, section 19)
+  yukseklik_m: 9.0                 # range 8-9 m with this model (v0.2); at 12-15 m the model barely finds a person
+  geride_durma_m: 12.9             # = height / tan(35 deg) ~ 1.43 x height; with stock Follow Me never below 11.4 m
+  takip_modu_notu: stock PX4 Follow Target overshoots on stops/turns (~6.2 m closer); m15 needs a minimum-distance guard
+
+eksenler:                          # assumptions until the shared specs (roadmap m03, m05) are written
+  optik: OpenCV optical frame - x right, y down, z forward; pixel origin top-left, u right, v down
+  govde: PX4 FRD - x nose, y right, z down
+  gazebo: world ENU, models FLU; FLU -> FRD = diag(1, -1, -1)
+  optik_to_govde_egim0: optical z -> body x, optical x -> body y, optical y -> body z; then pitch down by egim_asagi_deg
