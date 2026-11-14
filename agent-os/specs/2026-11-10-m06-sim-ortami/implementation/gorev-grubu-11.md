@@ -192,8 +192,8 @@ Her koşu GEÇTİ; paylaşılan halkada ezilen kare 0, kuyruk dolu olduğu için
   tur, pasif aboneyle); "kaydı/yayını ayrı çekirdeğe almak" → uygulanmadı: payın çoğu iş değil abonelikti, Gazebo'nun
   iş parçacıkları sabitlenmeden bir çekirdeğe almak SMT kardeşiyle çakışmayı garanti etmez ve paylaşımdan sonra
   ölçülecek pay kalmadı.
-- **Öneri (kullanıcı onayı bekliyor):** 13.11'deki "RTF'in önemli olduğu ölçümlerde `--videosuz`" kuralı kalksın;
-  ölçüm koşuları da videolu koşulsun (her koşunun `kosu.mp4`'ü olur). Onay gelene kadar kural yazılı kalır.
+- **Karar (kullanıcı kararı 15.11.2026, Ahmet):** 13.11'deki "RTF'in önemli olduğu ölçümlerde `--videosuz`" kuralı kalktı; ölçüm koşuları da
+  videolu koşulur (her koşunun `kosu.mp4`'ü olur).
 
 ## 6. Koşular (11.7)
 
@@ -260,13 +260,14 @@ kare/sim-s, RTF 1.00, fx 1773.9; `SYS_AUTOSTART` 4001; 21/21 parametre; Hold + F
 
 ## 9. Açık konular ve sorulacaklar
 
-- **Kullanıcıya:** `--videosuz` kuralı (karar 13.11) kalksın mı? Öneri: evet (bölüm 5.5).
-- **Kullanıcıya:** QGC'siz izleme için VLC yerine ffplay (sabit ffmpeg paketinin parçası) uygun mu? VLC'nin canlı
+- ~~`--videosuz` kuralı kalksın mı?~~ Karar (kullanıcı kararı 15.11.2026, Ahmet): kalktı (bölüm 5.5).
+- ~~QGC'siz izleme için VLC yerine ffplay uygun mu?~~ Karar (kullanıcı kararı 15.11.2026, Ahmet): uygun; ffplay (sabit ffmpeg paketinin parçası) ve gst-launch. VLC'nin canlı
   yayını açması için live555'li bir VLC gerekir; Ubuntu deposunda yok, önerilmez.
 - **Görsel kontrol (Ahmet, QGC 5.1.4):** "Kendin dene" 2. QGC'nin video ayarındaki alanın adı (port mu "UDP URL" mi)
   bu grupta görülmedi; README iki adı da yazıyor.
 - Tasarım notu: model süreci artık video karelerini paylaşılan belleğe de kopyalıyor (kare başına ≈ 0.7 ms, `model_ms`
-  değişmedi). Spec'teki "yayın ayrı süreç" kuralı korunuyor; ölçüm sonucuna dayanan bir uygulama kararı.
+  değişmedi). Spec'teki "yayın ayrı süreç" kuralı korunuyor; ölçüm sonucuna dayanan bir uygulama kararı. Onaylandı
+  (kullanıcı kararı 15.11.2026, Ahmet).
 - Wi-Fi benzetimi (`netsim`, Faz B, 16. grup) bu hatta `rtph264pay`'den sonra eklenecek.
 
 ## 10. Dosyalar (commit'e girecekler)

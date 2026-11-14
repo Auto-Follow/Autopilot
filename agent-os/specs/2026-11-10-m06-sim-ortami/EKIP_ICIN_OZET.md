@@ -130,4 +130,4 @@ Ayrıntı: `tez/sim/README.md` → "Canlı video (QGC)". Senaryolar `tez/sim/sen
 Kamera montaj açısı (öneri 35°) · m01'e "en az yatay mesafe" ölçütü (öneri ≥ 3 m) · gerçek uçuşta `follow_target`
 kaydı · ortak model saklama yeri · `TEZ_LOS` biçiminin m05'te kesinleşmesi · yer istasyonunda görüntü/takip gösterim
 yöntemi (öneri: önce QGC video + videoya çizili kutular, simde `--qgc` ile hazır; gerekirse PySide6 uygulaması; QGC'yi
-kaynaktan özelleştirmek en son) · `--videosuz` kuralının kalkması (11. grupta kaydın RTF payı giderildi; kullanıcı onayı).
+kaynaktan özelleştirmek en son).

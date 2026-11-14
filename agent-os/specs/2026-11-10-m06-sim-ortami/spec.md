@@ -476,8 +476,9 @@
     video + `--qgc` 0.948; tur içinde fark video −0.027 ± 0.067 (bir yavaş koşu; onsuz +0.002), `--qgc` +0.001 ± 0.027.
     Kaydedici + yayın sürecinin işlemcisi kayıt boyunca video 0.31–0.35 → 0.11, `--qgc` 0.48–0.49 → 0.29–0.31 çekirdek.
     Bu ölçümlerin gürültüsü içinde (4 koşu, tur içi farkın sapması 0.03–0.07) **kayıt ve yayının ölçülebilir bir payı
-    kalmadı**; RTF'in kalan düşüşü modelindir. Öneri (kullanıcı onayı bekliyor): `--videosuz` kuralı kalkar, ölçüm
-    koşuları da videolu koşulur.
+    kalmadı**; RTF'in kalan düşüşü modelindir. Karar (kullanıcı kararı 15.11.2026, Ahmet): 13.11'deki `--videosuz` kuralı kalktı, ölçüm
+    koşuları da videolu koşulur. Model sürecinin video karelerini paylaşılan belleğe de kopyalaması (kare başına
+    ≈ 0.7 ms; yayın yine ayrı süreç) ve canlı yayını QGC'siz izlemek için VLC yerine ffplay / gst-launch da onaylandı.
 - Koşu bitince `araclar/video.py` videoyu birleştirir: 2000×720, 15 fps.
   - Uygulamada: yalnız koşu klasörünün dosyalarından (`kareler/`, `dogru_cevap.csv`, `algilama.csv` + `kutular.csv`,
     `tez_los.csv`, `follow_target.csv`, `ozet.json`, ULog); `rapor.write`'ın `video` kancası `ozet.json` ve CSV'ler

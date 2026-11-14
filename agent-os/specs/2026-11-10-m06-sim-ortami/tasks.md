@@ -497,7 +497,7 @@ F0 GEÇTİ. Ayrıntı: `implementation/gorev-grubu-10.md`. Kurt/Algan'ın modül
 
 **Durum (14.11):** uygulandı, test edildi, koşuldu; QGC'deki görsel kontrol Ahmet'te. 295 test, ruff temiz, KILIT
 SAGLAM, F0 GEÇTİ; doğrulama koşusu GEÇTİ (yayın kayıpsız alındı, kutular çizili); 11.6'da kayıt + yayının RTF payı
-−0.114'ten +0.001 ± 0.027'ye indi. Kullanıcıya sorular: `--videosuz` kuralının kalkması, VLC yerine ffplay. Ayrıntı:
+−0.114'ten +0.001 ± 0.027'ye indi. Kararlar (kullanıcı kararı 15.11.2026, Ahmet): `--videosuz` kuralı kalktı, QGC'siz izleme ffplay / gst-launch ile, paylaşılan bellek tasarımı onaylandı. Ayrıntı:
 `implementation/gorev-grubu-11.md`.
 
 ### Gecikme ve Karşılaştırma
