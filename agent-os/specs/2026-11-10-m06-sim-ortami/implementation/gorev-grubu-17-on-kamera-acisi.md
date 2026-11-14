@@ -2184,8 +2184,13 @@ kişi görüntünün altından çıkıyor ve stok Follow Me onu bir daha bulamı
 vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_37.5_9m_12.9m_kivrimli_kayip_kosu.mp4 2>/dev/null
 ```
 
-Seçilen ayar, takip yolu: **Ctrl+T** ile **0:49**'a git (kişi koşudan sonra batıya dönüyor; dronla kişi arası köşede en
-az 5.9 m, kişi görüntüde kalıyor).
+Seçilen ayar, takip yolu: **Ctrl+T** ile **0:49**'a git (kişi koşudan sonra batıya dönüyor). **0:51.4–0:52.7** (sim
+78.8–80.1 s) kişi ~1.2 s **kadrajdan çıkıyor** ("HEDEF YOK", kilit kaybı) ve sonra geri geliyor: stok Follow Me köşede
+kişiye 5.9 m'ye kadar yaklaşıyor (0:52.2, sim 79.6 s), bu kameranın yakın görüş sınırının (6.6 m) içinde, kişinin
+ayakları kadrajın altında kalıyor. Takip yolunda bu ayarın üç koşusunun üçünde de köşede böyle bir çıkış var (en uzun
+kayıp 0.8–1.3 s, en az mesafe 5.8–7.0 m); kişi her seferinde geri bulunuyor. "Hiç çıkmadı" yalnız kıvrımlı yol için
+doğru (üç koşuda kayıp 0 s). (Düzeltme 14.11.2026: bu satır önce "kişi görüntüde kalıyor" diyordu; Ahmet VLC'de gördü,
+17.8 kontrolü.)
 
 ```bash
 vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17b_secilen_35_9m_12.9m_takip_yolu_kosu.mp4 2>/dev/null
