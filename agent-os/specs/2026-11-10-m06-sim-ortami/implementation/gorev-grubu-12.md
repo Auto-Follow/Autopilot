@@ -234,6 +234,34 @@ Videoda (`gorev12_kare_70.4s_tepki_bekleniyor.jpg`) üstte "kilit yok (tepki_bek
 
 Üçünde de "kamera karesi olmayan an 0", kareler silindi.
 
+### 4.4 200 ms × 3 (kullanıcı isteği 15.11)
+
+`toplu.py --senaryo takip_yuruyen --tekrar 3 --cikti tez/sim/sonuclar/gorev12_gecikme200_x3 -- --gecikme-ms 200`
+(commit `a78245da2b`; 3/3 GEÇTİ, ilk denemede). Karşılaştırma 17. grubun aynı ayarlı 0 ms × 3 koşusuyla
+(`gorev17_varsayilan_takip_yuruyen_x3`): `karsilastir.py ... --html tez/sim/sonuclar/gorev12_gecikme200_x3/karsilastirma.html`.
+Değerler ort. (en az–en çok).
+
+| Ölçüt | 0 ms × 3 (17. grup) | 200 ms × 3 | Δ |
+|---|---|---|---|
+| Uçtan uca gecikme ort. [sim ms] | 137.00 (133.85–140.51) | 332.68 (331.06–333.77) | +195.68 |
+| Hattaki süre `ek_gecikme_ms` ort. [sim ms] | 0.02 | 200.37 (200.17–200.55) | +200.35 |
+| Kişi sonuna kadar izlendi (son `FOLLOW_TARGET` koşu sonundan en çok 3 s önce) | 3/3 | **3/3** | |
+| En az yatay mesafe [m] | 6.63 (5.68–7.12) | 6.58 (5.91–7.04) | −0.05 |
+| Yatay mesafe ort. [m] | 12.08 (11.58–12.35) | 12.11 (12.01–12.19) | +0.03 |
+| Kaydın 6 m altı | %0.6 | %0.2 | |
+| En uzun kayıp [s] | 0.54 (0.00–0.86) | 0.89 (0.53–1.22) | +0.35 |
+| Köşede PX4'ün yetişmesi ort. / en çok [s] | 2.29 / 2.91 | 2.59 / 3.72 | +0.29 / +0.81 |
+| Bulma oranı | %62.2 | %60.0 | −2.2 puan |
+| Kilit kaybı | 4.00 (3–5) | 5.00 (3–7) | +1.00 |
+| Konum hatası ort. [m] | 0.36 | 0.39 | +0.03 |
+| RTF | 0.95 | 0.97 | |
+
+Uçtan uca fark +195.7 ms (hattaki +200.4 ms'den ≈ 5 ms az: 200 ms koşularında model hazır olma süresi `hazir_ms_ort`
+132 ms, 17. grupta 137 ms; RTF farkı). Sonuç: **200 ms'lik ek gecikmede stok Follow Me bu senaryoda kişiyi 3/3 sonuna
+kadar izliyor, mesafe değişmiyor**; değişen köşede yetişme (en çok +0.8 s), en uzun kayıp (+0.35 s) ve kilit kaybı
+(+1). Etkiler 3 koşunun yayılımıyla aynı büyüklükte, yani 200 ms bu senaryoda takibi bozmuyor, köşelerde biraz
+geciktiriyor. Ayrıntı: `tez/sim/sonuclar/gorev12_gecikme200_x3/toplu.html`.
+
 ## 5. Görsel kontrol: model kutusunun gecikmesi (Ahmet'in kontrolü bekleniyor)
 
 Videoda kırmızı kutu "PX4'teki son model sonucu"dur (gönderim anına göre; 8. grup); 200 ms'de PX4'e 200 ms geç
@@ -286,9 +314,7 @@ kontrol maddesi Ahmet'in videoyu izlemesine kadar açık (`tasks.md` 12.0 / 12.5
 ## 8. Açık konular ve öneriler
 
 - **Görsel kontrol (Ahmet):** 200 ms koşusunun videosu ve üç kare ("Kendin dene" 1–2).
-- **Tek koşu:** 200 ms'nin takibe etkisi (köşede yetişme +0.5–1.3 s, kadrajdan 1 s çıkış) tek koşuyla söylenemez;
-  m06 kuralıyla 3 koşu gerekir: `toplu.py --senaryo takip_yuruyen --tekrar 3 -- --gecikme-ms 200` (~7 dk). İstenirse
-  koşulur; bu grupta istenmedi.
+- ~~**Tek koşu**~~ → kapandı, 3 koşu yapıldı (kullanıcı isteği 15.11, bölüm 4.4).
 - **Öneri (yapılmadı):** `gecikme.tohum` alanı (aynı titreşim dizisi yerine tekrar başına farklı tohum); şimdilik sabit
   tohum `gecikme.JITTER_SEED = 0`.
 - **Öneri (yapılmadı):** saat modelini `FOLLOW_TARGET.timestamp`'e de uygulamak (Pi'nin saati iki mesajı da damgalar);
