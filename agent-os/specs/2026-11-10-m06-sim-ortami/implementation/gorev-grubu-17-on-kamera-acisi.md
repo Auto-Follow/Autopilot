@@ -9,8 +9,8 @@
 - Durum: **uygulandı, test edildi, koşuldu**; commit'lenmedi (commit'i kullanıcı atar; iş A ayrı commit, bölüm 13).
   Bölüm 1–3 koşulardan önce yazıldı (13.11.2026 13:26), sonuçlar koşulardan sonra eklendi.
 - 14.11 ekleri: İş 1 (canlı hakem akışı düzeltmesi, ayrı commit, bölüm 16), İş 2 (37.5° ve genişletilmiş tarama, son
-  karar ve gerçek uçuş önerisi, bölüm 17–19), İş 3 (seçilen ayar simin varsayılanı, bölüm 20). 17.1 ve 17.5'in
-  tasarımları koşulardan önce yazıldı.
+  karar ve gerçek uçuş önerisi, bölüm 17–19), İş 3 (seçilen ayar simin varsayılanı, bölüm 20), İş 4 (alçak + uzak
+  takip denemesi, bölüm 21). 17.1, 17.5 ve 21.1'in tasarımları koşulardan önce yazıldı.
 
 ## Kısaca
 
@@ -56,6 +56,14 @@
   `gercek_dron.params` değişmedi. F0 ve F1 yeni varsayılanla GEÇTİ; `takip_yuruyen` ×3: kişi 3/3 izlendi, en az
   6.63 (5.68–7.12) m; `kalabalik_park` ×3: hedef %99 (98–100) kadrajda, ama yanlış kişiye
   geçme %16 (12–19) (45° / 10 m'de %6–12). 281 test.
+- **Alçak + uzak takip denemesi (İş 4, bölüm 21, 14.11 akşam):** kullanıcının fikri (açıyı azalt, alçal, daha geride
+  dur; kişi görüntünün ortasının üstünde): 30° 6/12.9, 30° 7/12.9, 32.5° 7/12.9, 35° 8/12.9 iki yolda 3'er koşu +
+  kalabalık park 3'er koşu (36 koşu, 1 sa 36 dk). Takip yolunda dördü de 3/3 (köşede 6.7–7.9 m), kıvrımlı yolda 30° 6 m
+  dışındakiler 3/3; kuralın sim seçimi **30° 7/12.9** (bulma %73–76, kişi 200 px). Ama sorun alttan üste taşındı:
+  hızlanırken burun 12–18° aşağı eğilince kişi görüntünün üstünden çıkıyor (6 m'de kayba kadar); kalabalıkta alçak
+  bakışta kişiler üst üste biniyor, yanlış kişi %39–77 (35° 9 m'de %16). Önceden yazılan şart sağlanmadı: **gerçek
+  uçuş başlangıcı 35° 9/12.9 kalıyor; yedek 35° 8/12.9** (aynı montaj; 13.11'in yedeği 8/11.4 yerine; doğrulanmamış).
+  Varsayılanlar değişmedi.
 
 ## 1. Ne yapıldı (kod)
 
@@ -1548,6 +1556,403 @@ karesi). Videolar h264 / yuv420p / 2000×720 (`ffprobe`).
   koşularıyla doğrudan karşılaştırılmaz; m11 (hedef seçimi) ve Ortatepe için not: 35° montajda yakın duran kişilerin
   kutuları daha sık birleşiyor ya da karışıyor.
 
+## 21. Alçak + uzak takip denemesi, 14.11 (İş 4)
+
+**Kullanıcının fikri (14.11, koordinatör üzerinden):** kamera açısını azaltıp yüksekliği (dikey uzaklığı) azaltmak ve
+yatay uzaklığı artırmak. Taramada geride durma ya kişiyi görüntünün ortasına koyan `h / tan(eğim)` ya da raporun
+değerleriydi; "alçak + kişi görüntünün ortasının üstünde + daha geride" hiç denenmedi. Denenen alçak ayarlar (30°
+6/10.4, 35° 7/10) kıvrımlı yolun geri dönüşünde kişiyi kaybetti; nedeni dronun kişiye yakın durması, yani yaklaşma
+payının küçük olması (bölüm 8, 17.4).
+
+### 21.1 Tasarım (sonuçlar görülmeden yazıldı, 14.11 17:35)
+
+**Ayarlar** (montaj eğimi koşu başına `kamera.egim_deg`; varsayılan dosyalar değişmez). Geometri düz uçuşta,
+`tarama.margins` / `geometry` ile (repo dışı `gorev17c_betikler/geometri.py`):
+
+| Ayar | Neden | Yaklaşma payı [m] (kod / basit formül) | Geri kalma payı [m] | Kişinin gövde merkezi görüntüde | Ufuk payı [°] | Zemin duyarlılığı d / h | Başların üstü [m] |
+|---|---|---|---|---|---|---|---|
+| 30° · 6 m / 12.9 m | yeni: en alçak, en geride | 7.57 / 7.88 | 22.6 | merkezin 7.5° (232 px) üstü; ayak 127 px üstü | 9.9 | 2.15 | 4.25 |
+| 30° · 7 m / 12.9 m | yeni | 6.73 / 7.04 | 28.3 | 3.7° (116 px) üstü | 9.9 | 1.84 | 5.25 |
+| 32.5° · 7 m / 12.9 m | yeni (30° ile 35°'nin arası) | 7.24 / 7.54 | 19.9 | 6.2° (194 px) üstü | 12.4 | 1.84 | 5.25 |
+| 35° · 8 m / 12.9 m | yeni: aynı mesafede 35° | 7.03 / 7.31 | 18.0 | 5.2° (162 px) üstü | 14.9 | 1.61 | 6.25 |
+| 35° · 9 m / 12.9 m | başvuru (seçili ayar) | 6.33 / 6.61 | 21.7 | 2.0° (61 px) üstü | 14.9 | 1.43 | 7.25 |
+| 35° · 8 m / 11.4 m | başvuru (ikinci seçenek) | 5.53 / 5.81 | 19.5 | 2.1° (63 px) üstü | 14.9 | 1.43 | 6.25 |
+
+- **Geometrinin doğrulanması:** koordinatörün notundaki 7.9 / 7.2 / 6.6 m'nin 7.9 ve 6.6'sı basit formülün (`d − h /
+  tan(eğim + 20.07°)`, kamera ofseti yok) değeri; kod kameranın base_link'in 0.151 m önünde ve yerden h + 0.19 m
+  yüksekte olduğunu hesaba katar ve ≈ 0.3 m küçük verir. 32.5° 7/12.9'un basit formülü 7.54 m (7.2 kodun değeri).
+  Notun "kişi 30° 6/12.9'da optik eksenin ≈ 5.1° üstünde (≈ 158 px)" sayısı ayak noktası, ofsetsiz; gövde merkezi
+  (0.9 m; bölüm 19'daki tablo gibi) 7.5° / 232 px üstte. Belgede kodun değerleri kullanılır.
+- Köşede stok Follow Me dronu ort. **6.2 m** (sd 1.2; %10–90: 4.6–7.6 m) yaklaştırıyor (bölüm 8). Dört yeni ayarın
+  payı bu ortalamanın üstünde (6.7–7.6 m); 35° 9/12.9'unki 6.3, 35° 8/11.4'ünki 5.5 m.
+- Kişi bütün ayarlarda kadraja sığar (`tarama.view`: ayak ve baş kenarlardan en az 2° içeride); baş üst kenarın 9.3°
+  (30° 6/12.9) – 15.3° (35° 9/12.9) altında.
+
+**Koşular** (aynı kod: HEAD `ad283dcc9d`, çalışma ağacı temiz; durum dosyalı `tarama.py kos`; videolu; v0.2 CPU'da,
+stok Follow Me, `FLW_TGT_RS 0.3`, LOS kaynağı model):
+- Her yeni ayar: `takip_yuruyen` yolu ×3 (`gorev10on_tarama/asama4`), `kivrimli_yuruyus` yolu ×3
+  (`asama4_kivrimli`), `kalabalik_park` aynı eğim ve yükseklikte, Hold ×3 (`gorev17c_kalabalik/kalabalik`; repo
+  dışı `kalabalik_plan.py` kalabalığın yolunu ve takip bloğunu değiştirmeden yalnız yüksekliği ve eğimi yazar).
+- **Başvurular yeniden koşulmaz:** 35° 9/12.9 ve 35° 8/11.4'ün takip ve kıvrımlı yol koşuları `asama3` /
+  `asama3_kivrimli`'de, hakem akışı düzeltmesinden sonraki kodla (bölüm 16–17). Kod o koşulardan sonra yalnız
+  varsayılan eğimi 35° yaptı (bölüm 20); eğimi açıkça verilen koşular için uçuş aynı. Kalabalıkta 35° / 9 m
+  `gorev17_varsayilan_kalabalik_park_x3` (bölüm 20); 35° / 8 m'yi yeni dizi koşar (kalabalık Hold'da yalnız eğim ve
+  yüksekliğe bağlı: 35° 8/12.9'un ve 35° 8/11.4'ün ortak başvurusu).
+- Kapı için başvuruların kuralın ilk üç koşusu kullanılır (17.5'teki gibi); 35° 9/12.9'un kıvrımlı yoldaki ek üç
+  koşusu (`asama3_kivrimli_ek`) "bütün koşular" satırında ayrıca gösterilir.
+- Planda üç bileşim fazladan yazıldı ve koşulmaz (`tarama.py plan --carpan 1`'in yan ürünü, merkez mesafeleri):
+  `e32.5_h7_d11.0`, `kivrimli_yuruyus_e30_h7_d12.1`, `kivrimli_yuruyus_e32.5_h7_d11.0`.
+- Bütçe: 36 koşu × ≈ 2.5 dk ≈ 1.5 saat (+ açılışlar); 2.5 saatlik bütçeye sığıyor, kalabalık 3'er koşu kalır.
+
+**Düşük yükseklik kontrolleri:**
+- `FLW_TGT_HT` < 8 (6–7 m) PX4'te yalnız üst veri sınırı: kalkıştan önce PX4'ten geri okunan değer ve ULog'daki
+  yükseklik (60–90 s) istenenle karşılaştırılır (bölüm 4'teki yöntem).
+- **Ağaç:** yol koşuları ağaçsız `duz_alan`'da. `kalabalik_park` `cayir`'de ve dron Hold'da (0, 0)'da bekler;
+  kalkış yerinin 8 m çevresine ağaç konmaz (en yakın gövde 13.9 m): çarpma olamaz. Ağaç boyları 7.3–10.9 m (çam (13,
+  5): 9.2 m, taç tabanı 1.2 m), yani 6–7 m'de dron ağaç tepelerinin altında. Hedefin yürüyüşünde kameradan gövde
+  merkezine giden ışının bir ağaç tacından geçtiği pay kaba geometriyle (taç elipsoid, gerçek ağaçtan geniş; repo
+  dışı `park_geo_c.py`) 9 m'de %39, 8 m'de %38, 7 m'de %38, 6 m'de %37: alçalmak bu senaryoda örtülmeyi büyütmüyor.
+  Ölçülen değer hakemin "gerçekten görünür" oranı. Hedef bütün yeni ayarlarda yolunun %97–99'unda kadrajda (35° / 9
+  m'de %100).
+
+**Değerlendirme (17'deki kural aynen, `tarama.py`'de değişmedi):**
+1. Kapı (her koşuda ≥ 3 m ve kişi sonuna kadar izlendi, geçerli koşu) takip yolunda 3/3; ek kapı kıvrımlı yolda 3/3.
+2. Kuralın puanı (7 grup, min–maks, eşit ağırlık) takip yolunda kapıyı 3/3 geçenler arasında (yeni 4 + 2 başvuru);
+   duyarlılık denemeleri aynı.
+3. Son seçim sırası 17.1'deki gibi uygulanır: iki yolda 3/3 geçenler arasında kuralın puanı; sonra güvenlik (köşede en
+   az mesafe, 6 m altı pay); sonra algılama. İki yolda 3/3 geçen yoksa 17.1'deki yedek kural (iki yolun bütün
+   koşularında kişinin izlendiği koşu oranı ve kalan yaklaşma payı).
+4. Ek sütunlar (puanlanmaz, kural değişmez): yaklaşma payı ve geri kalma payı (hesap ve ölçülen: köşe yaklaşmasından
+   sonra kalan pay, `FLW_TGT_DST`'nin ötesine en çok geri kalma), kişinin görüntüdeki dikey yeri (hakem, gövde merkezi,
+   ortadan piksel), piksel boyu ve bulma oranı, köşede en az yatay mesafe ve aynı andaki 3B mesafe (dron ile kişinin
+   başı arası), kalabalıkta yanlış kişi oranı, konum hatası ve duyarlılığı (`d / h` ≈ 1 / tan(bakış)), ufuk payı.
+
+**Gerçek uçuş önerisi için önceden yazılan okuma:**
+- Yeni bir ayar, 35° 9/12.9'un yerine gerçek uçuş başlangıç ayarı olarak ancak üçü birlikte sağlanırsa önerilir:
+  (a) iki yolda 3/3 kapı; (b) kalabalıkta yanlış kişi oranının ortalaması 35° / 9 m'nin en kötü koşusunu (%19)
+  aşmıyor; (c) yükseklik 8 m'nin altındaysa (PX4'ün Follow Me için önerdiği alt sınır, başlara yakınlık, ağaç
+  tepelerinin altı) ya da ufuk payı 35°'ninkinden küçükse, bu bedele karşı simde ölçülen kazanç (iki yolda daha çok
+  izlenen koşu ya da köşe / geri dönüşte belirgin daha büyük kalan pay ya da daha iyi algılama) sayıyla
+  gösterilebiliyor. Aksi hâlde 35° 9/12.9 başlangıç ayarı kalır; yeni ayar en çok yedek olur.
+- 3 koşuluk kapı gürültülü (35° 8/11.4 kıvrımlı yolda iki günde 3/3 ve 2/3): 3/3 ile 2/3 arasındaki fark tek başına
+  güçlü kanıt değil; sonuçlar koşu sayısıyla yazılır.
+- Varsayılanlar (`kamera.NOMINAL_TILT_DEG`, `models/x500_tez`, `takip_yuruyen`, `kamera_montaji.yaml`) bu işte
+  değişmez; karar kullanıcının.
+
+### 21.2 Koşular ve düşük yükseklik doğrulaması
+
+- 14.11, 17:34–19:10: 24 yol koşusu (4 ayar × 2 yol × 3) ve 12 kalabalık koşusu (4 eğim / yükseklik × 3), hepsi
+  GEÇTİ (koşu sonucu, kapı değil); yeniden denenen koşu yok. Yol koşuları ≈ 2.5 dk (takip) / ≈ 2.6 dk (kıvrımlı),
+  RTF ort. 0.90 (0.77–1.00); kalabalık ≈ 2.9 dk, RTF 0.76 (0.62–0.83). Gazebo'nun bildirdiği eğim her
+  koşuda istenenle aynı (30.0 / 32.5 / 35.0°). Kod HEAD `ad283dcc9d`, çalışma ağacı temiz; bu iş kod değiştirmedi.
+- **`FLW_TGT_HT` < 8 uygulandı:** 6 ve 7 m'lik 18 yol koşusunun hepsinde PX4'ten kalkıştan önce geri okunan değer
+  istenenle aynı; PX4'ün ULog'undaki yükseklik (ev noktasına göre, 60–90 s) istenenden +0.02…+0.12 m, Gazebo'nun
+  ölçtüğü dron yüksekliği de öyle; 8 m'lik 6 koşu da aynı.
+
+**FLW_TGT_HT / yükseklik kontrolü (yeni koşular)**
+
+| Koşu | İstenen yükseklik [m] | PX4'ten geri okunan `FLW_TGT_HT` | ULog yükseklik 60–90 s [m] | Gazebo [m] | Sonuç |
+|---|---|---|---|---|---|
+| gorev10on_tarama/asama4/e30_h6_d12.9/kosu_1 | 6.0 | 6.0 | 6.05 | 5.97 | GEÇTİ |
+| gorev10on_tarama/asama4/e30_h6_d12.9/kosu_2 | 6.0 | 6.0 | 6.10 | 6.09 | GEÇTİ |
+| gorev10on_tarama/asama4/e30_h6_d12.9/kosu_3 | 6.0 | 6.0 | 6.08 | 6.05 | GEÇTİ |
+| gorev10on_tarama/asama4/e30_h7_d12.9/kosu_1 | 7.0 | 7.0 | 7.11 | 7.13 | GEÇTİ |
+| gorev10on_tarama/asama4/e30_h7_d12.9/kosu_2 | 7.0 | 7.0 | 7.04 | 7.03 | GEÇTİ |
+| gorev10on_tarama/asama4/e30_h7_d12.9/kosu_3 | 7.0 | 7.0 | 7.07 | 7.05 | GEÇTİ |
+| gorev10on_tarama/asama4/e32.5_h7_d12.9/kosu_1 | 7.0 | 7.0 | 7.05 | 7.03 | GEÇTİ |
+| gorev10on_tarama/asama4/e32.5_h7_d12.9/kosu_2 | 7.0 | 7.0 | 7.05 | 7.03 | GEÇTİ |
+| gorev10on_tarama/asama4/e32.5_h7_d12.9/kosu_3 | 7.0 | 7.0 | 7.03 | 7.06 | GEÇTİ |
+| gorev10on_tarama/asama4/e35_h8_d12.9/kosu_1 | 8.0 | 8.0 | 8.05 | 8.03 | GEÇTİ |
+| gorev10on_tarama/asama4/e35_h8_d12.9/kosu_2 | 8.0 | 8.0 | 8.12 | 8.11 | GEÇTİ |
+| gorev10on_tarama/asama4/e35_h8_d12.9/kosu_3 | 8.0 | 8.0 | 8.02 | 8.01 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e30_h6_d12.9/kosu_1 | 6.0 | 6.0 | 6.02 | 5.99 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e30_h6_d12.9/kosu_2 | 6.0 | 6.0 | 5.98 | 5.99 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e30_h6_d12.9/kosu_3 | 6.0 | 6.0 | 6.06 | 6.01 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e30_h7_d12.9/kosu_1 | 7.0 | 7.0 | 6.97 | 6.99 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e30_h7_d12.9/kosu_2 | 7.0 | 7.0 | 7.00 | 7.00 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e30_h7_d12.9/kosu_3 | 7.0 | 7.0 | 7.04 | 7.03 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e32.5_h7_d12.9/kosu_1 | 7.0 | 7.0 | 7.01 | 6.96 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e32.5_h7_d12.9/kosu_2 | 7.0 | 7.0 | 7.01 | 7.01 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e32.5_h7_d12.9/kosu_3 | 7.0 | 7.0 | 7.05 | 7.04 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e35_h8_d12.9/kosu_1 | 8.0 | 8.0 | 8.03 | 8.03 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e35_h8_d12.9/kosu_2 | 8.0 | 8.0 | 8.07 | 8.03 | GEÇTİ |
+| gorev10on_tarama/asama4_kivrimli/kivrimli_yuruyus_e35_h8_d12.9/kosu_3 | 8.0 | 8.0 | 8.04 | 8.03 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h6/kosu_1 | 6.0 | – (Hold) | 6.00 | 5.99 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h6/kosu_2 | 6.0 | – (Hold) | 6.05 | 6.06 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h6/kosu_3 | 6.0 | – (Hold) | 6.03 | 6.03 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h7/kosu_1 | 7.0 | – (Hold) | 6.98 | 6.97 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h7/kosu_2 | 7.0 | – (Hold) | 6.99 | 7.01 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h7/kosu_3 | 7.0 | – (Hold) | 6.96 | 6.81 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e32.5_h7/kosu_1 | 7.0 | – (Hold) | 7.02 | 7.05 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e32.5_h7/kosu_2 | 7.0 | – (Hold) | 6.97 | 7.02 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e32.5_h7/kosu_3 | 7.0 | – (Hold) | 7.13 | 7.19 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e35_h8/kosu_1 | 8.0 | – (Hold) | 8.07 | 8.10 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e35_h8/kosu_2 | 8.0 | – (Hold) | 8.01 | 8.00 | GEÇTİ |
+| gorev17c_kalabalik/kalabalik/kalabalik_park_e35_h8/kosu_3 | 8.0 | – (Hold) | 8.00 | 8.03 | GEÇTİ |
+
+- Kalabalık koşularında (Hold, Follow Me yok) dron istenen yükseklikte: ULog'daki yükseklik istenenden (6 / 7 / 8 m)
+  en çok 0.13 m farklı; ağaçla çarpma yok (21.5).
+
+### 21.3 İki yolun sonucu ve kuralın sırası
+
+**Kuralın sonucu (takip yolu havuzu: 4 yeni + 2 başvuru, ilk 3'er koşu)**
+
+| Sıra | Ayar | Kapı (takip yolu) | Güv. | Sür. | Alg. | Konum | Salın. | Köşe | Geo. | Toplam | Sim | Kıvrımlı yol: kapı / izlendi |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 35° · 8 m / 11.4 m | geçti | − 0.00 | + 0.70 | + 0.84 | + 1.00 | ○ 0.33 | ○ 0.45 | + 0.89 | 0.60 | 0.55 | ✗ / 2/3 |
+| 2 | 30° · 7 m / 12.9 m | geçti | ○ 0.67 | + 0.71 | + 0.81 | ○ 0.49 | ○ 0.46 | ○ 0.52 | − 0.25 | 0.56 | 0.61 | geçti / 3/3 |
+| 3 | 30° · 6 m / 12.9 m | geçti | ○ 0.64 | − 0.20 | + 0.99 | ○ 0.56 | ○ 0.56 | ○ 0.61 | − 0.00 | 0.51 | 0.60 | ✗ / 2/3 |
+| 4 | 35° · 8 m / 12.9 m | geçti | ○ 0.63 | ○ 0.49 | ○ 0.34 | ○ 0.37 | ○ 0.59 | − 0.16 | + 0.80 | 0.49 | 0.43 | geçti / 3/3 |
+| 5 | 35° · 9 m / 12.9 m | geçti | ○ 0.43 | ○ 0.40 | − 0.00 | ○ 0.60 | ○ 0.55 | − 0.30 | + 1.00 | 0.47 | 0.38 | geçti / 3/3 |
+| 6 | 32.5° · 7 m / 12.9 m | geçti | ○ 0.65 | ○ 0.39 | + 0.82 | − 0.00 | − 0.23 | − 0.23 | ○ 0.42 | 0.39 | 0.39 | geçti / 3/3 |
+
+Duyarlılık:
+
+- eşit: 35° · 8 m / 11.4 m (0.60) > 30° · 7 m / 12.9 m (0.56) > 30° · 6 m / 12.9 m (0.51) > 35° · 8 m / 12.9 m (0.48) > 35° · 9 m / 12.9 m (0.47) > 32.5° · 7 m / 12.9 m (0.39)
+- güvenlik ×2: 30° · 7 m / 12.9 m (0.57) > 35° · 8 m / 11.4 m (0.53) > 30° · 6 m / 12.9 m (0.53) > 35° · 8 m / 12.9 m (0.50) > 35° · 9 m / 12.9 m (0.46) > 32.5° · 7 m / 12.9 m (0.42)
+- algılama ×2: 35° · 8 m / 11.4 m (0.63) > 30° · 7 m / 12.9 m (0.59) > 30° · 6 m / 12.9 m (0.57) > 35° · 8 m / 12.9 m (0.47) > 32.5° · 7 m / 12.9 m (0.45) > 35° · 9 m / 12.9 m (0.41)
+- sim puanı (geometrisiz): 30° · 7 m / 12.9 m (0.61) > 30° · 6 m / 12.9 m (0.59) > 35° · 8 m / 11.4 m (0.56) > 35° · 8 m / 12.9 m (0.43) > 32.5° · 7 m / 12.9 m (0.39) > 35° · 9 m / 12.9 m (0.38)
+
+**Bütün koşular (düzeltmeden sonra; kapı = ≥ 3 m ve kişi sonuna kadar izlendi)**
+
+| Ayar | Takip yolu | Kıvrımlı yol | İki yol |
+|---|---|---|---|
+| 30° · 6 m / 12.9 m | 3/3 (izlendi 3) | 2/3 (izlendi 2) | **5/6** |
+| 30° · 7 m / 12.9 m | 3/3 (izlendi 3) | 3/3 (izlendi 3) | **6/6** |
+| 32.5° · 7 m / 12.9 m | 3/3 (izlendi 3) | 3/3 (izlendi 3) | **6/6** |
+| 35° · 8 m / 12.9 m | 3/3 (izlendi 3) | 3/3 (izlendi 3) | **6/6** |
+| 35° · 9 m / 12.9 m | 7/7 (izlendi 7) | 5/6 (izlendi 5) | **12/13** |
+| 35° · 8 m / 11.4 m | 3/3 (izlendi 3) | 2/3 (izlendi 2) | **5/6** |
+
+- **Takip yolunda dört yeni ayarın dördü de 3/3 geçti**, köşede en az 6.7–7.9 m (seçili 35° 9/12.9'da 5.8–7.0, 35°
+  8/11.4'te 4.9–5.6 m) ve kaydın 6 m altında hiç kalmadı.
+- **Kıvrımlı yolda (164° geri dönüş) 30° 7/12.9, 32.5° 7/12.9 ve 35° 8/12.9 3/3 geçti;** 30° 6/12.9 bir koşuda kişiyi
+  kaybetti (2/3), 35° 8/11.4 yine bir koşuda kaybetti (2/3; düzeltmeden sonra iki yolun 6 koşusunda 5).
+- **Kuralın son seçimi (önceden yazılan sırayla: iki yolda 3/3 geçenler arasında toplam puan): 30° · 7 m / 12.9 m**
+  (0.56). Dört ağırlık denemesinin dördünde de iki yolda 3/3 geçenlerin birincisi; ikincisi hep 35° · 8 m / 12.9 m
+  (0.49), seçili 35° 9/12.9 üçüncü (0.47), 32.5° 7/12.9 dördüncü (0.39). Havuzun puanla birincisi 35° 8/11.4 (0.60)
+  kıvrımlı yolun kapısından kaldı. Puanlar bu altı ayarlık havuzda ölçeklendi; bölüm 17.3'ün puanlarıyla
+  karşılaştırılmaz.
+- Koşu sayısı küçük: üç koşuluk kapı gürültülü (35° 8/11.4 kıvrımlı yolda iki günde 3/3 ve 2/3). Yeni ayarların her
+  birinde 6, seçili ayarda 13 koşu var; "iki yolda 3/3" yeni ayarlar arasında güçlü bir ayrım değil, puan ve ham
+  değerler birlikte okunmalı.
+
+### 21.4 Ne değişti: kişiyi kaçırma riski alttan üste taşındı
+
+**Takip yolu (3'er koşu; ort. (en az–en çok))**
+
+| Ayar | Kapı | En az yatay [m] | O anda 3B (kamera–baş) [m] | < 6 m [%] | Kişi kaybı | Kadrajda [%] | En uzun kayıp [s] | Bulma [%] | Kutu [px] | Kilit kaybı | Konum hatası ort / p95 [m] | Köşe yaklaşması [m] | Yaklaşma payı [m] | Kalan pay [m] | Gövde merkezi kadraj dışı alttan / yandan / üstten [s] | En çok geri kalma [m] | Kişinin yeri: ortadan yukarı [px] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 30° · 6 m / 12.9 m | geçti | 7.1 (6.7–7.5) | 8.4 (8.0–8.8) | 0.0 (0.0–0.0) | 0/3 | 80 (77–84) | 2.5 (2.1–3.0) | 73 (66–77) | 213 (210–216) | 1.7 (1.0–3.0) | 0.42 (0.40–0.46) / 0.95 (0.84–1.05) | 5.8 (5.4–6.2) | 7.6 | 1.8 (1.3–2.2) | 0.1 (0.0–0.3) / 0.0 (0.0–0.0) / 2.8 (2.1–4.2) | 2.0 (1.5–2.3) | 315 (292–338) |
+| 30° · 7 m / 12.9 m | geçti | 7.3 (6.7–7.9) | 9.2 (8.7–9.6) | 0.0 (0.0–0.0) | 0/3 | 91 (87–93) | 1.2 (0.6–1.9) | 73 (72–75) | 200 (198–202) | 1.7 (1.0–2.0) | 0.46 (0.39–0.49) / 0.95 (0.79–1.09) | 5.6 (5.0–6.2) | 6.7 | 1.1 (0.5–1.7) | 0.4 (0.0–0.6) / 0.0 (0.0–0.0) / 1.1 (0.0–2.4) | 2.3 (1.7–2.7) | 184 (167–200) |
+| 32.5° · 7 m / 12.9 m | geçti | 7.2 (7.1–7.3) | 9.1 (9.0–9.1) | 0.0 (0.0–0.0) | 0/3 | 88 (83–91) | 1.8 (1.4–2.3) | 72 (71–73) | 203 (202–204) | 1.7 (1.0–3.0) | 0.57 (0.51–0.63) / 1.12 (0.90–1.33) | 5.7 (5.6–5.8) | 7.2 | 1.6 (1.5–1.6) | 0.1 (0.0–0.2) / 0.0 (0.0–0.0) / 1.8 (1.4–2.3) | 1.9 (1.8–1.9) | 285 (277–294) |
+| 35° · 8 m / 12.9 m | geçti | 7.1 (6.8–7.6) | 9.7 (9.4–10.1) | 0.0 (0.0–0.0) | 0/3 | 88 (85–92) | 1.5 (0.9–2.3) | 66 (64–68) | 191 (190–192) | 2.7 (2.0–3.0) | 0.47 (0.39–0.62) / 1.01 (0.80–1.20) | 5.8 (5.3–6.1) | 7.0 | 1.2 (0.9–1.7) | 0.5 (0.0–0.9) / 0.0 (0.0–0.0) / 1.5 (0.9–2.3) | 2.1 (1.8–2.4) | 260 (245–271) |
+| 35° · 9 m / 12.9 m | geçti | 6.2 (5.8–7.0) | 9.8 (9.6–10.3) | 0.4 (0.0–0.7) | 0/3 | 95 (95–95) | 1.1 (0.8–1.3) | 62 (62–64) | 179 (178–180) | 3.3 (2.0–4.0) | 0.41 (0.35–0.46) / 0.96 (0.79–1.17) | 6.7 (5.9–7.1) | 6.3 | -0.3 (-0.7–0.4) | 1.1 (0.8–1.3) / 0.0 (0.0–0.0) / 0.0 (0.0–0.0) | 1.6 (1.4–1.9) | 167 (164–172) |
+| 35° · 8 m / 11.4 m | geçti | 5.2 (4.9–5.6) | 8.3 (8.1–8.6) | 1.8 (1.3–2.1) | 0/3 | 94 (94–95) | 0.9 (0.8–1.1) | 71 (67–75) | 207 (206–208) | 1.7 (1.0–2.0) | 0.36 (0.34–0.37) / 0.73 (0.67–0.77) | 6.2 (5.8–6.5) | 5.5 | -0.7 (-1.0–-0.3) | 0.9 (0.8–1.1) / 0.0 (0.0–0.0) / 0.0 (0.0–0.0) | 1.4 (1.2–1.6) | 143 (121–171) |
+
+**Kıvrımlı yol (3'er koşu; ort. (en az–en çok))**
+
+| Ayar | Kapı | En az yatay [m] | O anda 3B (kamera–baş) [m] | < 6 m [%] | Kişi kaybı | Kadrajda [%] | En uzun kayıp [s] | Bulma [%] | Kutu [px] | Kilit kaybı | Konum hatası ort / p95 [m] | Köşe yaklaşması [m] | Yaklaşma payı [m] | Kalan pay [m] | Gövde merkezi kadraj dışı alttan / yandan / üstten [s] | En çok geri kalma [m] | Kişinin yeri: ortadan yukarı [px] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 30° · 6 m / 12.9 m | kişi sonda kaybedildi (1/3 koşu) | 7.5 (6.4–8.3) | 8.7 (7.8–9.4) | 0.0 (0.0–0.0) | 1/3 | 76 (64–84) | 4.0 (1.2–8.5) | 78 (76–79) | 211 (210–214) | 1.3 (1.0–2.0) | 0.43 (0.40–0.50) / 0.82 (0.70–1.06) | 5.4 (4.6–6.5) | 7.6 | 2.2 (1.1–3.0) | 2.5 (0.0–7.4) / 0.6 (0.0–1.9) / 2.2 (1.7–3.0) | 2.6 (2.4–2.9) | 317 (305–340) |
+| 30° · 7 m / 12.9 m | geçti | 7.5 (7.3–7.8) | 9.3 (9.1–9.5) | 0.0 (0.0–0.0) | 0/3 | 93 (91–94) | 0.7 (0.5–1.0) | 76 (75–76) | 201 (200–202) | 1.0 (1.0–1.0) | 0.46 (0.41–0.49) / 0.97 (0.68–1.33) | 5.4 (5.1–5.6) | 6.7 | 1.3 (1.1–1.7) | 0.0 (0.0–0.0) / 0.2 (0.0–0.7) / 0.7 (0.5–1.0) | 2.5 (2.4–2.7) | 187 (175–196) |
+| 32.5° · 7 m / 12.9 m | geçti | 6.7 (5.3–8.7) | 8.7 (7.6–10.2) | 0.8 (0.0–2.3) | 0/3 | 86 (83–92) | 1.6 (1.2–1.9) | 76 (74–78) | 203 (202–204) | 2.0 (1.0–3.0) | 0.44 (0.38–0.54) / 0.88 (0.74–0.98) | 6.2 (4.2–7.6) | 7.2 | 1.1 (-0.3–3.0) | 0.5 (0.0–1.0) / 0.0 (0.0–0.0) / 1.9 (1.2–2.4) | 2.7 (2.7–2.7) | 266 (252–284) |
+| 35° · 8 m / 12.9 m | geçti | 7.9 (7.2–8.4) | 10.2 (9.6–10.6) | 0.0 (0.0–0.0) | 0/3 | 96 (91–99) | 0.6 (0.0–1.5) | 70 (67–74) | 190 (190–190) | 1.0 (1.0–1.0) | 0.48 (0.46–0.51) / 1.03 (0.99–1.07) | 5.0 (4.5–5.7) | 7.0 | 2.0 (1.3–2.5) | 0.0 (0.0–0.0) / 0.0 (0.0–0.0) / 0.7 (0.0–1.8) | 2.5 (2.4–2.6) | 249 (239–254) |
+| 35° · 9 m / 12.9 m | geçti | 8.1 (8.0–8.3) | 11.0 (10.9–11.1) | 0.0 (0.0–0.0) | 0/3 | 98 (97–100) | 0.0 (0.0–0.0) | 68 (66–69) | 178 (178–178) | 2.3 (2.0–3.0) | 0.45 (0.44–0.45) / 1.08 (1.00–1.19) | 4.8 (4.6–4.9) | 6.3 | 1.5 (1.4–1.7) | 0.0 (0.0–0.0) / 0.0 (0.0–0.0) / 0.0 (0.0–0.0) | 2.5 (2.3–2.7) | 121 (118–122) |
+| 35° · 8 m / 11.4 m | kişi sonda kaybedildi (1/3 koşu) | 6.7 (6.0–7.5) | 9.3 (8.8–9.8) | 0.3 (0.0–1.0) | 1/3 | 89 (74–99) | 2.6 (0.0–7.3) | 75 (70–79) | 201 (198–202) | 1.3 (0.0–3.0) | 0.40 (0.38–0.42) / 0.88 (0.63–1.08) | 4.7 (3.9–5.4) | 5.5 | 0.8 (0.1–1.6) | 0.7 (0.0–1.8) / 2.0 (0.0–6.0) / 0.2 (0.0–0.5) | 2.6 (2.4–2.7) | 128 (120–134) |
+
+**Kişinin görüntüdeki yeri ve üst kenar (takip yolu; ort. (en az–en çok))**
+
+| Ayar | Hesap, düz uçuş: gövde merkezi ortadan yukarı [px] | Ölçülen, havada (50–59 s) [px] | Ölçülen, yürürken (62–68 s) [px] | Yürürken burun aşağı [°] | Baş üst kenara en yakın [px] | Baş üst kenarın dışında [s] | Kıvrımlı: baş üst kenara en yakın [px] / dışında [s] |
+|---|---|---|---|---|---|---|---|
+| 30° · 6 m / 12.9 m | 232 | 260 (251–270) | 315 (292–338) | 2.3 (1.9–2.9) | -257 (-263–-253) | 5.3 (4.2–6.2) | -240 (-302–-163) / 5.7 (4.0–6.9) |
+| 30° · 7 m / 12.9 m | 116 | 139 (135–144) | 184 (167–200) | 2.2 (1.8–3.1) | -185 (-269–-83) | 1.9 (1.1–3.2) | -159 (-180–-134) / 1.9 (1.3–2.8) |
+| 32.5° · 7 m / 12.9 m | 194 | 218 (211–229) | 285 (277–294) | 2.9 (2.4–3.3) | -298 (-344–-252) | 2.9 (2.2–4.2) | -266 (-315–-191) / 4.0 (2.6–4.9) |
+| 35° · 8 m / 12.9 m | 162 | 201 (192–209) | 260 (245–271) | 2.5 (1.6–3.8) | -183 (-209–-144) | 2.7 (1.5–3.9) | -116 (-228–-11) / 1.5 (0.4–3.0) |
+| 35° · 9 m / 12.9 m | 61 | 80 (74–83) | 167 (164–172) | 3.0 (2.2–3.5) | -11 (-50–20) | 0.2 (0.0–0.5) | -9 (-27–19) / 0.3 (0.0–0.4) |
+| 35° · 8 m / 11.4 m | 63 | 82 (70–92) | 143 (121–171) | 1.7 (1.4–1.8) | -55 (-70–-34) | 0.7 (0.6–0.7) | -62 (-127–-15) / 0.8 (0.5–1.3) |
+
+- **Alt kenar (köşe ve geri dönüş) rahatladı.** Köşede ölçülen yaklaşma yeni ayarlarda 5.0–6.2 m (takip yolu
+  ortalamaları 5.6–5.8 m; seçili ayarda 6.7 m): hesaplanan paydan sonra ortalama 1.1–2.2 m pay kalıyor (seçili ayarda takip
+  yolunda −0.3 m, yani ayaklar kısa bir süre görüntünün altına iniyor). Kişinin gövde merkezi takip yolunda
+  görüntünün altında yeni ayarlarda 0.1–0.5 s, başvurularda 0.9–1.1 s kaldı. 13.11'deki 70 koşunun köşe yaklaşması
+  dağılımına göre (ort. 6.2 m, sd 1.2) payın aşılma olasılığı: 30° 6/12.9 %10, 32.5° 7/12.9 %16, 35° 8/12.9 %20, 30°
+  7/12.9 %31, seçili 35° 9/12.9 %46, 35° 8/11.4 %83.
+- **Üst kenar daraldı.** İleri uçarken dron burnunu 2–3° aşağı eğiyor ve kamera da onunla dönüyor: kişi yürürken
+  havada asılı durduğundan 45–90 px daha yukarıda. Köşeden sonra stok Follow Me kişiye yetişmek için burnu **12–18°**
+  aşağı eğerek hızlanıyor (bütün ayarlarda benzer; `analiz_17c.json` → `burun_asagi_maks_deg`). Kişi görüntünün ortasının
+  üstüne konunca bu anlarda baş, hatta gövde üstten çıkıyor: takip yolunda başın üst kenarın dışında kaldığı süre yeni
+  ayarlarda 1.9–5.3 s, seçili ayarda 0.2 s; gövde merkezi üstten 1.1–2.8 s (başvurularda 0). Model kesik kişiyi çoğu
+  zaman yine buldu (kişinin tamamı kadrajda %80–91, seçili %95; kilit kaybı yine de daha az: 1.7–2.7, seçili 3.3).
+- **Geri kalma payı (yerde) sınırlayıcı değil:** dron `FLW_TGT_DST`'nin ötesine en çok 1.4–2.7 m geri kaldı; yerdeki
+  pay 18–28 m. Asıl sınır görüntünün üst kenarının açısı ve dronun burun eğimi.
+- **Kullanıcının fikri aşırıya götürülünce (30° · 6 m / 12.9 m):** kişi düz uçuşta merkezin 232 px üstünde (yürürken
+  ≈ 315 px), başı her koşuda 4–7 s üst kenarın dışında; kıvrımlı yolda bir koşuda 164° dönüşten hemen önceki kısa
+  koşuda (burun −14°) kişi görüntünün **tamamen üstünden** çıktı, dönüşte alttan / yandan kaçtı ve stok mod onu bir
+  daha bulamadı (`asama4_kivrimli/kivrimli_yuruyus_e30_h6_d12.9/kosu_2`, videoda ≈ 1:00). 35° ve 37.5°'nin
+  kayıpları çoğunlukla alttandı (bölüm 17.4–18); 30° 6 m'de kayıp üstten başlıyor.
+- **Algılama:** alçalınca kişi büyüyor ve daha yandan görünüyor; model 6 m'de %73–78, 7 m'de %72–76, 8 m / 12.9 m'de %66–70
+  (seçili %62–68) buluyor; kişi 190–213 px (seçili 179 px). v0.2'nin çöktüğü 150 px'e pay 40–63 px (seçili 29 px).
+- **Konum hatası (sim):** 0.42–0.57 m (seçili 0.41–0.45 m); simde zemin düz ve yükseklik kusursuz olduğu için fark
+  küçük. Gerçekte zemin ya da GPS yüksekliği hatası `d / h` katıyla büyür: 30° 6/12.9 2.15, 7 m'liler 1.84, 35° 8/12.9
+  1.61, seçili 1.43 (GPS yüksekliği 0.5 m yanlışsa 1.08 / 0.92 / 0.81 / 0.72 m).
+
+### 21.5 Kalabalık park ve alçak uçuşta ağaçlar
+
+**Kalabalık park (Hold, cayir; 3'er koşu)**
+
+| Eğim / yükseklik | Yanlış kişi [%] | Aynı kıyafetli yanlış [%] | Seçim doğru [%] | Bulma [%] | Hedef kutusu [px] | Gerçekten görünür [%] | Hedef kadrajda [%] | Kilit kaybı | Dron yüksekliği [m] |
+|---|---|---|---|---|---|---|---|---|---|
+| 30° / 6 m | 77 (69–90) | 61 (41–74) | 16 (10–29) | 62 (56–67) | 215 (214–216) | 100 (100–100) | 95 (94–95) | 0.3 (0.0–1.0) | 6.03 (5.99–6.06) |
+| 30° / 7 m | 70 (68–73) | 46 (34–68) | 28 (24–31) | 58 (57–59) | 211 (210–212) | 100 (100–100) | 99 (97–100) | 0.0 (0.0–0.0) | 6.93 (6.81–7.01) |
+| 32.5° / 7 m | 73 (70–78) | 57 (34–68) | 25 (20–29) | 55 (52–58) | 207 (204–209) | 100 (100–100) | 96 (94–98) | 0.3 (0.0–1.0) | 7.09 (7.02–7.19) |
+| 35° / 8 m | 39 (16–69) | 28 (6–69) | 33 (27–44) | 57 (56–57) | 198 (197–198) | 100 (99–100) | 98 (97–99) | 1.0 (0.0–2.0) | 8.04 (8.00–8.10) |
+| 35° / 9 m | 16 (12–19) | 5 (0–7) | 49 (46–53) | 64 (61–66) | 192 (190–194) | 89 (84–93) | 99 (98–100) | 1.7 (1.0–3.0) | 8.95 (8.92–9.01) |
+
+**Seçimin başka birine ilk geçtiği an** (repo dışı `gecis_17c.py`; aynı kural: seçilen kutu hakeme göre başka bir
+kişinin üstünde):
+
+| Eğim / yükseklik | Erken geçiş (yürüyüşün 3. saniyesi, hedefin ≈ 6 m gerisinde duran aynı kıyafetli `insan4`'e) | Diğer koşularda ilk geçiş | Geçiş sayısı (3 koşu) |
+|---|---|---|---|
+| 30° / 6 m | 3/3 koşu (62.9–63.0 s) | – | 3, 8, 4 |
+| 30° / 7 m | 3/3 (63.1–63.5 s) | – | 10, 3, 10 |
+| 32.5° / 7 m | 3/3 (62.9–63.3 s) | – | 9, 5, 5 |
+| 35° / 8 m | 1/3 (63.5 s) | 78.0–78.9 s, sarı üstlü `insan3` (hedefin yanında duran) | 2, 5, 3 |
+| 35° / 9 m (başvuru) | 0/3 | 78.7–79.0 s, `insan3` | 4, 2, 2 |
+
+- **Mekanizma:** alçak ve yatık bakışta farklı derinlikteki kişiler görüntüde dikeyde sıkışıyor. Hedef drondan uzağa
+  yürürken görüntüde yukarı, arkasında duran aynı kıyafetli kişinin kutusuna doğru kayıyor; model hedefi bir karede
+  kaçırınca geçici seçim (`takip.Selection`: hakemle bir kez kilitlenir, sonra kapının içindeki en yakın kutuyu
+  izler) öbür kutuya atlıyor ve kişi durduğu için orada kalıyor. 35° / 9 m'de aynı iki kişi görüntüde birbirinden
+  uzak (kapının dışında). Görsel `gorev17c_kalabalik_gecis.png` (30° / 7 m, 62.5 s: seçim hedefte; 65.0 s: "YANLIŞ
+  KİŞİ", `insan4`).
+- **Sayının sınırı:** yanlış kişi oranı geçici seçim mantığına bağlı ve "yapışkan" (bir erken geçiş koşunun geri
+  kalanını yanlış sayar); m11'in gerçek seçimi (görünüş, hareket) başka bir sayı verir. Ama aynı kıyafetli kişide
+  görünüş yardım etmez ve kişilerin görüntüde üst üste binmesi bakış açısının kendisinden. **Önceden yazılan (b)
+  şartı (ortalama ≤ %19) dört yeni ayarın hiçbirinde sağlanmadı (%39–77).**
+- **Kullanıcının 8 m düşüncesine not:** kalabalık Hold'da yalnız eğim ve yüksekliğe bağlı; 35° / 8 m'nin %39'u
+  (3 koşunun 1'inde erken geçiş) hem 35° 8/12.9'un hem 35° 8/11.4'ün bedeli. 3 koşu gürültülü (%16–69).
+- **Örtülme:** hakemin "gerçekten görünür" ölçütü (hedefin en az 40 pikseli görünüyor) 9 m'de %89 (hedef çamın
+  arkasında zamanın %11'inde tamamen gizli), 6–8 m'de %99–100: alçakta hedef çamın arkasından geçerken de bir kısmı
+  hep göründü (nedeni ayrıştırılmadı; tahmin: yatık bakışta ağaç tacının altından bacaklar görünüyor). 21.1'deki kaba
+  elipsoid tahmini (%37–39) mutlak değerde yanlış çıktı (taç gerçek ağaçtan geniş); yönü (alçalmak örtülmeyi
+  büyütmüyor) doğru.
+- **Ağaç ve çarpma:** Hold'da (0, 0)'da beklerken çarpma olamaz ve olmadı (dron 6.0 / 6.9 / 7.1 / 8.0 m'de sabit).
+  Ama `cayir`'deki ağaçlar 7.3–10.9 m (dünya dosyası: meşe 6.5–10, çam 8–12 m): 6–7 m'de **takip eden** dron ağaç
+  tepelerinin altında kalır ve stok Follow Me engel bilmez; kişi bir ağacın yanından geçerse dron ağaca çarpar. Yol
+  koşuları ağaçsız `duz_alan`'da; ağaçlı alanda alçak takip denenmedi. Gerçekte 6–7 m'de takip ancak ağaçsız,
+  direksiz, binasız bir alanda olur; 8–9 m de kampüsteki 8–12 m'lik ağaçların yanında güvenli değil (bölüm 10).
+
+### 21.6 Tek tablo: 35° 9/12.9, 35° 8/11.4 ve yeni ayarlar
+
+**Tek tablo (3'er koşu, ort. (en az–en çok); takip yolu / kıvrımlı yol)**
+
+| Ayar | Kapı: takip / kıvrımlı (bütün koşular) | Köşede en az yatay [m] | Aynı anda 3B kamera–baş [m] | Yaklaşma payı hesap [m] / kalan (ölçülen) [m] | Geri kalma payı hesap [m] / en çok geri kalma [m] | Bulma [%] | Kişinin boyu [px] | Kişinin yeri ortadan yukarı: hesap / havada / yürürken [px] | Baş üst kenar dışında [s] | Kalabalıkta yanlış kişi [%] | Konum hatası sim [m] / duyarlılık d/h | Ufuk payı [°] | Başların üstü [m] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 30° · 6 m / 12.9 m | ✓ 3/3 / ✗ 2/3 (5/6) | 7.1 (6.7–7.5) / 7.5 (6.4–8.3) | 8.4 (8.0–8.8) / 8.7 (7.8–9.4) | 7.6 / 1.8 (1.3–2.2); 2.2 (1.1–3.0) | 22.6 / 2.0 (1.5–2.3) / 2.6 (2.4–2.9) | 73 (66–77) / 78 (76–79) | 213 (210–216) / 211 (210–214) | 232 / 260 (251–270) / 315 (292–338) | 5.3 (4.2–6.2) / 5.7 (4.0–6.9) | 77 (69–90) | 0.42 (0.40–0.46) / 0.43 (0.40–0.50) / 2.15 | 9.9 | 4.25 |
+| 30° · 7 m / 12.9 m | ✓ 3/3 / ✓ 3/3 (6/6) | 7.3 (6.7–7.9) / 7.5 (7.3–7.8) | 9.2 (8.7–9.6) / 9.3 (9.1–9.5) | 6.7 / 1.1 (0.5–1.7); 1.3 (1.1–1.7) | 28.3 / 2.3 (1.7–2.7) / 2.5 (2.4–2.7) | 73 (72–75) / 76 (75–76) | 200 (198–202) / 201 (200–202) | 116 / 139 (135–144) / 184 (167–200) | 1.9 (1.1–3.2) / 1.9 (1.3–2.8) | 70 (68–73) | 0.46 (0.39–0.49) / 0.46 (0.41–0.49) / 1.84 | 9.9 | 5.25 |
+| 32.5° · 7 m / 12.9 m | ✓ 3/3 / ✓ 3/3 (6/6) | 7.2 (7.1–7.3) / 6.7 (5.3–8.7) | 9.1 (9.0–9.1) / 8.7 (7.6–10.2) | 7.2 / 1.6 (1.5–1.6); 1.1 (-0.3–3.0) | 19.9 / 1.9 (1.8–1.9) / 2.7 (2.7–2.7) | 72 (71–73) / 76 (74–78) | 203 (202–204) / 203 (202–204) | 194 / 218 (211–229) / 285 (277–294) | 2.9 (2.2–4.2) / 4.0 (2.6–4.9) | 73 (70–78) | 0.57 (0.51–0.63) / 0.44 (0.38–0.54) / 1.84 | 12.4 | 5.25 |
+| 35° · 8 m / 12.9 m | ✓ 3/3 / ✓ 3/3 (6/6) | 7.1 (6.8–7.6) / 7.9 (7.2–8.4) | 9.7 (9.4–10.1) / 10.2 (9.6–10.6) | 7.0 / 1.2 (0.9–1.7); 2.0 (1.3–2.5) | 18.0 / 2.1 (1.8–2.4) / 2.5 (2.4–2.6) | 66 (64–68) / 70 (67–74) | 191 (190–192) / 190 (190–190) | 162 / 201 (192–209) / 260 (245–271) | 2.7 (1.5–3.9) / 1.5 (0.4–3.0) | 39 (16–69) | 0.47 (0.39–0.62) / 0.48 (0.46–0.51) / 1.61 | 14.9 | 6.25 |
+| 35° · 9 m / 12.9 m | ✓ 3/3 / ✓ 3/3 (12/13) | 6.2 (5.8–7.0) / 8.1 (8.0–8.3) | 9.8 (9.6–10.3) / 11.0 (10.9–11.1) | 6.3 / -0.3 (-0.7–0.4); 1.5 (1.4–1.7) | 21.7 / 1.6 (1.4–1.9) / 2.5 (2.3–2.7) | 62 (62–64) / 68 (66–69) | 179 (178–180) / 178 (178–178) | 61 / 80 (74–83) / 167 (164–172) | 0.2 (0.0–0.5) / 0.3 (0.0–0.4) | 16 (12–19) | 0.41 (0.35–0.46) / 0.45 (0.44–0.45) / 1.43 | 14.9 | 7.25 |
+| 35° · 8 m / 11.4 m | ✓ 3/3 / ✗ 2/3 (5/6) | 5.2 (4.9–5.6) / 6.7 (6.0–7.5) | 8.3 (8.1–8.6) / 9.3 (8.8–9.8) | 5.5 / -0.7 (-1.0–-0.3); 0.8 (0.1–1.6) | 19.5 / 1.4 (1.2–1.6) / 2.6 (2.4–2.7) | 71 (67–75) / 75 (70–79) | 207 (206–208) / 201 (198–202) | 63 / 82 (70–92) / 143 (121–171) | 0.7 (0.6–0.7) / 0.8 (0.5–1.3) | 39 (16–69) | 0.36 (0.34–0.37) / 0.40 (0.38–0.42) / 1.43 | 14.9 | 6.25 |
+
+- "Bütün koşular": düzeltmeden sonraki koşular (35° 9/12.9'da takip yolunda 7, kıvrımlı yolda 6 koşu; 35° 8/11.4'ün
+  13.11'deki 7 koşusu dahil edilirse 12/13). Kalabalık: 35° 8/11.4 ile 35° 8/12.9 aynı koşular (35° / 8 m).
+- Kişinin yeri: hesap düz uçuşta, dron tam `FLW_TGT_DST`'de; havada dron ≈ 0.3 m daha geride durduğu için ölçülen biraz
+  daha yukarıda; yürürken burun 2–3° aşağı.
+
+### 21.7 Okuma, kuralın sonucu ve gerçek uçuş önerisi
+
+**Kuralın sonucu (sim, bölüm 3 ve 17.1'in sırası, değişmeden): 30° · 7 m / 12.9 m** — iki yolda 3/3 geçen dört
+ayarın puanla birincisi; dört ağırlık denemesinde de. Simde yalnız yol koşularıyla bakılınca kullanıcının fikri
+çalışıyor.
+
+**Önceden yazılan gerçek uçuş okuması (21.1):**
+
+| Şart | 30° · 6 m / 12.9 m | 30° · 7 m / 12.9 m | 32.5° · 7 m / 12.9 m | 35° · 8 m / 12.9 m |
+|---|---|---|---|---|
+| (a) iki yolda 3/3 | ✗ (kıvrımlı 2/3) | ✓ | ✓ | ✓ |
+| (b) kalabalıkta yanlış kişi ort. ≤ %19 | ✗ %77 | ✗ %70 | ✗ %73 | ✗ %39 |
+| (c) 8 m altı / ufuk payı küçük ise ölçülen kazanç | 6 m, 9.9° | 7 m, 9.9°; kazanç var (bulma +11 / +8 puan, kutu +21 px, takip yolunda köşede +1.1 m) | 7 m, 12.4°; kazanç var (bulma +10 / +8, +24 px) | gerekmez (8 m, 14.9°) |
+
+**(b) hiçbirinde sağlanmadı: önceden yazıldığı gibi 35° · 9 m / 12.9 m başlangıç ayarı kalır; yeni ayarlar en çok
+yedek.**
+
+**Gerçek uçuş için öneri (doğrulanmamış; ilk saha uçuşunda doğrulanacak, bölüm 19'daki plan geçerli):**
+
+1. **Başlangıç: kamera 35°, 9 m yükseklik, 12.9 m geride (değişmedi).** İki yolda düzeltmeden sonraki 13 koşunun
+   12'si; kişi görüntünün ortasına yakın (havada 80 px, yürürken 167 px yukarıda), yani alt ve üst pay dengeli:
+   rüzgârda ve frende burnun iki yöne eğilmesine karşı en sağlam yer. Kalabalıkta yanlış kişi en düşük (%16, hiçbir
+   koşuda erken geçiş yok); başların 7.25 m üstü, ufuk payı 14.9°, konum duyarlılığı 1.43. **Bedeli:** algılama en
+   zayıf (%62–68, kişi 179 px: v0.2'nin çöktüğü 150 px'e 29 px) ve köşede kalan pay en küçük (takip yolunda kişinin gövde
+   merkezi 0.8–1.3 s görüntünün altında).
+2. **Yedek: kamera 35°, 8 m yükseklik, 12.9 m geride.** Aynı montaj; sahada yalnız yükseklik 9 → 8 m (`FLW_TGT_DST`
+   12.9 kalır). **Ne zaman:** gerçek kamera / Hailo kişiyi 9 m'de zayıf bulursa (bölüm 19 adım 3: takipsiz hover'da
+   kişi ≈ 180 px'te model zorlanırsa). **Gerekçe:** iki yolda 6/6, köşede en az 6.8–8.4 m (yaklaşma payı 7.0 m),
+   kişi 190 px (+12 px), bulma +4 / +2 puan, kilit kaybı daha az (2.7 / 1.0, 9 m'de 3.3 / 2.3); 8 m PX4'ün Follow Me
+   için önerdiği alt sınır, ufuk payı aynı. **Bedeli:** kalabalıkta yanlış kişi %39 (3 koşunun 1'inde erken geçiş;
+   kalabalık alanda kullanılmamalı ya da m11'in seçimi beklenmeli); kişi merkezin 162 px üstünde, hızlanırken baş
+   1.5–2.7 s üstten çıkıyor (9 m'de 0.2–0.3 s; rüzgârlı günde daha sık olabilir); konum duyarlılığı 1.61.
+   - **13.11'in yedeği 35° 8/11.4 yerine neden bu:** aynı yükseklik ve aynı kalabalık bedeli; ama 8/11.4 kıvrımlı yolda
+     düzeltmeden sonra yine 3 koşunun 1'inde kişiyi kaybetti (5/6; 13.11 dahil 12/13), yaklaşma payı 5.5 m (takip
+     yolunda kalan pay −0.7 m). 8/11.4'ün artısı biraz daha iyi algılama (%71–75, 207 px) ve kişinin merkezde durması
+     (üst kenar 0.7–0.8 s). Kullanıcının "8 m / 11.4 m'ye geçme" düşüncesine cevap: 8 m'ye inilecekse simde 12.9 m
+     geride kalmak daha sağlam; algılama farkı küçük (5 puan, 16 px).
+3. **30° · 7 m / 12.9 m (kuralın sim seçimi) gerçek uçuş için önerilmez:** kalabalıkta 3 koşunun 3'ünde yürüyüşün 3.
+   saniyesinde aynı kıyafetli kişiye geçti (%70); 7 m PX4'ün 8 m'sinin altında, başların 5.25 m üstünde, kampüs
+   ağaçlarının altında; ufuk payı 9.9° (Ağustos uçuşlarında frende burun 6–11° kalktı: her sert frende ufuk kadraja
+   girebilir, otomatik pozlama simde yok); konum 1.84 kat duyarlı (GPS yüksekliği 0.5 m yanlışsa 0.92 m); yeni bir 30°
+   parça (bölüm 19'daki ayarlanabilir 30–40° parça olursa mümkün). Ne zaman düşünülür: m11'in seçimi kalabalıkta
+   sağlamsa, alan ağaçsız ve boşsa ve 35°'de algılama yetmezse; ayrı bir uçuş denemesi olarak.
+4. **30° · 6 m / 12.9 m ve 32.5° · 7 m / 12.9 m önerilmez:** 6 m'de kişi merkezin 232 px üstünde, baş her koşuda 4–7 s
+   üstten dışarıda ve kıvrımlı yolda bir kayıp; 32.5° kişiyi 194 px yukarı koyuyor (baş 2.9–4.0 s dışarıda), kalabalıkta
+   %73 ve konum hatası simde en büyük (0.57 m takip yolunda).
+
+**Kullanıcının fikri üzerine, dürüst özet:** "Açıyı azalt, alçal, daha geride dur" simde köşe ve geri dönüşteki alt
+kenar sorununu gerçekten çözüyor (kalan pay +1.1…+2.2 m, 7 ve 8 m'lik ayarlar iki yolda 6/6) ve kişiyi büyütüyor
+(+12…+34 px, bulma +2…+11 puan). Ama sorunu iki yere taşıyor: (1) kişi merkezin üstünde durduğu için dron hızlanınca
+görüntünün üstünden çıkıyor (6 m'de kayba kadar); (2) alçak bakışta kalabalıkta kişiler üst üste biniyor (yanlış
+kişi %39–77). Sim dışı bedeller (8 m altı, ağaç tepelerinin altı, ufuk payı, konum duyarlılığı) de cabası. Bu
+denemede yeni ayarlar 35° 9/12.9'u gerçek uçuş için geçmiyor; en yakını aynı montajdaki 35° 8/12.9 ve yedek olarak
+önerildi. m15 en az mesafe koruması getirirse köşedeki 6.2 m'lik yaklaşma küçülür: yeni ayarların artısı (büyük alt
+pay) azalır, bedeli kalır.
+
+**Varsayılanlar değişmedi** (`kamera.NOMINAL_TILT_DEG` 35°, `models/x500_tez`, `takip_yuruyen` 9 m / 12.9 m,
+`kamera_montaji.yaml`, `EKIP_ICIN_OZET.md`, bölüm 19). Yedeğin 8/11.4'ten 8/12.9'a geçmesi kullanıcı onaylarsa
+bölüm 19, `kamera_montaji.yaml` (`ucus_onerisi`) ve `EKIP_ICIN_OZET.md`'ye işlenir.
+
+**Açık konular ve sınırlar:** her yeni ayarda 6 yol koşusu ve 3 kalabalık koşusu (gürültülü; 3/3 ile 2/3 tek başına
+kanıt değil); kalabalık sayısı geçici seçim mantığına bağlı; simde rüzgâr yok (burun eğilmesi yalnız hızlanma ve
+frenden); stok Follow Me (m15 değil); v0.2 CPU'da (Hailo değil); tek kalabalık senaryosu (aynı kıyafetli kişi hedefin
+6 m gerisinde: kötü durum).
+
+### 21.8 Dosyalar, görseller, süre
+
+- **Süre:** 14.11 17:34:37–19:10:44, 36 koşu, 1 saat 36 dakika sim (bütçe 2.5 saat; kalabalık 3'er koşu kaldı). Takip
+  ≈ 2.5, kıvrımlı ≈ 2.6, kalabalık ≈ 2.9 dk / koşu; kalabalıkta RTF 0.62–0.83 (9 m'de 0.85). Kod değişmedi (test /
+  ruff / pin gerekmedi).
+- **Koşu klasörleri** (`tez/sim/sonuclar/`, git dışında): `gorev10on_tarama/asama4/`, `asama4_kivrimli/` (her birinde
+  `durum.json`), `asama4.log`, `asama4_kivrimli.log`, `asama4.plan.log`, `plan.json`'a eklenen 11 bileşim (8'i koşuldu)
+  ve `senaryolar/`, `analiz_17c.json`, `gecis_17c.json`; `gorev17c_kalabalik/` (`plan.json`, `senaryolar/`,
+  `kalabalik/`, `kalabalik.log`).
+- **Görseller ve videolar** (`~/Desktop/Follow/3_m06_Simulasyon/Deneme/`, `gorev17c_` ile başlayanlar):
+
+| Dosya | Ne |
+|---|---|
+| `gorev17c_karsilastirma.png` | 6 ayar × (takip yolu, kıvrımlı yol, kalabalık), her nokta bir koşu: en az mesafe, kapı, kalan pay, bulma, kişi boyu, yanlış kişi, konum hatası, kişinin görüntüdeki yeri, başın üst kenar dışında kalması |
+| `gorev17c_yan_gorunus.png` | Yan görünüş (dron, kamera konisi, kişi, köşede 6.2 m yaklaşınca kişi, yaklaşma payı) ve görüntüde kişinin yeri: düz uçuş, yaklaşınca, burun 10° aşağı; 30° 7/12.9, 35° 8/12.9, 35° 9/12.9, 35° 8/11.4 |
+| `gorev17c_kalabalik_gecis.png` | 30° / 7 m kalabalık: 62.5 s seçim hedefte, 65.0 s aynı kıyafetli kişiye geçmiş |
+| `gorev17c_30_7m_12.9m_takip_yolu_kosu.mp4`, `gorev17c_30_7m_12.9m_kivrimli_yol_kosu.mp4` | En iyi yeni ayar (kuralın seçimi), temsili koşular (`asama4/e30_h7_d12.9/kosu_3`, `asama4_kivrimli/kivrimli_yuruyus_e30_h7_d12.9/kosu_3`) |
+| `gorev17c_35_8m_12.9m_takip_yolu_kosu.mp4`, `gorev17c_35_8m_12.9m_kivrimli_yol_kosu.mp4` | Önerilen yedek, temsili koşular (`kosu_1`'ler) |
+| `gorev17c_30_6m_12.9m_kivrimli_kayip_kosu.mp4` | 30° 6/12.9, kişinin üstten çıkıp kaybedildiği koşu (`asama4_kivrimli/kivrimli_yuruyus_e30_h6_d12.9/kosu_2`) |
+| `gorev17c_30_7m_kalabalik_park_kosu.mp4` | 30° / 7 m kalabalık, aynı kıyafetli kişiye geçiş (`gorev17c_kalabalik/kalabalik/kalabalik_park_e30_h7/kosu_2`) |
+
+- **Betikler** (`gorev17c_betikler/`, repoya girmedi): `geometri.py`, `park_geo_c.py`, `kalabalik_plan.py`,
+  `zincir_17c.sh`, `analiz_17c.py` (bu bölümün tabloları → `gorev17c_tablolar.md`), `gecis_17c.py`,
+  `karsilastirma_17c.py`, `yan_gorunus_17c.py`, `videolar_17c.py`, `satirlar_17c.py` (kabul satırları),
+  `pdf_olustur17c.py` + `kisaca17c.md` (PDF'in yeni bölümü).
+
+
 ---
 
 ## Kendin dene
@@ -1818,3 +2223,87 @@ cd /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot && /home/ahmet/Desktop/Pro
 ```
 
 Beklenen: `6 passed` (5 test, biri iki senaryo için) ve `281 passed`.
+
+### 12. Alçak + uzak takip denemesi (İş 4, bölüm 21)
+
+Önce PDF'in yeni bölümü ("Ek deneme (14.11 akşam)", Kısaca sayfasından hemen sonra):
+
+```bash
+xdg-open /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Kamera_Acisi_ve_Mesafe_Modelli_Tarama.pdf
+```
+
+Kişiyi görüntünün ortasının üstüne koymak ne demek (solda yan görünüş: köşede dron 6.2 m yaklaşınca kişi nerede;
+sağda kameranın görüntüsünde kişi: düz uçuşta kırmızı, yaklaşınca turuncu, burun 10° aşağı eğilince mavi):
+
+```bash
+xdg-open /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_yan_gorunus.png
+```
+
+Altı ayar, her nokta bir koşu (iki yol + kalabalık; gri alan 35° 9/12.9 ve 35° 8/11.4):
+
+```bash
+xdg-open /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_karsilastirma.png
+```
+
+Kalabalıkta 30° / 7 m: solda 62.5 s'de seçim hedefte, sağda 65.0 s'de arkasındaki aynı kıyafetli kişiye geçmiş:
+
+```bash
+xdg-open /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_kalabalik_gecis.png
+```
+
+En iyi yeni ayar (kuralın sim seçimi) 30° · 7 m / 12.9 m, takip yolu: **Ctrl+T** ile **0:50**'ye git; 0:51'de kişi
+batıya dönüyor, 0:56'da dron hızlanırken kişinin başı görüntünün üst kenarında kesiliyor ama model onu buluyor.
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_30_7m_12.9m_takip_yolu_kosu.mp4 2>/dev/null
+```
+
+Aynı ayar, kıvrımlı yol: **Ctrl+T** ile **1:00**'a git; 1:02'de kişi neredeyse tam geri dönüp (164°) drona doğru
+yürüyor, kişi görüntüde kalıyor.
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_30_7m_12.9m_kivrimli_yol_kosu.mp4 2>/dev/null
+```
+
+Önerilen yedek 35° · 8 m / 12.9 m (aynı montaj, yalnız yükseklik 8 m): takip yolu köşe ≈ **0:52**, kıvrımlı yol geri
+dönüş ≈ **1:01**.
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_35_8m_12.9m_takip_yolu_kosu.mp4 2>/dev/null
+```
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_35_8m_12.9m_kivrimli_yol_kosu.mp4 2>/dev/null
+```
+
+Fikir aşırıya götürülünce, 30° · 6 m / 12.9 m: **Ctrl+T** ile **0:58**'e git; 1:00'da dron burnunu aşağı eğerek
+hızlanırken kişi görüntünün tamamen üstünden çıkıyor ("HEDEF YOK"), 1:04'te geri dönüşte kayboluyor.
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_30_6m_12.9m_kivrimli_kayip_kosu.mp4 2>/dev/null
+```
+
+Kalabalıkta 30° / 7 m: **Ctrl+T** ile **0:38**'e git; 0:40 civarında durum satırında kırmızı "YANLIŞ KİŞİ (hedefle
+aynı kıyafetli)" çıkıyor ve seçim koşunun çoğunda o kişide kalıyor.
+
+```bash
+vlc /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_30_7m_kalabalik_park_kosu.mp4 2>/dev/null
+```
+
+Bölümün bütün tabloları (betiğin çıktısı):
+
+```bash
+xdg-open /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_betikler/gorev17c_tablolar.md
+```
+
+Bir ayarı kendin koştur (pencere yok, ≈ 3 dakika; senaryo dosyası tarama klasöründe, git dışında):
+
+```bash
+cd /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot && /home/ahmet/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo tez/sim/sonuclar/gorev10on_tarama/senaryolar/e30_h7_d12.9.yaml --ekransiz
+```
+
+Tabloları koşulardan yeniden hesapla (≈ 10 saniye):
+
+```bash
+cd /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot && /home/ahmet/Desktop/Projects/Auto-Follow/.venv-tez/bin/python /home/ahmet/Desktop/Follow/3_m06_Simulasyon/Deneme/gorev17c_betikler/analiz_17c.py
+```
