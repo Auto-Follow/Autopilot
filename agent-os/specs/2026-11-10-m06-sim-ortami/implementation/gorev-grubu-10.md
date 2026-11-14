@@ -46,8 +46,8 @@
    çalışamaz olur; o koşunun ölçütleri takılan modu ölçmez. Ölçütler, rapor ve video yine yazılır; olaylarda satır
    sayısı ve ilk satır bulunur, `ozet.json` → `harici_mod.unresponsive` bütün satırları tutar. Kapanıştan sonra
    kalan süreç gibi diğer sorunlar eskisi gibi yalnız olaydır. Arama büyük/küçük harfe duyarsız `unresponsive`
-   (commander: `No response from <id>, flagging unresponsive`, `externalChecks.cpp`). **Kullanıcıya soru:** bu
-   sertlik uygun mu (bölüm 9)?
+   (commander: `No response from <id>, flagging unresponsive`, `externalChecks.cpp`). **Kullanıcı kararı
+   (14.11.2026, Ahmet):** böyle kalır; "unresponsive" bulunan harici koşu TAMAMLANMADI sayılır.
 3. **Komutun derlemede olduğu sim açılmadan denetlenir** (`bin/px4-<ilk kelime>` var mı). Yoksa
    `'<komut>' bu PX4 derlemesinde yok … Ağaç dışı bir modülse önce: tez/sim/derle.sh --harici <klasör>` ile çıkış
    kodu 2. Gerekçe: modülsüz bir derlemeyle koşu ancak ~20 s sonra PX4'ün "command not found"una çarpardı; takım
@@ -221,8 +221,8 @@ modül, video ya da ULog girmedi. Repo dışı: `/home/ahmet/Desktop/Follow/3_m0
 
 ## 9. Açık konular ve sorulacaklar
 
-- **Kullanıcıya:** "unresponsive" bulunan harici koşunun "TAMAMLANMADI" sayılması (karar 2) uygun mu, yoksa yalnız
-  olay mı olsun?
+- ~~"unresponsive" bulunan harici koşunun "TAMAMLANMADI" sayılması~~ → karara bağlandı (14.11.2026, Ahmet): böyle
+  kalır (karar 2).
 - Kurt/Algan: modülün yeri (`tez/px4` dalı mı, ayrı repo mu), başlatma komutu, kesin mod adı ve `AF_` öneki
   (m15/m16 spec'i). Kodda değişiklik gerekmez.
 - `karsilastir.py` (C7) 12. grupta; `m06_kabul.sh` 3. koşusu 13. grupta.
