@@ -2,8 +2,7 @@
 
 - Tarih: 15.11.2026 · dal `ozellik/m06-sim-ortami` · taban commit `29bdb0d8d3` + çalışma ağacı
 - Kapsam: `tasks.md` 12.0–12.5 (12.4: kullanıcının 12.11 kararı, 5. grubun açık konusu)
-- Durum: **uygulandı, test edildi, koşuldu**; commit'i ana oturum atar. 200 ms koşusunun videosundaki görsel kontrol
-  Ahmet'te (bölüm 6, "Kendin dene" 1–2).
+- Durum: **tamam** (commit `a78245da2b`, `74d62db2c8`). Ahmet'in görsel kontrolü 15.11: "kutular geride" (bölüm 5).
 
 ## Kısaca
 
@@ -21,7 +20,7 @@
   kilit kaybı (pencere) 1 / 3 (17. grubun üç koşusunda 3–5), RTF 0.89 / 0.98.
 - **Model kutusu videoda belirgin geride:** PX4'teki son model sonucunun yaşı (yürüyüşte, kutulu anlarda) p50
   **196 → 396 ms**, kutu merkezinin hakem kutusundan uzaklığı ort. **65 → 126 px** (2304×1296 görüntüde). Üç kare
-  (0 ms üstte, 200 ms altta) bölüm 6'da; Ahmet'in görsel kontrolü bekleniyor.
+  (0 ms üstte, 200 ms altta) bölüm 5'te; Ahmet'in görsel kontrolü 15.11: "kutular geride".
 - `takip.yeniden_kilit_bekleme_s` / `--yeniden-kilit-bekleme-s`: kilit düştükten sonra operatörün tepki süresi
   (sim s, varsayılan 0 = bugünkü davranış). `kalabalik_park` 1.5 s ile: kilit 69.50 s'de düştü,
   69.57–70.95 s'nin 19 karesi `tepki_bekleniyor`, 71.02 s'den sonra olağan nedenler (bekleme tam 1.5 s).
@@ -262,7 +261,7 @@ kadar izliyor, mesafe değişmiyor**; değişen köşede yetişme (en çok +0.8 
 (+1). Etkiler 3 koşunun yayılımıyla aynı büyüklükte, yani 200 ms bu senaryoda takibi bozmuyor, köşelerde biraz
 geciktiriyor. Ayrıntı: `tez/sim/sonuclar/gorev12_gecikme200_x3/toplu.html`.
 
-## 5. Görsel kontrol: model kutusunun gecikmesi (Ahmet'in kontrolü bekleniyor)
+## 5. Görsel kontrol: model kutusunun gecikmesi (Ahmet: "kutular geride", 15.11)
 
 Videoda kırmızı kutu "PX4'teki son model sonucu"dur (gönderim anına göre; 8. grup); 200 ms'de PX4'e 200 ms geç
 ulaştığı için hakemin o anki mavi kutusunun daha gerisinde kalmalı. Ölçüyle (yürüyüş, 60 s'den sonra, PX4'teki son
@@ -288,8 +287,8 @@ eni kadar (69 / 80 px).
 | `tez/sim/sonuclar/gorev12_kilit_bekleme1.5/gorev12_kare_70.4s_tepki_bekleniyor.jpg` | Bekleme sırasında durum satırları (4.2) |
 
 Benim yorumum: 200 ms'de kutu her üç anda da 0 ms'ye göre belirgin geride; geride kalma, kişinin değil çoğu zaman
-**dronun** hareketinden (dönüş, hızlanma) görüntünün kaymasından geliyor (70.8 s ve 88.4 s'de kişi duruyor). Görsel
-kontrol maddesi Ahmet'in videoyu izlemesine kadar açık (`tasks.md` 12.0 / 12.5).
+**dronun** hareketinden (dönüş, hızlanma) görüntünün kaymasından geliyor (70.8 s ve 88.4 s'de kişi duruyor). Ahmet'in
+kontrolü (15.11, kareler ve videolar): "kutular geride"; `tasks.md` 12.0 / 12.5 kapandı.
 
 ## 6. Karşılaşılan sorunlar
 
@@ -313,7 +312,7 @@ kontrol maddesi Ahmet'in videoyu izlemesine kadar açık (`tasks.md` 12.0 / 12.5
 
 ## 8. Açık konular ve öneriler
 
-- **Görsel kontrol (Ahmet):** 200 ms koşusunun videosu ve üç kare ("Kendin dene" 1–2).
+- ~~**Görsel kontrol (Ahmet)**~~ → kapandı 15.11: "kutular geride".
 - ~~**Tek koşu**~~ → kapandı, 3 koşu yapıldı (kullanıcı isteği 15.11, bölüm 4.4).
 - **Öneri (yapılmadı):** `gecikme.tohum` alanı (aynı titreşim dizisi yerine tekrar başına farklı tohum); şimdilik sabit
   tohum `gecikme.JITTER_SEED = 0`.
