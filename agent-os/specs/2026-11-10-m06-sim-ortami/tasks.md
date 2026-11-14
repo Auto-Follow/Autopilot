@@ -418,13 +418,13 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 #### Görev Grubu 10: Kendi PX4 modülünü takmak — `derle.sh --harici`, `--px4-baslat`, kılavuz
 **Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.5 gün · **Bekleyen:** Kurt/Algan modülü (o arada iskelet modül ağaç dışında). Ekipten gelen bilgi (09.11, Yusuf Algan; kesinleşmiş değil, m15/m16 spec'inde yazılınca o geçerli): mod adı **"AUTO FOLLOW"** (QGC'de böyle görünecek), parametre öneki **`AF_`** (`AF_XXX`).
 
-- [ ] 10.0 m15 modunun sime kolayca takılıp aynı senaryo, ölçüt ve videoyla denenebilmesi
-  - [ ] 10.1 Testleri yaz (2–4 test): `calistir.sh`'a giden argüman listesinin oluşturulması (`takip.px4_baslat` + `--px4-baslat`, `takip.px4_parametreleri` + `--param` sırası); "unresponsive" kontrolünün yalnız harici modlu koşuda açılması. (`takip.px4_parametreleri` + `--param` sırası 2. grupta `test_hedef.py`'de sınandı.)
-  - [ ] 10.2 `derle.sh --harici <klasör>` → `EXTERNAL_MODULES_LOCATION`; bayrak yoksa `tez/px4/src/CMakeLists.txt` varsa o, yoksa stok; çıktı her zaman `build/px4_sitl_tez`; klasör önbellektekinden farklıysa CMake yeniden yapılandırılır
-  - [ ] 10.3 `calistir.sh --px4-baslat "<komut>"` (çoklu): `px4-logger status` başarılı olana kadar en çok 90 s beklenir; komut `rootfs` içinde `bin/px4-<komut>` ile çalışır, çıktısı sim log'una yazılır
-  - [ ] 10.4 `senaryo.py`/`simulasyon.py`: `takip.px4_baslat`, `takip.px4_parametreleri`, `--px4-baslat` bağlanır; harici modlu koşu sonunda `sim.log`'da "unresponsive" aranır. 2. gruptaki ilgili ara hatalar kaldırılır. (`takip.px4_parametreleri` ve `--param` 2. grupta bağlandı ve koşuda PX4'ten geri okunuyor; burada yalnız `px4_baslat` kalır.)
-  - [ ] 10.5 README "C. Kendi PX4 modülünü takmak" bölümü (spec "Takım Arkadaşı Kılavuzu" C1–C8); iskelet modül notları (`PARENT_SCOPE`, `DEPENDS` yok, `register_ext_component_request`, 24 karakter) `c4b4abf342`'ye atıfla
-  - [ ] 10.6 Doğrulama
+- [x] 10.0 m15 modunun sime kolayca takılıp aynı senaryo, ölçüt ve videoyla denenebilmesi
+  - [x] 10.1 Testleri yaz (2–4 test): `calistir.sh`'a giden argüman listesinin oluşturulması (`takip.px4_baslat` + `--px4-baslat`, `takip.px4_parametreleri` + `--param` sırası); "unresponsive" kontrolünün yalnız harici modlu koşuda açılması. (`takip.px4_parametreleri` + `--param` sırası 2. grupta `test_hedef.py`'de sınandı.)
+  - [x] 10.2 `derle.sh --harici <klasör>` → `EXTERNAL_MODULES_LOCATION`; bayrak yoksa `tez/px4/src/CMakeLists.txt` varsa o, yoksa stok; çıktı her zaman `build/px4_sitl_tez`; klasör önbellektekinden farklıysa CMake yeniden yapılandırılır
+  - [x] 10.3 `calistir.sh --px4-baslat "<komut>"` (çoklu): `px4-logger status` başarılı olana kadar en çok 90 s beklenir; komut `rootfs` içinde `bin/px4-<komut>` ile çalışır, çıktısı sim log'una yazılır
+  - [x] 10.4 `senaryo.py`/`simulasyon.py`: `takip.px4_baslat`, `takip.px4_parametreleri`, `--px4-baslat` bağlanır; harici modlu koşu sonunda `sim.log`'da "unresponsive" aranır. 2. gruptaki ilgili ara hatalar kaldırılır. (`takip.px4_parametreleri` ve `--param` 2. grupta bağlandı ve koşuda PX4'ten geri okunuyor; burada yalnız `px4_baslat` kalır.)
+  - [x] 10.5 README "C. Kendi PX4 modülünü takmak" bölümü (spec "Takım Arkadaşı Kılavuzu" C1–C8); iskelet modül notları (`PARENT_SCOPE`, `DEPENDS` yok, `register_ext_component_request`, 24 karakter) `c4b4abf342`'ye atıfla
+  - [x] 10.6 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler -q
@@ -450,6 +450,12 @@ Toplam: 17 görev grubu (Faz A: 13 bu dalda + 1 çatıda; Faz B: 3).
 - 10.1'deki testler geçer
 - Ağaç dışı bir modül derlenir, başlatılır, adıyla seçilir; aynı ölçütler ve MP4 üretilir
 - Bayraksız derleme stok hâle döner; m06 kilit listesine yol eklemez
+
+**Durum (14.11):** uygulandı ve doğrulandı. 4 yeni test (`test_harici_mod.py`) + `test_hedef.py` / `test_olcum.py`
+güncellemesi, 289 test geçti; ruff temiz; KILIT SAGLAM. İskelet (`c4b4abf342`, scratchpad'de, değiştirilmeden derlendi)
+ile `takip_yuruyen` harici modlu koşu GEÇTİ ("Tez Auto Follow" listede, adıyla seçildi, istenen modda %100,
+"unresponsive" yok, `TEZ_LOS` 892 = ULog 892, `kosu.mp4` + `rapor.html` + `ozet.json`); bayraksız `derle.sh` stoka döndü,
+F0 GEÇTİ. Ayrıntı: `implementation/gorev-grubu-10.md`. Kurt/Algan'ın modülüyle koşu modül gelince yapılacak.
 
 ### Video Yayını
 

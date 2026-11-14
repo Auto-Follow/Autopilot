@@ -4,6 +4,10 @@ with Simulation(out_dir, world_file, headless=True, params={"FLW_TGT_DST": 10}) 
     if sim.wait_ready(): ...
 sim.problems()   # what was wrong with the run: processes left over, an external mode marked unresponsive
 
+px4_start=["<module> start"]: PX4 commands calistir.sh runs once PX4 is up (calistir.sh --px4-baslat, in this order),
+e.g. the start of an out-of-tree flight mode built with derle.sh --harici. wait_ready() then also waits until they
+ran, and only such a run is checked for a mode the commander marked unresponsive (external_mode).
+
 restart_logger(): PX4 v1.17.0's logger subscribes to its optional topics only if they exist when it starts
 (LoggedTopics::add_topic, orb_exists). follow_target, follow_target_estimator and follow_target_status come into
 being only with the first FOLLOW_TARGET and the Follow Target mode, so a follow_me run restarts the logger once they
@@ -11,10 +15,11 @@ exist: the ULog then has them, in a second file from that moment on (ulogs()).
 """
 
 import os
+import re
 import subprocess
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from parametreler import Number, format_value
@@ -24,6 +29,11 @@ REPO = SIM_DIR.parent.parent
 BUILD = REPO / "build" / "px4_sitl_tez"
 READY_LINE = "Startup script returned successfully"  # PX4 ran its whole rcS: attached to Gazebo, all modules up
 FAILED_LINES = ("Startup script returned with return value", "Unknown model", "gz_bridge failed")
+# what calistir.sh prints about the --px4-baslat commands (it runs them once `px4-logger status` succeeds)
+START_DONE_LINE = "PX4 başlatma komutları tamam"
+START_FAILED_LINES = ("PX4 başlatma komutu başarısız", "PX4 başlatma komutları çalıştırılamadı")
+START_RESULT = re.compile(r"PX4 başlatma komutu (?:bitti|başarısız) \(çıkış kodu (-?\d+)\): (.*)$")
+UNRESPONSIVE = "unresponsive"  # commander: "No response from <id>, flagging unresponsive" (externalChecks.cpp)
 # logger start arguments of the SITL start (init.d-posix/rcS + init.d/rc.logging with the parameter defaults this sim
 # keeps: LOGGER_BUF 1000, EKF2_EN 1 -> poll ekf2_timestamps, SDLOG_MODE 1 -> -e, SDLOG_BACKEND 3 -> -m all)
 LOGGER_START_ARGS = ("-b", "1000", "-t", "-p", "ekf2_timestamps", "-e", "-m", "all")
@@ -36,13 +46,18 @@ def running() -> bool:
     return px4 or gz
 
 
-def command(world: str | Path, headless: bool, params: Mapping[str, Number] | None = None) -> list[str]:
-    """calistir.sh call; `params` are loaded after the .params files, in their order (the last one wins)."""
+def command(
+    world: str | Path, headless: bool, params: Mapping[str, Number] | None = None, px4_start: Sequence[str] = ()
+) -> list[str]:
+    """calistir.sh call; `params` are loaded after the .params files, in their order (the last one wins);
+    `px4_start` are run in their order once PX4 is up."""
     args = [str(SIM_DIR / "calistir.sh"), "--dunya", str(world)]
     if headless:
         args.append("--ekransiz")
     for name, value in (params or {}).items():
         args += ["--param", f"{name}={format_value(value)}"]
+    for text in px4_start:
+        args += ["--px4-baslat", text]
     return args
 
 
@@ -53,17 +68,25 @@ class Simulation:
         world: str | Path = "duz_alan",
         headless: bool = True,
         params: Mapping[str, Number] | None = None,
-        external_mode: bool = False,
+        px4_start: Sequence[str] = (),
     ) -> None:
         self.out = out
         self.world = world
         self.headless = headless
         self.params = dict(params or {})
-        # Only an out-of-tree mode can be marked unresponsive by the commander; stock runs do not check for it.
-        self.external_mode = external_mode
+        self.px4_start = tuple(px4_start)
         self.log_path = out / "sim.log"
         self.proc: subprocess.Popen | None = None
         self.started = 0.0
+
+    @property
+    def external_mode(self) -> bool:
+        """Only a module started after PX4 (--px4-baslat) can register an external mode, and only such a mode can be
+        marked unresponsive by the commander; stock runs are not checked for it."""
+        return bool(self.px4_start)
+
+    def command(self) -> list[str]:
+        return command(self.world, self.headless, self.params, self.px4_start)
 
     def __enter__(self) -> "Simulation":
         if running():
@@ -73,7 +96,7 @@ class Simulation:
         env = {**os.environ, "TEZ_PYTHON": os.environ.get("TEZ_PYTHON") or sys.executable}
         self.started = time.time()
         self.proc = subprocess.Popen(
-            command(self.world, self.headless, self.params),
+            self.command(),
             stdin=subprocess.DEVNULL,
             stdout=self.log_path.open("w"),
             stderr=subprocess.STDOUT,
@@ -88,17 +111,32 @@ class Simulation:
         return self.log_path.read_text(errors="replace") if self.log_path.is_file() else ""
 
     def wait_ready(self, timeout: float = 150.0) -> bool:
+        """PX4 ran its rcS and, with start commands, calistir.sh ran them all (a failed one = False). The start
+        commands may finish before rcS does (they wait for the logger, which rcS starts second to last)."""
+        needed = (READY_LINE, START_DONE_LINE) if self.px4_start else (READY_LINE,)
+        failed = FAILED_LINES + (START_FAILED_LINES if self.px4_start else ())
         t_end = time.monotonic() + timeout
         while time.monotonic() < t_end:
             if self.proc.poll() is not None:
                 return False
             text = self.log()
-            if any(line in text for line in FAILED_LINES):
+            if any(line in text for line in failed):
                 return False
-            if READY_LINE in text:
+            if all(line in text for line in needed):
                 return True
             time.sleep(1)
         return False
+
+    def start_results(self) -> list[dict]:
+        """[{"komut", "cikis_kodu"}] of the start commands calistir.sh ran, in their order (from sim.log)."""
+        found = (START_RESULT.search(line) for line in self.log().splitlines())
+        return [{"komut": m.group(2), "cikis_kodu": int(m.group(1))} for m in found if m]
+
+    def unresponsive(self) -> list[str]:
+        """sim.log lines in which the commander flagged an external mode unresponsive; [] without one."""
+        if not self.external_mode:
+            return []
+        return [line.strip() for line in self.log().splitlines() if UNRESPONSIVE in line.lower()]
 
     def stop(self) -> None:
         if self.proc is None or self.proc.poll() is not None:
@@ -139,8 +177,11 @@ class Simulation:
             time.sleep(1)
         else:
             found.append("kapanıştan sonra çalışan PX4/Gazebo süreci kaldı")
-        if self.external_mode and "unresponsive" in self.log().lower():
-            found.append("PX4 harici modu 'unresponsive' olarak işaretledi (sim.log)")
+        lines = self.unresponsive()
+        if lines:
+            found.append(
+                f"PX4 harici modu 'unresponsive' olarak işaretledi (sim.log, {len(lines)} satır; ilki: {lines[0]})"
+            )
         return found
 
     def ulogs(self) -> list[Path]:

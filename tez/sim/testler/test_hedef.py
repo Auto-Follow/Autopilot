@@ -412,7 +412,6 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     hedef.check_wired(sc)  # defaults only: the run may start
     assert hedef.settings(sc)["henuz_bagli_degil"] == {}  # kosu.mp4 is made since group 8
     later = [
-        (hedef.CommandLine(px4_start=("x start",)), "takip.px4_baslat / --px4-baslat: Görev grubu 10'da"),
         (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
         (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
     ]
@@ -420,8 +419,9 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
         with pytest.raises(ValueError, match=re.escape(message)):
             hedef.check_wired(hedef.load(good, cli))
     # wired already: start parameters, no model, no video, the model's settings (group 4), TEZ_LOS with an external
-    # mode chosen by name and the referee's LOS (group 5), kept video frames (group 8)
+    # mode chosen by name and the referee's LOS (group 5), kept video frames (group 8), PX4 start commands (group 10)
     hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
+    hedef.check_wired(hedef.load(good, hedef.CommandLine(px4_start=("x start",))))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(keep_frames=True)))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Hold", los="hakem")))
     hedef.check_wired(

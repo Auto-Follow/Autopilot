@@ -322,6 +322,15 @@ def test_mode_timeline_and_how_long_the_mode_held() -> None:
     changes = [(27.1, "Follow Target"), (88.2, "Land")]
     assert olcum.mavlink_mode_kept(changes, "Follow Target", 60.0, 90.0) == pytest.approx(28.2 / 30.0)
 
+    # an external mode (task group 10): the ULog has its slot, External 1 = nav_state 23; the report and the video
+    # call it by the name it registered with, which the run selected. PX4's own modes keep PX4's names.
+    external = olcum.mode_timeline({"timestamp": t * 1e6, "nav_state": np.where(nav == 19, 23, nav)})
+    assert external[3]["ad"] == "External 1" and olcum.wanted_nav_state(external, 27.1) == 23
+    named = olcum.with_mode_name(external, 23, "Tez Auto Follow")
+    assert [s["ad"] for s in named] == ["Hold", "Takeoff", "Hold", "Tez Auto Follow", "Land"]
+    assert olcum.with_mode_name(line, wanted, "Follow Target") == line
+    assert olcum.with_mode_name(external, None, "Tez Auto Follow") == external
+
 
 def test_tez_los_in_a_ulog_without_debug_vect_has_every_key() -> None:
     """A run whose ULog holds no debug_vect (no TEZ_LOS reached PX4) still has every key (the log line of a run with

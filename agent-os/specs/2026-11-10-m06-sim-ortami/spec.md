@@ -232,6 +232,11 @@
     listesiyle karşılaştırılır) denetlenir; yoksa hata bu adları ve harici modun nasıl ekleneceğini söyler
     (0.7 s, çıkış kodu 2). `takip.px4_baslat` / `--px4-baslat` verilmişse (harici mod, 10. grup) ad PX4 açılıp
     modül başladıktan sonra, kalkıştan önce PX4'ün listesinde aranır.
+  - Uygulamada (10. grup): harici modlu koşuda liste, ad bulunana kadar 10 s'ye kadar her saniye yeniden istenir
+    (`senaryo.EXTERNAL_MODE_WAIT_S`; modül kaydını ilk istekten birkaç ms sonra alır, iskelet isteğini saniyede bir
+    yineler). Bulunamazsa koşu PX4'ün listesiyle ve "ad modülün `register_ext_component_request`'te yazdığıyla aynı
+    olmalı (en çok 24 karakter)" ipucuyla kalkıştan önce durur. İskelet koşusunda liste 18 ad (17 stok + "Tez Auto
+    Follow"; `custom_mode` 0xb040000, `nav_state` 23 = EXTERNAL1), ad ilk istekte bulundu.
 - `follow_me` için `araclar/konumlama.py` kutunun alt ortasını (ayak noktası) düz zemine izdüşürür.
   - Kare anındaki EKF pozu kullanılır: `ATTITUDE_QUATERNION` + `LOCAL_POSITION_NED`, `time_boot_ms` ile interpolasyon. SITL'de bu zaman sim zamanıyla ±4 ms içinde aynıdır.
   - NED konumu `GPS_GLOBAL_ORIGIN`'e göre enlem/boylama çevrilir.
@@ -303,6 +308,14 @@
     ayrı iş parçacığında). ULog iki dosyaya bölünür: `ucus_once.ulg` (açılış → ≈ 27 s) ve `ucus.ulg` (≈ 27 s → iniş).
     Uçuşa etkisi yoktur. Gerçek araç için karar bekliyor (bkz. "Açık Konular").
 - `tez_los` kaynağında yalnız `TEZ_LOS` gönderilir. Takılan modül `--px4-baslat` ile başlatılır. Koşu sonunda `sim.log` içinde "unresponsive" aranır.
+  - Uygulamada (10. grup): "harici modlu koşu" = başlatma komutu verilmiş koşu (`Simulation.external_mode`; yalnız
+    PX4'ten sonra başlatılan bir modül harici mod kaydedebilir). Arama büyük/küçük harfe duyarsızdır (commander'ın
+    satırı `No response from <id>, flagging unresponsive`, `externalChecks.cpp`). Bulunursa olaylara satır sayısı ve
+    ilk satırla yazılır ve koşu **"TAMAMLANMADI"** olur: commander modu düşürmüştür, ölçütler modu ölçmez. Stok
+    koşularda arama yapılmaz. `ozet.json` → `harici_mod`: `baslatma` (her komutun `komut`, `cikis_kodu`'su, sim.log'dan)
+    ve `unresponsive` (satırlar). ULog'da harici mod yalnız yuva numarasıyla durur ("External 1"); `mod.ulog`
+    çizelgesinde (rapor tablosu ve `kosu.mp4` durum satırı) koşunun seçtiği yuva kayıtlı adıyla yazılır
+    (`olcum.with_mode_name`; PX4'ün kendi modları PX4'ün adını korur).
 - Poz geçmişi pymavlink'in `message_hooks` kancasıyla toplanır; ana iş parçacığının `recv_match` döngüsü bozulmaz.
   - Bütün gönderimler tek bir kilitle yapılır; GCS heartbeat iş parçacığıyla çakışmaz.
   - `TEZ_MODE_NAME` sabiti kaldırılır.
@@ -320,6 +333,30 @@
 - `calistir.sh --px4-baslat "<komut>"` (birden çok verilebilir) `.post` dosyasının yerini alır.
   - rcS'in bitmesi beklenir: `px4-logger status` başarılı olana kadar, en çok 90 s.
   - Sonra komutlar `rootfs` içinde `bin/px4-<komut>` istemcisiyle çalıştırılır; çıktıları sim log'una yazılır.
+- Uygulamada (10. grup):
+  - `derle.sh` klasörü mutlak yola çevirir (`realpath`; önbellekle karşılaştırma başlatılan klasörden bağımsız) ve
+    içinde `src/CMakeLists.txt` olmasını ister (yoksa çıkış kodu 2, CMake'e gidilmez). Orada `PARENT_SCOPE` yoksa
+    uyarır (modül listesi PX4'e geçmez, modül sessizce derlenmezdi). Hangi harici klasörle derlendiğini ve yeniden
+    yapılandırıldığını yazar.
+  - PX4'ün derlemesi `bin/px4-<komut>` bağlantılarını derleme sonrası oluşturur ama hiç silmez: harici modülle bir
+    derlemeden sonra stok derlemede `bin/px4-tez_auto_follow` kalıyordu (10.11'den beri vardı). `derle.sh` derlemeden
+    sonra `px4-alias.sh`'ta (yapılandırmada güncel modül listesinden yazılır) olmayan `bin/px4-*` bağlantılarını
+    siler; böylece `bin/px4-<komut>` yalnız bu derlemenin komutları için vardır.
+  - `calistir.sh` her `--px4-baslat` komutunun ilk kelimesi için `bin/px4-<komut>`'u **sim açılmadan** denetler
+    (yoksa "`<komut>` bu PX4 derlemesinde yok … `derle.sh --harici`", çıkış kodu 2); boş komut ve değersiz bayrak da
+    reddedilir. Komutlar arka planda (terminalde PX4 `pxh>` için ön planda kalır) PX4 açılınca çalışır; kelimeler
+    boşlukla ayrılır (tırnak desteklenmez). Sim log'una: `PX4 başlatma komutu: <komut>`, komutun çıktısı,
+    `PX4 başlatma komutu bitti (çıkış kodu 0): <komut>`; sonunda `PX4 başlatma komutları tamam (N komut)`. Başarısız
+    komut `PX4 başlatma komutu başarısız (çıkış kodu N): <komut>` yazar ve kalanları durdurur; 90 s'de logger
+    gelmezse `PX4 başlatma komutları çalıştırılamadı: …`. `calistir.sh` kapanırken bekleyen başlatıcıyı da durdurur.
+  - `simulasyon.Simulation(px4_start=...)`: `wait_ready` başlatma komutları verilmişse hem `Startup script returned
+    successfully`'yi hem `PX4 başlatma komutları tamam`'ı bekler (komutlar logger'ı beklediği için rcS'in son satırından
+    önce de bitebilir; üç iskelet açılışında da rcS'ten ~1 s sonra bitti); başarısızlık satırlarında beklemeden `False` döner
+    ("Simülasyon açılmadı"). Satırlar tek yerde (`simulasyon.START_*`) ve test `calistir.sh`'ın aynı satırları
+    yazdığını denetler. `senaryo.simulation(sc, ...)` senaryonun parametrelerini ve başlatma komutlarını sırasıyla verir.
+  - Doğrulama (14.11): iskelet modül (`c4b4abf342`, scratchpad'e açıldı, değiştirilmeden derlendi) + `takip_yuruyen`
+    `--takip tez_los --mod-adi "Tez Auto Follow" --px4-baslat "tez_auto_follow start" --los hakem` → GEÇTİ; ardından
+    bayraksız `derle.sh` stoka döndü ve F0 GEÇTİ (`implementation/gorev-grubu-10.md`).
 - Senaryodaki iki alan aynı işi `calistir.sh`'a devreder:
   - `takip.px4_baslat`: başlatma komutları.
   - `takip.px4_parametreleri`: modülün kendi parametreleri, başlangıçta yüklenir.
@@ -365,14 +402,15 @@
     değer (`deger`), kaynağı (`kaynak`: dosya:satır # yorum, `takip.px4_parametreleri` ya da `--param`) ve koşuda
     kalkıştan önce PX4'ten geri okunan değer (`px4`, `PARAM_REQUEST_READ`). PX4 istenen değeri tutmuyorsa koşu
     kalkıştan önce durur ("TAMAMLANMADI"; 1. maddedeki `param set` istisnası). `takip.px4_parametreleri` ve
-    `--param` bu yüzden 2. görev grubunda bağlandı; 10. grup yalnız `px4_baslat`'ı bağlar.
+    `--param` bu yüzden 2. görev grubunda bağlandı; 10. grup yalnız `px4_baslat`'ı bağlar (bağlandı, 14.11).
   - Ara durum (m06 sürerken, tasks.md 2.5): sonraki bir görev grubunda bağlanacak ayar varsayılan dışında verilirse
     `senaryo.py` simülasyonu açmadan "`<alan>`: Görev grubu N'de bağlanacak" hatasıyla durur (`hedef.check_wired`;
     `senaryo.run` de aynı kontrolü yapar). Varsayılanı henüz etkin olmayan ayarlar `ayarlar.henuz_bagli_degil`'de
     grup numarasıyla listelenir (5. gruptan sonra yalnız `{"video.mp4": 8}`, 8. gruptan sonra boş; 4. grup `algilama.etkin` satırını ve
     `algilama.*` / `kusurlar` ara hatalarını, 5. grup `takip.kaynak: tez_los`, `takip.los: hakem` ara hatalarını ve
-    `henuz_bagli_degil["takip.los"]`'u, 6. grup `takip.kaynak: follow_me` ara hatasını sildi). Her grup kendi
-    satırlarını `hedef.unwired` / `hedef.not_in_effect`'ten siler.
+    `henuz_bagli_degil["takip.los"]`'u, 6. grup `takip.kaynak: follow_me` ara hatasını, 10. grup
+    `takip.px4_baslat / --px4-baslat` ara hatasını sildi). Her grup kendi satırlarını `hedef.unwired` /
+    `hedef.not_in_effect`'ten siler.
   - `ozet.json`'daki eski `takip_kaynagi` alanı `ayarlar.takip.kaynak`'a taşındı (`ayarlar.takip.mod`: seçilen PX4
     modunun adı).
 - `calistir.sh`'a `--param` ve `--px4-baslat`, `derle.sh`'a `--harici` eklenir. Mevcut `--ekransiz`, `--dunya` (`calistir.sh`) ve `--temiz` (`derle.sh`) aynen kalır. `calistir.sh` her açılışta parametreleri zaten sıfırlar.
@@ -662,9 +700,9 @@ flowchart LR
 | `ROMFS/px4fmu_common/init.d-posix/airframes/4030_gz_x500_tez`, `.post`, `airframes/CMakeLists.txt` | v1.17.0 hâline döner | (b) yolu; `verify_pin.sh --worktree` geçer |
 | `tez/px4/` | daldan çıkar | İskelet modül m06 PR'ına girmez |
 | `tez/sim/parametreler/gercek_dron.params`, `sim.params` | yeni | Başlangıç parametreleri (tablo aşağıda) |
-| `tez/sim/calistir.sh` | değişir | `PX4_SYS_AUTOSTART=4001`, `PX4_GZ_MODEL_NAME`, `PX4_PARAM_*`; `--param`, `--px4-baslat` |
+| `tez/sim/calistir.sh` | değişir | `PX4_SYS_AUTOSTART=4001`, `PX4_GZ_MODEL_NAME`, `PX4_PARAM_*`; `--param`, `--px4-baslat`. 10. grupta: komutun derlemede olduğu sim açılmadan denetlenir, `px4-logger status` beklenir, komutlar arka planda sırayla, sonuç satırları sim log'una |
 | `araclar/parametreler.py` | yeni | `.params` ayrıştırma, yükleme sırası, `PX4_PARAM_*` satırları; F0 için geri okunan değerin karşılaştırılması |
-| `tez/sim/derle.sh` | değişir | `--harici`, değişince yeniden yapılandırma; `tez/px4` yoksa stok derleme |
+| `tez/sim/derle.sh` | değişir | `--harici`, değişince yeniden yapılandırma; `tez/px4` yoksa stok derleme. 10. grupta: klasör denetimi (`src/CMakeLists.txt`, `PARENT_SCOPE` uyarısı), mutlak yol, derlemeden çıkan modüllerin `bin/px4-*` bağlantılarının silinmesi |
 | `tez/sim/kur.sh` | değişir | Sonda model klasörü ve sha256 kontrolü (indirmez) |
 | `tez/sim/modeller.yaml` | yeni | Bilinen model dosyaları: ad, sha256, boyut, kaynak |
 | `araclar/goruntu.py`, `kusurlar.py`, `algilama.py` | yeni | Kare okuyucu, kusur aşaması (Faz A kapalı), algılayıcı arayüzü + YOLO + model süreci |
@@ -675,7 +713,7 @@ flowchart LR
 | `araclar/tarama.py` | yeni (Görev Grubu 17 öne alındı, 14.11) | Kamera eğimi × yükseklik × mesafe taraması: ızgara ve her bileşimin senaryosu (kaydırılmış yol), `toplu.py` ile koşma ve kaldığı yerden sürme (`durum.json`), kapılar, grup puanları, aşama 2 adayları, geometrik paylar ve ölçülen yaklaşma; `hedef.py`'ye `kamera.egim_deg` ve modelin eğimli kopyası, `kamera.py`'ye `NOMINAL_TILT_DEG` ve `tilt_of_mount`, `takip.py` / `konumlama.py` / `olcum.py` / `rapor.py` / `video.py` / `senaryo.py`'ye eğim |
 | `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html`. 9. grupta: köşelerin koşu koşu tablosu, her koşunun 6 m altı geçişleri ve sebepleri |
 | `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
-| `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler |
+| `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler. 10. grupta `simulasyon.py`: `px4_start`, `external_mode`, başlatma komutlarını bekleyen `wait_ready`, `start_results`, `unresponsive`; `senaryo.py`: `simulation()`, harici modun adını bekleme, "unresponsive" → TAMAMLANMADI, `ozet.json` → `harici_mod`; `olcum.with_mode_name` |
 | `araclar/senaryo.py`, `hedef.py`, `rapor.py`, `onizleme.py` | değişir | Yeni alanlar, bayraklar, süreçler, ölçütler, MP4. 3. grupta: `onizleme.capture()` / `people_of()` ayrıldı, `hedef.read_detection()` herkese açık oldu (`model_dene.py` kullanır) |
 | `araclar/f0_testi.py`, `f1_testi.py` | değişir | Stok modlar + parametre doğrulaması; `--modelsiz` |
 | `senaryolar/*.yaml`, `senaryolar/takip_yuruyen.yaml` | değişir / yeni | `drone.mod` → `takip`; Follow Me 8/8 senaryosu. 9. grupta: `takip_yuruyen_10m.yaml` (10/10 denemesi) ve Follow Me senaryolarında `FLW_TGT_RS` (karar 1). 14.11 (kullanıcı kararı): `takip_yuruyen` 10/10, `takip_yuruyen_8m.yaml` 8/8, `takip_yuruyen_10m.yaml` kaldırıldı. 14.11 (Görev Grubu 17 son kararı): `takip_yuruyen` 9/12.9 (kamera varsayılan 35°), `takip_yuruyen_45_10m.yaml` ve `takip_yuruyen_45_8m.yaml` (eski `takip_yuruyen_8m.yaml`, 45° dosyada), `kalabalik_park` 9 m; `models/x500_tez/model.sdf` 35° (`kamera.NOMINAL_TILT_DEG`) |
@@ -721,7 +759,7 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 | `takip.kaynak` | `yok` \| `follow_me` \| `tez_los`; `yok` | Mod: Hold / "Follow Target" / `mod_adi`; `--takip` | `yok`: 1 · `tez_los`: 5 (bağlandı) · `follow_me`: 6 (bağlandı) |
 | `takip.mod_adi` | metin | `tez_los`'ta zorunlu; AVAILABLE_MODES'taki ad, sim açılmadan stok adlarla denetlenir; `--mod-adi` | 5 (bağlandı) |
 | `takip.los` | `model` \| `hakem`; `model` (algılama kapalı + `yok`: LOS yok) | LOS kaynağı (i) / (ii); algılama kapalıyken `model` olamaz; `--los` | 5 (bağlandı) |
-| `takip.px4_baslat` | metin listesi; boş | PX4 açıldıktan sonraki komutlar; `--px4-baslat` sona eklenir | 10 |
+| `takip.px4_baslat` | metin listesi; boş | PX4 açıldıktan sonraki komutlar; `--px4-baslat` sona eklenir; verilirse koşu harici modludur ("unresponsive" aranır) | 10 (bağlandı) |
 | `takip.px4_parametreleri` | {AD: sayı}; boş | Dosyalardan sonra, `--param`'dan önce yüklenir; koşuda PX4'ten geri okunur; `MIS_TAKEOFF_ALT` yazılmaz | 2 |
 | `algilama.etkin` | `true` | `false` / `--modelsiz`: model süreci yok | `false`: 2 (model zaten yok) · `true`: 4 |
 | `algilama.model`, `imgsz`, `conf`, `sinif`, `cekirdek` | yol (`~` açılır); `.pt`'deki (tam sayı ≥ 32); 0.25 ((0, 1]); adı `person` olan (ad ya da numara ≥ 0); 4 (≥ 1) | Komut satırı ezer (`--model`, `--imgsz`, `--conf`, `--sinif`) | 4 |
@@ -1227,6 +1265,7 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
 | `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü. 14.11'de: durum satırında "YANLIŞ KİŞİ" (aynı kıyafetli kişi dahil) ve bir koşu klasöründe anların ölçütün kuralıyla bulunması (`test_olcum.py`: kuralın kendisi) |
 | `test_goruntu_yayini.py` (8. grup) | Kare seçimi (sim zamanında 15 fps ızgarası, pencere, kaybolan kare), 1280×720 JPEG, dolu kuyrukta kare düşürme ve sayma |
 | `test_hedef.py` (eklenir) | Yeni senaryo alanları; hatanın alan adıyla verilmesi; `tez_los`'ta `mod_adi` zorunluluğu |
+| `test_harici_mod.py` (10. grup) | `takip.px4_baslat` + `--px4-baslat`'ın `calistir.sh`'a sırayla (parametrelerden sonra) gitmesi, bağlı olması ve harici adın sim açılmadan reddedilmemesi; "unresponsive"ın yalnız başlatma komutlu koşuda aranması (stok koşuda aynı satır sorun sayılmaz); `wait_ready`'nin rcS + komutların bitişini (her iki sırada) beklemesi, başarısız komutta ve gelmeyen logger'da `False` dönmesi, `calistir.sh`'ın aynı satırları yazması; `calistir.sh`'ın derlemede olmayan / boş / değersiz komutu sim açılmadan çıkış kodu 2 ile reddetmesi (derleme yoksa atlanır). Ayrıca `test_olcum.py`: harici yuvanın ("External 1") koşunun seçtiği adla yazılması |
 
 **SITL kabul testleri** (pencere yok)
 - `f0_kabul.sh` (güncellenir, ~2 dk):
@@ -1293,6 +1332,14 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 6. Koştur: bir senaryoyu kopyala ve `takip: {kaynak: tez_los, mod_adi: "<ad>", px4_baslat: [...], px4_parametreleri: {...}}` yaz. Önce `--los hakem` (mükemmel algılayıcı), sonra `--los model` ile koş.
 7. Karşılaştır: aynı senaryoyu `--takip follow_me` ile de koş, sonra `karsilastir.py sonuclar/A sonuclar/B`.
 8. Gerçek kart: `make px4_fmu-v6c_default EXTERNAL_MODULES_LOCATION=$PWD/tez/px4`. Flash ~%98 dolu; taşarsa repo sorumlusuna haber ver. Kartta başlatma (`etc/extras.txt`) m15/m16'nın işidir.
+
+Uygulamada (10. grup): C bölümü `tez/sim/README.md`'ye "C. Kendi PX4 modülünü takmak" olarak girdi (A ve B adımları
+README'nin "Kurulum", "Çalıştırma", "Senaryolar" bölümlerinde; 13. grup tamamlar). Taslaktan farklar: C2'ye
+commander'ın "unresponsive" kuralı (300 ms'de bir istek, 50 ms cevap süresi, art arda 3 / kayıttan sonra 10 cevapsız)
+ve ULog'da harici modun yuva numarasıyla durduğu; C3'e `--harici` klasörünün `src/`'nin üstü olduğu ve bayraksız
+derlemenin stoka döndüğü; C4'e komutun derlemede olduğunun sim açılmadan denetlendiği ve sim log'undaki satırlar;
+C6'ya koşu sonundaki "unresponsive" araması ve `ozet.json` → `harici_mod`; C7'de `karsilastir.py` 12. grupta gelene
+kadar `ozet.json`/`rapor.html`'lerin yan yana konması; iskelet modülün ağaç dışında açılıp denenmesi (komutlarıyla).
 
 ## Faz B (15.11'den sonra, aynı spec'e bağlı ikinci PR)
 

@@ -23,6 +23,10 @@ flat-ground position, the camera's near limit and the video use it, and the tilt
 after the run.
 A setting that a later task group of spec 2026-11-10-m06-sim-ortami wires in, or a mode name PX4 does not offer,
 stops the run before anything starts.
+An out-of-tree flight mode (e.g. m15's; built in with tez/sim/derle.sh --harici <folder>) is started with
+takip.px4_baslat / --px4-baslat (calistir.sh runs the commands once PX4 is up, before the takeoff) and selected by
+its name (--takip tez_los --mod-adi "<name>"), looked up in PX4's AVAILABLE_MODES; such a run ends with a look for
+"unresponsive" in sim.log (the commander dropped the mode: the run is not complete) and ozet.json "harici_mod".
 
 The model (algilama.py) runs in its own process on the newest camera frame only, from the moment Gazebo publishes
 until the recording ends; frames that arrive while it is busy are skipped and counted. The tracking side (takip.py)
@@ -92,6 +96,9 @@ REFEREE_LATE_EVENT_FRAMES = 5
 # simulasyon.restart_logger); ~0.3 s after the first one. The restart must be done before the window starts.
 LOGGER_RESTART_AFTER = 3
 TILT_TOLERANCE_DEG = 0.05  # [deg] the tilt Gazebo reports must be the scenario's (the copy writes 6 decimals of rad)
+# [s wall] an external mode registers itself with the commander a moment after its start command (the skeleton
+# module repeats its request every second until the commander answers); its name is looked for this long
+EXTERNAL_MODE_WAIT_S = 10.0
 # PX4 mode (AVAILABLE_MODES name) of each tracking source; chosen by name, never by number (tez_los: takip.mod_adi)
 TRACKING_MODES = {"yok": HOLD_MODE_NAME, "follow_me": FOLLOW_TARGET_MODE_NAME}
 
@@ -125,6 +132,13 @@ def mode_name(sc: hedef.Scenario) -> str:
 def check_mode(sc: hedef.Scenario) -> None:
     """ValueError before anything starts if PX4 will not offer the mode of the tracking source (by name only)."""
     check_mode_name(mode_name(sc), sc.tracking.px4_start)
+
+
+def simulation(sc: hedef.Scenario, out: Path, world_file: Path, headless: bool) -> Simulation:
+    """The run's calistir.sh: the scenario's takip.px4_parametreleri then --param (loaded after the .params files),
+    takip.px4_baslat then --px4-baslat (run once PX4 is up; with them the run is checked for "unresponsive")."""
+    t = sc.tracking
+    return Simulation(out, world_file, headless, params={p.name: p.value for p in t.px4_params}, px4_start=t.px4_start)
 
 
 def settings(sc: hedef.Scenario, model: algilama.ModelFile | None = None) -> dict:
@@ -262,6 +276,19 @@ def _progress(
         log(f"  t = {now:.0f} s: son {PROGRESS_EVERY:.0f} s'de {tracker.recent(now - PROGRESS_EVERY)}")
 
 
+def _modes_with(v: Vehicle, name: str, wait_s: float) -> dict[str, int]:
+    """PX4's AVAILABLE_MODES; asked again for up to `wait_s` [s] while `name` is not in it (an external mode)."""
+    t_end = time.monotonic() + wait_s
+    available = v.modes()
+    while name not in available and time.monotonic() < t_end:
+        time.sleep(1)
+        available = v.modes()
+    if wait_s > 0:
+        state = "listede" if name in available else f"{wait_s:.0f} s beklendi, listede yok"
+        log(f"Harici mod '{name}': {state} (PX4'ün {len(available)} seçilebilir modu)")
+    return available
+
+
 def _fly(
     v: Vehicle,
     sc: hedef.Scenario,
@@ -276,16 +303,24 @@ def _fly(
 ) -> bool:
     if not check_start_params(v, run_settings["px4_parametreleri"], events):
         return False
-    available = v.modes()  # name -> custom_mode of the modes PX4 offers now; the number is only ever taken from here
+    name = run_settings["takip"]["mod"]
+    # name -> custom_mode of the modes PX4 offers now; the number is only ever taken from here
+    available = _modes_with(v, name, EXTERNAL_MODE_WAIT_S if sc.tracking.px4_start else 0.0)
     run_settings["takip"]["px4_modlari"] = sorted(available)
     missing = sorted(set(STOCK_MODE_NAMES) - set(available))
     if missing:  # the list checked before the start differs from PX4's: the run goes on, PX4's list decides
         events.append(f"PX4'ün mod listesinde beklenen stok modlar yok: {', '.join(missing)}")
-    name = run_settings["takip"]["mod"]
     if name not in available:
+        hint = ""
+        if sc.tracking.px4_start:  # the module started (wait_ready) but no mode of that name registered
+            hint = (
+                f"; başlatma komutları çalıştı ama bu adla mod kaydolmadı ({EXTERNAL_MODE_WAIT_S:.0f} s beklendi): "
+                "ad modülün register_ext_component_request'te yazdığıyla aynı olmalı (en çok 24 karakter), modülün "
+                "çıktısı sim.log'da"
+            )
         events.append(
             f"'{name}' PX4'ün mod listesinde yok (takip.mod_adi / --mod-adi); PX4'ün seçilebilir modları: "
-            f"{', '.join(sorted(available))}"
+            f"{', '.join(sorted(available))}{hint}"
         )
         return False
     mode = available[name]
@@ -597,6 +632,8 @@ def run(
     t = sc.tracking
     los_text = {"model": "model kutusu, LOS (i)", "hakem": "hakem, LOS (ii)", None: "yok, TEZ_LOS gönderilmez"}[t.los]
     log(f"Takip kaynağı {t.source} (PX4 modu '{run_settings['takip']['mod']}'), TEZ_LOS kaynağı {los_text}")
+    if t.px4_start:
+        log("PX4 başlatma komutları (PX4 açılınca, kalkıştan önce): " + "; ".join(t.px4_start))
     waiting = run_settings["henuz_bagli_degil"]
     if waiting:
         log("Henüz bağlanmamış varsayılanlar, bu koşuda etkin değil: " + ", ".join(waiting))
@@ -663,8 +700,7 @@ def run(
         if detections is not None:
             detections.close()
         raise
-    # scenario's takip.px4_parametreleri, then --param: calistir.sh loads them after the .params files
-    sim = Simulation(out, world_file, headless, params={p.name: p.value for p in t.px4_params})
+    sim = simulation(sc, out, world_file, headless)
     completed = False
     modes = ModeLog()
     try:
@@ -673,6 +709,8 @@ def run(
                 events.append("Simülasyon açılmadı (sim.log'a bakın)")
             else:
                 log("PX4 ve Gazebo hazır")
+                for r in sim.start_results():
+                    log(f"PX4 başlatma komutu '{r['komut']}': çıkış kodu {r['cikis_kodu']} (çıktısı sim.log'da)")
                 completed = fly(
                     sc, rec, events, run_settings, model, detections, tracker, sim.restart_logger, modes, frames
                 )
@@ -690,6 +728,9 @@ def run(
             detections.close()
         video_books = frames.stop() if frames is not None else None
     events += sim.problems()
+    unresponsive = sim.unresponsive()
+    if unresponsive:  # the commander dropped the external mode: the run did not fly the mode it measures
+        completed = False
     if video_books is not None:
         _frame_log_line(video_books, events)
 
@@ -748,6 +789,9 @@ def run(
     )
     measured, sections = olcum.measure(data)
     more |= measured
+    if sim.external_mode:
+        sections["harici_mod"] = {"baslatma": sim.start_results(), "unresponsive": unresponsive}
+        log(f"Harici mod: sim.log'da 'unresponsive' satırı {len(unresponsive)}")
     if sections.get("ulog_hatasi"):
         events.append(f"ULog okunamadı: {sections['ulog_hatasi']}")
     if tracker is not None:

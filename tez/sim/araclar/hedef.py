@@ -549,11 +549,8 @@ def settings(sc: Scenario) -> dict:
 # not_in_effect() lists the defaults that do not act yet. Each task group deletes its lines when it wires them in.
 def unwired(sc: Scenario) -> list[str]:
     """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet."""
-    t, v = sc.tracking, sc.video
-    found: list[tuple[str, int]] = []
-    if t.px4_start:
-        found.append(("takip.px4_baslat / --px4-baslat", 10))
-    found += [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
+    v = sc.video
+    found: list[tuple[str, int]] = [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
     if v.qgc:
         found.append(("video.qgc: true (--qgc)", 11))
     return [f"{what}: {in_group(group)} bağlanacak" for what, group in found]

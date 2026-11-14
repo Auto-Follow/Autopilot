@@ -10,7 +10,9 @@ Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodl
 > hesabı ve stok Follow Me ile kapalı döngü (`FOLLOW_TARGET`), adıyla seçilen takip modu (`yok` → Hold, `follow_me` →
 > Follow Target, `tez_los` → `--mod-adi`), ULog, spec'teki bütün ölçütler, kontroller ve uyarılarla HTML rapor, aynı
 > senaryonun N koşusu ve dağılımı (`toplu.py`), her koşunun VLC'de açılan videosu (`kosu.mp4`: dron kamerası +
-> kuşbakışı harita). m06'nın devamı (harici modül, QGC yayını): `agent-os/specs/2026-11-10-m06-sim-ortami/`.
+> kuşbakışı harita), ağaç dışı bir PX4 modülünü (ör. m15'in takip modu) derleyip başlatarak aynı senaryo, ölçüt ve
+> videoyla denemek (Görev grubu 10; aşağıda "C. Kendi PX4 modülünü takmak"). m06'nın devamı (QGC yayını):
+> `agent-os/specs/2026-11-10-m06-sim-ortami/`.
 
 > **Ekip için kısa özet** (kamera ve montaj, eksenler, PX4'e giden mesajlar, kendi modunu takmak, model ölçümleri,
 > karar bekleyenler): [`agent-os/specs/2026-11-10-m06-sim-ortami/EKIP_ICIN_OZET.md`](../../agent-os/specs/2026-11-10-m06-sim-ortami/EKIP_ICIN_OZET.md).
@@ -55,8 +57,9 @@ tez/sim/kur.sh              # insan modeli, zemin dokuları ve ağaçları indir
 ```
 
 `derle.sh` stok `px4_sitl_default` yapılandırmasını (+ Gazebo eklentileri) ayrı bir klasöre derler; ekibin normal
-`build/px4_sitl_default` derlemesine dokunmaz. Eski bir `build/px4_sitl_tez` harici modülle yapılandırılmışsa
-`derle.sh` CMake'i kendiliğinden yeniden yapılandırır.
+`build/px4_sitl_default` derlemesine dokunmaz. Ağaç dışı bir PX4 modülüyle derlemek için `derle.sh --harici <klasör>`
+(aşağıda "C"). `build/px4_sitl_tez` başka bir harici klasörle (ya da harici modülle) yapılandırılmışsa `derle.sh`
+CMake'i kendiliğinden yeniden yapılandırır: bayraksız `derle.sh` her zaman stok SITL'e döner.
 
 ## Çalıştırma
 
@@ -64,6 +67,7 @@ tez/sim/kur.sh              # insan modeli, zemin dokuları ve ağaçları indir
 tez/sim/calistir.sh                          # Gazebo penceresi + bu terminalde PX4 kabuğu (pxh>)
 tez/sim/calistir.sh --ekransiz               # pencere yok (otomatik testler için)
 tez/sim/calistir.sh --param FLW_TGT_DST=10   # parametre dosyalarından sonra bir parametre daha (sonuncu kazanır)
+tez/sim/calistir.sh --px4-baslat "tez_auto_follow start"   # PX4 açılınca bir PX4 komutu (birden çok; "C" bölümü)
 ```
 
 AMD hibrit GPU'lu laptopta Gazebo penceresini açmadan önce `export DRI_PRIME=1`.
@@ -113,15 +117,17 @@ koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (�
 11'de bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok`, `follow_me` ve
 `tez_los` (`--mod-adi`), `takip.los: model | hakem` (`--los`), algılama (`algilama.*`, `--model`, `--imgsz`, `--conf`,
 `--sinif`, `--modelsiz`), `kusurlar` (Faz A: boş), `video.mp4` / `--videosuz`, `--kareleri-sakla`,
-`takip.px4_parametreleri` ve `--param`. `ozet.json` → `ayarlar.henuz_bagli_degil` 8. gruptan beri boştur.
+`takip.px4_parametreleri` ve `--param`, `takip.px4_baslat` ve `--px4-baslat` (10. grup). `ozet.json` →
+`ayarlar.henuz_bagli_degil` 8. gruptan beri boştur.
 
 **Mod her zaman adıyla seçilir** (`yok` → "Hold", `follow_me` → "Follow Target", `tez_los` → `takip.mod_adi` /
 `--mod-adi`); numarası koda
 gömülmez, koşuda PX4'ün `AVAILABLE_MODES` listesinden okunur. PX4'ün sunmadığı bir ad simülasyon açılmadan, PX4
 v1.17.0'ın seçilebilir modlarını listeleyen bir hatayla reddedilir (harici bir modun adı ise PX4 açılıp modül
-başladıktan sonra aranır; 10. grup). Örnek duman testi: `--takip tez_los --mod-adi "Hold"`. Ekipten gelen bilgi
-(09.11, Yusuf Algan; kesinleşmiş değil): m15'in modu QGC'de **"AUTO FOLLOW"** adıyla görünecek, parametreleri `AF_`
-önekli olacak; modül takılınca `--takip tez_los --mod-adi "AUTO FOLLOW" --px4-baslat "<başlatma komutu>"`.
+başladıktan sonra, kalkıştan önce PX4'ün listesinde aranır; "C" bölümü). Örnek duman testi: `--takip tez_los
+--mod-adi "Hold"`. Ekipten gelen bilgi (09.11, Yusuf Algan; kesinleşmiş değil, m15/m16 spec'inde kesinleşecek):
+m15'in modu QGC'de **"AUTO FOLLOW"** adıyla görünecek, parametreleri `AF_` önekli olacak; modül takılınca
+`--takip tez_los --mod-adi "AUTO FOLLOW" --px4-baslat "<başlatma komutu>"`.
 
 Senaryo yöneticisi mod adını ve model dosyasını (sha256) kontrol eder, modeli kendi sürecinde yükler, dünyayı (temel
 dünya + hedef) yazar, Gazebo ve PX4'ü açar, dronu kaldırır ve takip kaynağının moduna adıyla alır, hedef yürürken
@@ -264,7 +270,9 @@ belgesinin 19. bölümünde, doğrulanmadı). Yeni senaryo yazmak için birini k
   - `los`: PX4'e `TEZ_LOS` olarak giden görüş vektörünün kaynağı: `model` (model kutusu, LOS i, varsayılan) veya
     `hakem` (doğru cevap `los_govde`, LOS ii, her kamera karesinde). Algılama kapalıyken `model` olamaz;
     `follow_me`/`tez_los` o zaman `hakem` ister.
-  - `px4_baslat`: PX4 açıldıktan sonra çalışacak komutlar (liste)
+  - `px4_baslat`: PX4 açıldıktan sonra, kalkıştan önce çalışacak PX4 komutları (liste, ör. `[tez_auto_follow start]`;
+    `--px4-baslat` sona eklenir). Verilirse koşu "harici modlu"dur: sonunda `sim.log`'da "unresponsive" aranır
+    ("C" bölümü)
   - `px4_parametreleri`: `{AD: sayı}`; parametre dosyalarından sonra, `--param`'dan önce yüklenir, aynı ad ve sayı
     kuralı (`MIS_TAKEOFF_ALT` yazılmaz, onu `drone.yukseklik_m` verir). Koşuda her başlangıç parametresi PX4'ten geri
     okunur; PX4 istenen değeri tutmuyorsa koşu kalkıştan önce durur.
@@ -466,19 +474,86 @@ F1 kabul testi (senaryoyu modelsiz, `--modelsiz`, iki kez koşar, ~4 dakika; `ar
 tez/sim/araclar/f1_kabul.sh       # her koşuda hedef farkı ≤ 0.3 m, iki koşu aynı (≤ 0.15 m)
 ```
 
-## Kontrol ekibi: kendi PX4 modunu takmak
+## C. Kendi PX4 modülünü takmak
 
-Bu dalda tez PX4 modülü yok; sim stok PX4 ile çalışır. Ağaç dışı bir modülü (ör. m15 takip modu) sime takmak için
-`derle.sh --harici <klasör>` ve `calistir.sh --px4-baslat "<komut>"` m06 Görev grubu 10'da gelir; adım adım kılavuz
-spec'in "Takım Arkadaşı Kılavuzu" bölümündedir. Eski iskelet modül örnek olarak dalın `c4b4abf342` commit'inde
-okunabilir (`tez/px4/src/...`). Modülün, parametrelerin ve modun adını modülü yazan kişi kendi spec'inde belirler.
+Kılavuzun A (kurulum) ve B (çalıştırma) adımları yukarıdaki "Kurulum", "Çalıştırma" ve "Senaryolar" bölümlerindedir.
+Bu bölüm, ağaç dışı bir PX4 modülünü (ör. m15'in takip modu) **PX4 dosyası değiştirmeden** sime takıp aynı senaryo,
+ölçüt ve videoyla denemeyi anlatır (m06 Görev grubu 10; spec "Takım Arkadaşı Kılavuzu" C1–C8). Modülün,
+parametrelerin ve modun adını modülü yazan kişi kendi spec'inde belirler. Ekipten gelen bilgi (09.11, Yusuf Algan;
+kesinleşmiş değil, m15/m16 spec'inde kesinleşecek): mod adı **"AUTO FOLLOW"**, parametre öneki `AF_`.
+
+1. **Modülü koy.** Kendi dalında `tez/px4/src/modules/<ad>/` altına (ya da repo dışında bir klasöre; `--harici` ile
+   verilir). Örnek: eski iskelet modül `tez_auto_follow`, dalın `c4b4abf342` commit'inde (repoda değil; açmak için
+   aşağıdaki "İskelet modülle deneme"). Gereken üç kural (iskelet bunlara uyar):
+   - `tez/px4/src/CMakeLists.txt` modül listesini **`PARENT_SCOPE`** ile tanımlar:
+     `set(config_module_list_external modules/<ad> PARENT_SCOPE)`. PX4 listeyi üst kapsamda okur
+     (`CMakeLists.txt`, `add_subdirectory(<klasör>/src)`); `PARENT_SCOPE` yoksa modül sessizce derlenmez
+     (`derle.sh` bunun için uyarır).
+   - Modül `px4_add_module(MODULE modules__<ad> MAIN <ad> SRCS ... [MODULE_CONFIG module.yaml])` ile eklenir;
+     PX4 kütüphanelerine **`DEPENDS` yazılmaz**: harici modüller PX4'ün kendi kütüphanelerinden önce yapılandırılır
+     (`px4_work_queue` vb. zaten `px4` ikilisine bağlanır).
+   - Ağaç içi bir modül (`src/modules/...` + `.px4board`) istiyorsan kilit listesi PR'ı gerekir; repo sorumlusuna sor.
+     m06 kilit listesine yol eklemez.
+2. **Modu kaydet.** Modül kendini commander'a harici mod olarak kaydeder (`mc_nn_control` ile aynı yol):
+   `register_ext_component_request` (`register_mode` + `register_arming_check`; ad en çok **24 karakter**:
+   `char[25] name`), sonra her `arming_check_request`'e `arming_check_reply` ile cevap verir. Commander 300 ms'de
+   bir sorar, 50 ms içinde cevap bekler; art arda 3 (kayıttan hemen sonra 10) cevapsız istekte modu "unresponsive"
+   sayar ve mod çalışamaz olur (`externalChecks.hpp`/`.cpp`). İskelet döngüsünü 10 ms'de bir çalıştırır. Mod QGC'nin
+   listesinde ve `AVAILABLE_MODES`'ta bu adla görünür (ULog'da yalnız yuva numarası, `nav_state` 23 = "External 1";
+   rapor ve video koşunun seçtiği adı yazar).
+3. **Derle.** `tez/sim/derle.sh` `tez/px4/src/CMakeLists.txt`'i kendisi bulur; başka bir klasör için
+   `tez/sim/derle.sh --harici <klasör>` (içinde `src/CMakeLists.txt` olan klasör, `src`'nin kendisi değil). Çıktı her
+   zaman `build/px4_sitl_tez`; klasör CMake önbelleğindekinden farklıysa yeniden yapılandırılır. Bayraksız `derle.sh`
+   (ve `tez/px4` yoksa) yeniden stok SITL'dir; derlemeden çıkan modülün `bin/px4-<ad>` bağlantısı silinir.
+4. **Başlat.** `calistir.sh --px4-baslat "<ad> start"` (birden çok verilebilir, sırayla) ya da senaryoda
+   `takip.px4_baslat: ["<ad> start"]` (`senaryo.py --px4-baslat` sona eklenir). Bu, eski airframe `.post`
+   dosyasının yerini alır; PX4 dosyası gerekmez. `calistir.sh` önce komutun bu derlemede olduğunu denetler
+   (`bin/px4-<ad>` yoksa sim açılmadan durur), PX4 açılınca `px4-logger status` başarılı olana kadar (en çok 90 s)
+   bekler, sonra komutları `rootfs` içinde `bin/px4-<ad> <argümanlar>` ile çalıştırır; çıktıları ve çıkış kodları
+   sim log'una yazılır (`PX4 başlatma komutu ...`). Başarısız bir komut kalanları durdurur ve koşu açılmaz.
+5. **Girdiyi oku.** `debug_vect` uORB'una abone ol ve `name == "TEZ_LOS"` ile süz; x, y, z kameradan hedefe gövde FRD
+   birim vektör, NaN = hedef yok. PX4 `debug_vect`'e `time_usec`'i taşımaz: zaman aşımını varış zamanına göre kendin
+   uygula (spec "Varsayımlar"; biçim m05 ICD'ye kadar varsayım).
+6. **Koştur.** Bir senaryoyu kopyala ve `takip: {kaynak: tez_los, mod_adi: "<ad>", px4_baslat: ["<ad> start"],
+   px4_parametreleri: {...}}` yaz ya da komut satırından ver. Önce `--los hakem` (mükemmel algılayıcı), sonra
+   `--los model`:
+
+   ```bash
+   $P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --takip tez_los --mod-adi "<ad>" \
+       --px4-baslat "<ad> start" --los hakem
+   ```
+
+   Mod adı kalkıştan önce PX4'ün listesinde aranır (modül kaydını 10 s'ye kadar bekler); yoksa koşu PX4'ün
+   modlarını listeleyerek durur. Koşu sonunda `sim.log`'da "unresponsive" aranır; bulunursa koşu "TAMAMLANMADI"
+   olur (commander modu düşürmüş, ölçütler modu ölçmüyor). `ozet.json` → `harici_mod`: başlatma komutlarının çıkış
+   kodları ve "unresponsive" satırları; `ayarlar.takip.px4_modlari`: PX4'ün koşudaki mod listesi.
+7. **Karşılaştır.** Aynı senaryoyu `--takip follow_me` ile de koş; `ozet.json` / `rapor.html`'leri yan yana koy
+   (`karsilastir.py` m06 Görev grubu 12'de gelecek).
+8. **Gerçek kart.** `make px4_fmu-v6c_default EXTERNAL_MODULES_LOCATION=$PWD/tez/px4`. Flash ~%98 dolu (iskelet
+   `c4b4abf342`'de +2.8 KB ölçülmüştü); taşarsa (`region FLASH overflowed`) repo sorumlusuna haber ver. Kartta
+   başlatma (`etc/extras.txt`) m15/m16'nın işidir.
+
+**İskelet modülle deneme** (mekanizmanın çalıştığını görmek için; iskelet seçildiği yerde konum tutar, hedefi
+izlemez). Modül repoya konmaz, repo dışında bir klasöre açılır:
+
+```bash
+mkdir -p /tmp/iskelet && git archive c4b4abf342 tez/px4 | tar -x -C /tmp/iskelet
+tez/sim/derle.sh --harici /tmp/iskelet/tez/px4
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --takip tez_los --mod-adi "Tez Auto Follow" \
+    --px4-baslat "tez_auto_follow start" --los hakem
+tez/sim/derle.sh            # sonra yeniden stok SITL (F0 / F1 / m06 kabul testleri stok derlemeyle koşar)
+```
+
+Elle (Gazebo penceresi + QGC): `tez/sim/derle.sh --harici ...` sonrası `tez/sim/calistir.sh --px4-baslat
+"tez_auto_follow start"`; QGC'de Takeoff, sonra uçuş modu listesinden **Tez Auto Follow**. Ayrıntı ve ölçümler:
+`agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-10.md`.
 
 ## Dosyalar
 
 | Yol | Ne |
 |---|---|
-| `tez/sim/derle.sh` | Stok PX4 SITL + Gazebo eklentileri → `build/px4_sitl_tez` |
-| `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır (stok 4001, başlangıç parametreleri) |
+| `tez/sim/derle.sh` | Stok PX4 SITL + Gazebo eklentileri → `build/px4_sitl_tez`; `--harici <klasör>` ağaç dışı PX4 modülleriyle |
+| `tez/sim/calistir.sh` | Gazebo + PX4'ü başlatır (stok 4001, başlangıç parametreleri; `--px4-baslat` PX4 açılınca komutlar) |
 | `tez/sim/parametreler/gercek_dron.params`, `sim.params` | Başlangıç parametreleri (`AD DEĞER  # kaynak`); `araclar/parametreler.py` okur |
 | `tez/sim/models/x500_tez/` | X500 (PX4 `x500` modeli) + gövde altında 35° Camera Module 3 (simin varsayılan montajı, `kamera.NOMINAL_TILT_DEG`; tutucu ölçüleri yaklaşık) + hakem için segmentasyon kamerası; başka bir eğim (`kamera.egim_deg`) koşu klasörüne kopyalanır, bu dosya değişmez |
 | `tez/sim/worlds/duz_alan.sdf` | 500 m × 500 m düz çim alan; dron dünyanın içinde (`x500_tez_0`) |

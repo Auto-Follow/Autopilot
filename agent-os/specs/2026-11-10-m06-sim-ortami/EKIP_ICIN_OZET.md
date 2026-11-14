@@ -57,11 +57,18 @@ QGC 14550'de. Kod: `tez/sim/araclar/px4_baglanti.py` (`send_los`, `send_follow_t
 
 ## 5. Takip modu ve kendi modunu takmak (m15 — Yusuf Kurt / Yusuf Algan)
 
-- Sim modu **adıyla** seçer (`AVAILABLE_MODES`); numara koda gömülü değil. Ekipten gelen bilgi (09.11, kesin değil):
-  mod adı **"AUTO FOLLOW"**, parametreler **`AF_XXX`**. Hazır olunca:
-  `senaryo.py --senaryo takip_yuruyen --takip tez_los --mod-adi "AUTO FOLLOW"`. Ad yanlışsa sim açılmadan PX4'ün mod
-  listesiyle hata verir.
-- Ağaç dışı modülü derleyip başlatma (`derle.sh --harici`, `--px4-baslat`): m06 görev grubu 10'da gelecek.
+- Sim modu **adıyla** seçer (`AVAILABLE_MODES`); numara koda gömülü değil. Ekipten gelen bilgi (09.11, kesin değil;
+  m15/m16 spec'inde kesinleşecek): mod adı **"AUTO FOLLOW"**, parametreler **`AF_XXX`**. Hazır olunca:
+  `senaryo.py --senaryo takip_yuruyen --takip tez_los --mod-adi "AUTO FOLLOW" --px4-baslat "<başlatma komutu>"`
+  (başlatma komutu henüz bilinmiyor). Başlatma komutu olmadan stok olmayan bir ad sim açılmadan PX4'ün mod listesiyle
+  reddedilir; komutla verilirse ad PX4 açılınca, kalkıştan önce PX4'ün listesinde aranır.
+- Ağaç dışı modülü takmak (m06 görev grubu 10, PX4 dosyası değişmez): `tez/sim/derle.sh --harici <klasör>` (içinde
+  `src/CMakeLists.txt`, `config_module_list_external ... PARENT_SCOPE`; modülde `DEPENDS` yok), sonra
+  `senaryo.py ... --takip tez_los --mod-adi "<ad>" --px4-baslat "<modül> start" --los hakem`. Mod kendini
+  `register_ext_component_request` ile kaydeder (ad ≤ 24 karakter) ve her arming check isteğine cevap verir; koşu
+  sonunda `sim.log`'da "unresponsive" aranır. Adım adım: `tez/sim/README.md` → "C. Kendi PX4 modülünü takmak";
+  iskelet modül (`c4b4abf342`) ile denendi: `implementation/gorev-grubu-10.md`. İşin sonunda bayraksız
+  `tez/sim/derle.sh` yine stok SITL'dir.
 - **Stok Follow Me ölçümleri = m15 için gereksinim listesi** (spec "PX4 stok Follow Target davranışı"):
   - Mod açılınca hedefin kuzeye gittiğini varsayar (`FlightTaskAutoFollowTarget.hpp:284`), hedef ≥ 1 m/s olmadan rotayı
     güncellemez (`.cpp:191`) → başta gereksiz yörünge dönüşü.

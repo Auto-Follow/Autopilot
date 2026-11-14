@@ -74,6 +74,7 @@ NAV_STATE_NAMES = (
     "VTOL Takeoff",
     *(f"External {i}" for i in range(1, 9)),
 )
+FIRST_EXTERNAL_NAV_STATE = NAV_STATE_NAMES.index("External 1")  # vehicle_status NAVIGATION_STATE_EXTERNAL1 (23)
 STATS = ("ort", "p50", "p95", "maks")
 
 
@@ -1351,6 +1352,15 @@ def mode_timeline(status: Mapping | None) -> list[dict]:
     return spans
 
 
+def with_mode_name(timeline: Sequence[Mapping], nav_state: int | None, name: str | None) -> list[dict]:
+    """The timeline with the run's external mode slot ("External n") called by the name the mode registered with
+    (AVAILABLE_MODES, what QGC shows and the run selected): the ULog only has the slot's number. PX4's own modes keep
+    PX4's names."""
+    if nav_state is None or not name or nav_state < FIRST_EXTERNAL_NAV_STATE:
+        return [dict(s) for s in timeline]
+    return [{**s, "ad": name} if s["nav_state"] == nav_state else dict(s) for s in timeline]
+
+
 def mode_kept(timeline: Sequence[Mapping], wanted: int | None, start: float, end: float) -> float:
     """Share of start..end [s] the timeline spends in nav_state `wanted` (NaN if unknown or no overlap)."""
     if wanted is None or end <= start or not timeline:
@@ -1527,6 +1537,7 @@ def measure(d: RunData) -> tuple[dict, dict]:
     m |= corner_m | near_m
     timeline = mode_timeline(topics.get("vehicle_status"))
     wanted = wanted_nav_state(timeline, d.mode_switched_s)
+    timeline = with_mode_name(timeline, wanted, d.mode_name)  # rapor.html and kosu.mp4 show these names
     m["mod_korunma_orani"] = mode_kept(timeline, wanted, start, end)
     source = "ulog"
     if math.isnan(m["mod_korunma_orani"]):
