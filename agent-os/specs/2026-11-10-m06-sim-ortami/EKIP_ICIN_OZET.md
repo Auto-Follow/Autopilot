@@ -27,11 +27,13 @@ video (`kosu.mp4`: kamera + kuşbakışı harita), bir rapor (`rapor.html`) ve ~
 | Kamera | Raspberry Pi Camera Module 3 **Standard**; simde yatay FOV 66.0° (1.151917 rad), düşey 40.1°, 2304×1296, 30 fps, bozulmasız |
 | Montaj | gövdeye sabit (gimbal yok), **35° aşağı** (14.11.2026 kararı; öncesinde 45°), base_link'e göre FLU (0.151, 0, −0.035) m = FRD (0.151, 0, 0.035) m |
 | Gerçek montaj | **henüz yapılmadı.** Öneri 35° (+1° içinde); takılınca açı araçta ±0.5° ölçülüp Pi'ye verilmeli. Öneri: 30–40° arasında 2.5° adımlı ayarlanabilir parça (model değişince en iyi açı değişebilir) |
-| Uçuş önerisi (doğrulanmamış) | **9 m yükseklik, kişinin 12.9 m gerisi** (≈ 1.43 × yükseklik = yükseklik / tan 35°); stok Follow Me ile 11.4 m'nin altına inilmemeli |
+| Uçuş önerisi (doğrulanmamış) | **9 m yükseklik, kişinin 12.9 m gerisi** (≈ 1.43 × yükseklik = yükseklik / tan 35°). **Yedek: 8 m / 12.9 m** (aynı montaj; gerçek kamera ya da Hailo kişiyi 9 m'de zor bulursa). Stok Follow Me ile 11.4 m'nin altına inilmemeli |
 
 Neden 35°: ~180 koşuluk modelli tarama (30–45°, 4–15 m, farklı mesafeler; her aday iki yolda 3–6 koşu). 45°'de dron
 köşelerde kişiye çok yaklaşıp kadrajdan çıkarıyor; 37.5° ani geri dönüşte kişiyi 6 koşunun 5'inde kaybetti; 12–15 m'de
-v0.2 kişiyi neredeyse hiç bulamıyor. Belge: `implementation/gorev-grubu-17-on-kamera-acisi.md` (bölüm 17–19).
+v0.2 kişiyi neredeyse hiç bulamıyor. Alçak + uzak takip (30–32.5°, 6–7 m, 12.9 m) köşede yaklaşmayı çözüyor ama
+kalabalıkta yanlış kişiye geçme %70–77'ye çıkıyor (35°/9 m'de %16) ve dron hızlanırken kişi görüntünün üstünden
+çıkabiliyor; ilk uçuşlar için önerilmiyor. Belge: `implementation/gorev-grubu-17-on-kamera-acisi.md` (bölüm 17–21).
 
 ## 3. Eksenler (varsayım; m03 yazılınca güncellenir)
 

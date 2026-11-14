@@ -905,15 +905,15 @@ bileşim 3'er koşu (+ mükemmel algılayıcı ve kıvrımlı yol). Kapı: her k
   görüntünün ortasında). Koşulardan önce yazılan son seçim sırasıyla: takip yolunda kapıyı 3/3 geçen beş ayarın kıvrımlı
   yolda da 3/3 geçen tek ayarı; köşede en az mesafede ikinci (5.8–7.0 m). Kuralın puanla birincisi 37.5° · 9/12.9:
   takip yolunda ham değerleri 35°'ninkiyle pratikte aynı (farklar birkaç cm ve 1–3 puan; puan farkını min–maks
-  ölçekleme büyütüyor), kıvrımlı yolda kişiyi üç koşunun ikisinde kaybetti (ek koşularla 6 koşunun 5'inde; 35° 1'inde). İkinci seçenek aynı montajda 8 m / 11.4 m
-  (algılama daha iyi, %71). Bedeli: algılama beşin en zayıfı (%62, kişi ≈ 179 px), yeni montaj parçası, konum hesabının
+  ölçekleme büyütüyor), kıvrımlı yolda kişiyi üç koşunun ikisinde kaybetti (ek koşularla 6 koşunun 5'inde; 35° 1'inde). Yedek (14.11 akşam, alçak + uzak takip denemesinden sonra kullanıcı onayıyla): aynı montajda **8 m / 12.9 m**
+  (iki yolda 6/6, kişi ≈ 190 px; önceki yedek 8 m / 11.4 m kıvrımlı yolda 3 koşunun 1'inde kişiyi kaybetti). Bedeli: algılama beşin en zayıfı (%62, kişi ≈ 179 px), yeni montaj parçası, konum hesabının
   zemin / GPS yüksekliğine 1.43 kat duyarlılığı, ufuk payının 24.9°'den 14.9°'ye inmesi, dron kişinin 12.9 m gerisinde.
   **Simin varsayılanı bu ayar oldu** (kullanıcının isteği; `kamera.NOMINAL_TILT_DEG`, `models/x500_tez`, `takip_yuruyen`;
   belge bölüm 20). Hiçbir 45° ayarı seçilebilir değil; 45° senaryoları karşılaştırma için `takip_yuruyen_45_10m` ve
   `takip_yuruyen_45_8m`.
 - **Gerçek uçuş için önerilen ayar — doğrulanmamış, ilk uçuşta doğrulanacak** (belge bölüm 19; montaj henüz yapılmadı):
   montaj **35°** (hedef 35°, en çok +1°: yatık tarafa 32.5°'ye kadar simde sorun yok, dik tarafa 37.5°'de ani geri dönüşte kişi 6 koşunun 5'inde kayboldu; açı araçta ±0.5° ile ölçülüp Pi'ye girilir), uçuş yüksekliği **9 m**
-  (8–9 m), geride durma **12.9 m** (yükseklik / tan 35°: 8 m'de 11.4 m; stok Follow Me ile 11.4 m'nin altına inilmez).
+  (yedek **8 m**), geride durma **12.9 m** (iki yükseklikte de 12.9 m; stok Follow Me ile 11.4 m'nin altına inilmez).
   Simin temsil etmediği yanlar: rüzgâr ve burun eğilmesi (ufuk payı 14.9°), GPS / baro yükseklik hatası, zemin eğimi,
   gerçek kamera (FOV %5 belirsiz, pozlama, bulanıklık), Hailo'daki bulma oranı, stok Follow Me yerine m15 ("AUTO
   FOLLOW"; köşedeki ≈ 6 m'lik yaklaşma stok modun). İlk saha uçuşunda adım adım doğrulama planı belgede (açıyı ölç →
@@ -924,7 +924,7 @@ bileşim 3'er koşu (+ mükemmel algılayıcı ve kıvrımlı yol). Kapı: her k
 - İlk uçuş önerisi (14.11'de güncellendi; doğrulanmamış, ilk uçuşta doğrulanacak; ayrıntı belge bölüm 19):
   1. 35°'lik montaj parçasını tak; kamera açısını araç üzerinde ölç (±0.5°) ve Pi'ye gir.
   2. Takipsiz hover, 9 m: kişi 12.9 m önde; kişinin görüntüdeki yerine, boyuna (simde ≈ 180 px) ve modelin onu bulup
-     bulmadığına bak (model zorlanırsa 8 m / 11.4 m).
+     bulmadığına bak (model zorlanırsa yedek 8 m / 12.9 m).
   3. Önce yürüyen bir kişiyi, sonra duruş, 90° dönüş, kısa koşu ve geri dönüşü takip et; köşede en az mesafeye bak
      (simde stok modla 5.8–7.0 m).
   4. Görüntüyü ve uçuş kaydını sakla; kişinin kadrajda kalma oranını, en az mesafeyi ve bulma oranını simle karşılaştır.

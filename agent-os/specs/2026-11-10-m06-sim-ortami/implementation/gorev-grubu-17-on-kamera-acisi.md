@@ -1423,6 +1423,11 @@ değerler **simde ölçülenlere dayanan bir öneridir; gerçek araçta hiçbiri
 v0.2 modelini laptop işlemcisinde, PX4'ün stok Follow Me moduyla, rüzgârsız düz zeminde çalıştırdı; bu üçü gerçek
 uçuşta farklı olacak (aşağıda).
 
+> **Güncelleme (14.11 akşam, kullanıcı onayı):** yedek ayar 8 m / 11.4 m yerine **35° · 8 m / 12.9 m** (bölüm 21:
+> iki yolda 6/6, köşede en az 6.8–8.4 m, kişi ≈ 190 px; 8/11.4 kıvrımlı yolda 3 koşunun 1'inde kişiyi kaybetti).
+> Başlangıç ayarı değişmedi: 35° · 9 m / 12.9 m. Aşağıdaki tabloda "8 m'de 11.4 m" geçen yerler bu güncellemeden önceki
+> haliyle bırakıldı.
+
 | | Öneri | Aralık / tolerans | Simdeki dayanak |
 |---|---|---|---|
 | Montaj açısı (burnun altında) | **35°** | **hedef 35°, en çok +1°**: yatık tarafa 32.5°'ye kadar simde sorun yok (takip 3/3, kıvrımlı 2/3); dik tarafa 37.5° ani geri dönüşte kişiyi 6 koşunun 5'inde kaybettirdi; arası ölçülmedi | 35° · 9/12.9: düzeltmeden sonraki 10 koşunun 9'unda kapı (takip yolu 4/4, kıvrımlı 5/6); 37.5° · 9/12.9: 5/10 (kıvrımlı 1/6); 32.5° · 9/12.9: 5/6. Aynı 35° montajda 8 m / 11.4 m iki günde 12/13 |
