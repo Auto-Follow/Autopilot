@@ -381,7 +381,8 @@
   yükseklik / 12.9 m geride, kamera varsayılan 35° (dosyada `kamera` bloğu yok), yol 2.9 m doğuya kaydırıldı (kişi dronun
   12.9 m önünde başlar; taramanın `e35_h9_d12.9`'u ile aynı). 45° montajla karşılaştırma: `takip_yuruyen_45_10m`
   (14.11'e kadarki 10/10) ve `takip_yuruyen_45_8m` (eski `takip_yuruyen_8m`), ikisinde de `kamera: {egim_deg: 45}`.
-  `kalabalik_park` 9 m'de bekler (35° kamerayla 10 m'de hedef başta görüntünün altında kalıyordu).
+  `kalabalik_park` 9 m'de bekler (35° kamerayla 10 m'de hedef başta görüntünün altında kalıyordu; kullanıcı onayı
+  14.11.2026).
 - Yanlış alan adı ya da değer, hangi alan olduğu söylenerek reddedilir (`hedef._check_keys` deseni). Ayrıca:
   - `tez_los` için `mod_adi` zorunludur.
   - `algilama.etkin: false` iken `takip.los: model` reddedilir. `los` hiç verilmemişse ve algılama kapalıysa: `yok`

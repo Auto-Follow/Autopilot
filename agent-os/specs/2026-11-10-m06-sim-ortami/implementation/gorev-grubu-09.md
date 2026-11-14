@@ -590,7 +590,8 @@ parçalardadır; A'nın yaması B'li çalışma ağacına da temiz uygulanır (�
 Görev Grubu 17'nin son kararıyla (kamera eğimi × yükseklik × mesafe taraması, `gorev-grubu-17-on-kamera-acisi.md`
 bölüm 18 ve 20) simin varsayılanı değişti: kamera 35° aşağı (`kamera.NOMINAL_TILT_DEG`, `models/x500_tez`),
 `takip_yuruyen` 9 m / 12.9 m (yol 2.9 m doğuya kaydırıldı, kişi dronun 12.9 m önünde başlar; `FLW_TGT_RS 0.3` kaldı),
-`kalabalik_park` 9 m'de bekler (35° kamerayla 10 m'de hedef başta görüntünün altında kalıyordu). Bölüm 13'ün 45°
+`kalabalik_park` 9 m'de bekler (35° kamerayla 10 m'de hedef başta görüntünün altında kalıyordu; ajan kararıydı,
+kullanıcı 14.11.2026'da onayladı). Bölüm 13'ün 45°
 ayarları karşılaştırma için `takip_yuruyen_45_10m` (10 m / 10 m) ve `takip_yuruyen_45_8m` (eski `takip_yuruyen_8m`,
 8 m / 8 m) adıyla, 45° dosyada yazılı olarak duruyor. `gercek_dron.params` değişmedi. 15.11 demosunun iki senaryosu ve
 F0 / F1 yeni varsayılanla yeniden koşuldu (her senaryo 3 kez, `toplu.py`, videolu):
