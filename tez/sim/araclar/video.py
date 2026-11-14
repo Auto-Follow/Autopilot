@@ -79,6 +79,7 @@ TARGET_ARROW_S = 1.5  # [s] the person's arrow is its speed times this
 STANDING_SPEED = 0.1  # [m/s] below: the person stands (PX4: MINIMUM_SPEED_FOR_TARGET_MOVING)
 PX4_COURSE_SPEED = 1.0  # [m/s] PX4 updates its target course only above this (TARGET_SPEED_DEADZONE_...)
 SUB = 4  # cv2 fixed-point bits: coordinates in 1/16 px
+LABEL_MARGIN = 2  # [px] around a label's text box (antialiasing, sub-pixel start)
 
 
 def _bgr(hex_colour: str) -> tuple[int, int, int]:
@@ -125,20 +126,35 @@ class Label:
 
 
 def render_labels(frame: np.ndarray, labels: Sequence[Label]) -> np.ndarray:
-    """The labels on a BGR frame (PIL does not care about the channel order; the colours are BGR as well)."""
-    img = Image.fromarray(frame)
-    draw = ImageDraw.Draw(img)
+    """The labels on a BGR frame, drawn in place and returned (PIL does not care about the channel order; the colours
+    are BGR as well). Each label is drawn on the crop of its own text box: the same pixels as drawing on the whole
+    frame, without copying the frame into PIL and back (the live stream draws 15 frames a second; gorev-grubu-11)."""
+    if not (frame.flags.writeable and frame.flags.c_contiguous):
+        frame = np.array(frame)
+    height, width = frame.shape[:2]
     for lb in labels:
-        draw.text(
-            (lb.x, lb.y),
+        f = font(lb.size, lb.bold)
+        left, top, right, bottom = f.getbbox(lb.text, anchor=lb.anchor, stroke_width=lb.stroke)
+        # the crop starts left of and above the anchor too: PIL renders from the anchor's fractional part
+        # (math.modf), which a negative position inside the crop would change
+        x0 = max(0, math.floor(lb.x + min(left, 0)) - LABEL_MARGIN)
+        y0 = max(0, math.floor(lb.y + min(top, 0)) - LABEL_MARGIN)
+        x1 = min(width, math.ceil(lb.x + right) + LABEL_MARGIN)
+        y1 = min(height, math.ceil(lb.y + bottom) + LABEL_MARGIN)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        crop = Image.fromarray(frame[y0:y1, x0:x1])
+        ImageDraw.Draw(crop).text(
+            (lb.x - x0, lb.y - y0),
             lb.text,
             fill=lb.colour,
-            font=font(lb.size, lb.bold),
+            font=f,
             anchor=lb.anchor,
             stroke_width=lb.stroke,
             stroke_fill=lb.stroke_colour,
         )
-    return np.asarray(img)
+        frame[y0:y1, x0:x1] = np.asarray(crop)
+    return frame
 
 
 def text_width(text: str, size: int, bold: bool = False) -> float:
@@ -279,16 +295,33 @@ STATE_TEXT = {
 }
 
 
+def draw_model_boxes(
+    img: np.ndarray, boxes: Sequence[Sequence[float]], chosen: int | None, labels: list[Label], scale: float
+) -> None:
+    """The model's boxes (u0, v0, u1, v1, guven) in red: the chosen one thick with its confidence, the others thin."""
+    for i, b in enumerate(boxes):
+        corners = draw_box(img, b, MODEL_BGR, 4 if i == chosen else 1, scale)
+        if i == chosen and corners is not None:
+            labels.append(Label(corners[2] + 4, corners[3], f"{b[4]:.2f}", MODEL_BGR, 18, True, "lb", 2, WHITE))
+
+
+def draw_legend(img: np.ndarray, items: Sequence[tuple[str, tuple[int, int, int]]], labels: list[Label]) -> None:
+    """The colour key in the top right corner of the camera panel."""
+    width = max(round(text_width(text, 15, True)) for text, _ in items)
+    shade(img, img.shape[1] - width - 26, 0, img.shape[1], 9 + 21 * len(items), BLACK, 0.45)
+    for k, (text, colour) in enumerate(items):
+        labels.append(Label(img.shape[1] - 12, 9 + 21 * k, text, colour, 15, True, "ra"))
+
+
+LEGEND_REFEREE = (("mavi: hakem, hedef", (255, 190, 120)), ("turuncu: hakem, diğer insanlar", (80, 160, 255)))
+
+
 def draw_camera(img: np.ndarray, m: "Moment", labels: list[Label]) -> None:
     """Camera panel overlays (img: the 1280x720 frame, BGR, drawn in place)."""
     draw_referee(img, m.referee_boxes, labels, LEFT[0] / CAMERA_WIDTH)
     model = m.model
     if model is not None:
-        for i, b in enumerate(model.boxes):
-            chosen = i == model.chosen
-            corners = draw_box(img, b, MODEL_BGR, 4 if chosen else 1)
-            if chosen and corners is not None:
-                labels.append(Label(corners[2] + 4, corners[3], f"{b[4]:.2f}", MODEL_BGR, 18, True, "lb", 2, WHITE))
+        draw_model_boxes(img, model.boxes, model.chosen, labels, LEFT[0] / CAMERA_WIDTH)
     shade(img, 0, 0, 760, 64 if not m.repeated else 86, BLACK, 0.45)
     delay = f"uçtan uca {m.delay_ms:.0f} ms" if math.isfinite(m.delay_ms) else "uçtan uca –"
     labels.append(Label(14, 8, f"t = {m.t:.1f} s   ·   {m.mode or '–'}   ·   {delay}", WHITE, 21, True))
@@ -304,17 +337,48 @@ def draw_camera(img: np.ndarray, m: "Moment", labels: list[Label]) -> None:
     labels.append(Label(14, 38, line, WHITE, 16))
     if m.repeated:
         labels.append(Label(14, 60, "bu an için kamera karesi yok: önceki kare gösteriliyor", (120, 200, 255), 15))
-    legend = (
-        ("mavi: hakem, hedef", (255, 190, 120)),
-        ("turuncu: hakem, diğer insanlar", (80, 160, 255)),
-        ("kırmızı: PX4'teki model sonucu (kalın: seçilen)", (110, 110, 255)),
-    )
-    width = max(round(text_width(text, 15, True)) for text, _ in legend)
-    shade(img, LEFT[0] - width - 26, 0, LEFT[0], 72, BLACK, 0.45)
-    for k, (text, colour) in enumerate(legend):
-        labels.append(Label(LEFT[0] - 12, 9 + 21 * k, text, colour, 15, True, "ra"))
+    draw_legend(img, (*LEGEND_REFEREE, ("kırmızı: PX4'teki model sonucu (kalın: seçilen)", (110, 110, 255))), labels)
     if m.no_target:
         labels.append(Label(LEFT[0] / 2, 120, "HEDEF YOK", WARNING_BGR, 44, True, "mm", 3, WHITE))
+
+
+def draw_live(
+    img: np.ndarray,
+    frame_t: float,
+    msg: "goruntu_yayini.BoxMessage | None",
+    camera_width: int = CAMERA_WIDTH,
+    standalone: bool = False,
+) -> np.ndarray:
+    """One frame of the live stream to QGC (goruntu_yayini.LiveStream): img is the 1280x720 camera frame captured at
+    frame_t [s sim] (BGR, drawn in place); msg the newest boxes, of the model's frame msg.t: the referee's box of the
+    target (blue) and the model's boxes (red, the chosen one thick), as in kosu.mp4's camera panel. They belong to an
+    older frame, so they lag behind the person; older than goruntu_yayini.BOX_STALE_S they are not drawn. Returns the
+    finished frame (with the texts)."""
+    labels: list[Label] = []
+    scale = img.shape[1] / camera_width
+    shown = goruntu_yayini.fresh(msg, frame_t)
+    if shown:
+        if msg.referee is not None:
+            draw_referee(img, [("hedef", msg.referee)], labels, scale)
+        draw_model_boxes(img, msg.boxes, msg.chosen, labels, scale)
+    shade(img, 0, 0, 760, 64, BLACK, 0.45)
+    labels.append(Label(14, 8, f"CANLI   ·   t = {frame_t:.1f} s (sim)", WHITE, 21, True))
+    if msg is None:
+        line = "kutu yok (--model verilmedi)" if standalone else "kutu bilgisi yok (model sonucu henüz gelmedi)"
+    elif not shown:
+        line = f"kutu bilgisi eski: {frame_t - msg.t:.1f} s önceki kare (model sustu)"
+    else:
+        line = f"model: {1000 * (frame_t - msg.t):.0f} ms önceki kare, {len(msg.boxes)} kutu"
+        if not standalone and msg.state in STATE_TEXT:
+            line += f", {STATE_TEXT[msg.state]}"
+    labels.append(Label(14, 38, line, WHITE, 16))
+    model = ("kırmızı: model kutuları (tek başına, hedef seçimi yok)", (110, 110, 255))
+    if not standalone:
+        model = ("kırmızı: model sonucu (kalın: seçilen)", (110, 110, 255))
+    draw_legend(img, (model,) if standalone else (LEGEND_REFEREE[0], model), labels)
+    if shown and msg.no_target:
+        labels.append(Label(img.shape[1] / 2, 120, "HEDEF YOK", WARNING_BGR, 44, True, "mm", 3, WHITE))
+    return render_labels(img, labels)
 
 
 def placeholder(text: str) -> np.ndarray:

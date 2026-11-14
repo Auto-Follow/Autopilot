@@ -50,6 +50,12 @@ kosu.mp4 (unless --videosuz): a recorder process (goruntu_yayini.py) writes the 
 recording (15 fps of sim time, 1280x720 JPEG) into kareler/ while the run goes on; after the run video.py puts the
 video together from the run's files (camera with the referee's and the model's boxes | top view), then kareler/ goes
 (--kareleri-sakla keeps it).
+
+--qgc (video.qgc): the same process also streams the drone camera live to QGroundControl, H.264 RTP on UDP 5600 (QGC
+5.1.4: Application Settings -> Video -> "UDP h.264 Video Stream", port 5600; without QGC: ffplay with
+tez/sim/araclar/yayin.sdp), from Gazebo's start to the end of the run, with the boxes the tracking thread sends it for
+every processed model frame on UDP 5610 (the model's boxes, the chosen one, the referee's box of that frame). Its
+books are ozet.json "yayin"; --videosuz --qgc streams without kosu.mp4.
 """
 
 import argparse
@@ -419,10 +425,11 @@ def start_model(
     model_file: algilama.ModelFile,
     run_settings: dict,
     on_result: Callable[[algilama.FrameResult, float], None],
+    tap: goruntu_yayini.FrameTap | None = None,
 ) -> algilama.ModelProcess:
     """Start the model process and wait until the model is loaded; every result goes to on_result (the tracking
-    thread, which writes algilama.csv / kutular.csv)."""
-    model = algilama.ModelProcess(model_settings(sc, model_file), on_result)
+    thread, which writes algilama.csv / kutular.csv); tap: the video's frames from the model's subscription."""
+    model = algilama.ModelProcess(model_settings(sc, model_file), on_result, tap)
     d = sc.detection
     log(f"Model süreci açılıyor: {model_file.path.name}, CPU, {d.cores} çekirdek (indirme ve analitik kapalı)...")
     info = model.start()
@@ -644,6 +651,7 @@ def run(
     rec: Recorder | None = None
     detections = algilama.DetectionLog(out, clock, takip.ROW_COLUMNS) if model_file is not None else None
     tracker = None
+    boxes = goruntu_yayini.BoxSender() if sc.video.qgc else None  # the live stream's boxes (UDP 5610)
     world = konumlama.world_geo(hedef.SIM_DIR / "worlds" / f"{sc.world}.sdf")  # the drone's GPS comes from it
     mount = kamera.camera_to_body(math.radians(sc.camera.tilt_deg))  # C_cb of LOS (i) and the flat-ground position
     log(f"Kamera eğimi {sc.camera.tilt_deg:g}° (kamera.egim_deg; varsayılan montaj {kamera.NOMINAL_TILT_DEG:g}°)")
@@ -660,9 +668,14 @@ def run(
             world=world,
             truth=lambda s: sc.truth(s)[:2],
             mount=mount,
+            overlay=boxes.send if boxes is not None else None,
         )
     model = None
     frames = None
+    # the video's frames (kosu.mp4, --qgc) come from the model process' camera subscription when there is a model: a
+    # second 9 MB x 30 Hz subscriber cost the RTF ~0.06 (implementation/gorev-grubu-11.md)
+    video_on = sc.video.mp4 or sc.video.qgc
+    share = goruntu_yayini.FrameShare() if video_on and model_file is not None else None
     try:
         if model_file is not None:  # loaded before anything is written or started: a refused setting stops here
             known = (
@@ -672,17 +685,31 @@ def run(
             if model_file.warning:
                 log(f"UYARI: {model_file.warning}")
                 events.append(f"Model dosyası uyarısı: {model_file.warning}")
-            model = start_model(sc, model_file, run_settings, tracker.on_model if tracker else detections.add)
+            on_result = tracker.on_model if tracker else detections.add
+            model = start_model(sc, model_file, run_settings, on_result, share.tap() if share else None)
         else:
             log("Model yok (--modelsiz / algilama.etkin: false): model süreci açılmaz")
         out.mkdir(parents=True, exist_ok=True)
-        if sc.video.mp4:  # like the model: listening to the camera before Gazebo starts
-            frames = goruntu_yayini.FrameRecorder(out / goruntu_yayini.FRAMES_DIR)
-            frames.start()
-            log(
-                f"Video kare kaydedicisi hazır: kayıt boyunca {goruntu_yayini.FPS} kare/sim-s, "
-                f"{goruntu_yayini.FRAME_SIZE[0]}x{goruntu_yayini.FRAME_SIZE[1]} JPEG -> {goruntu_yayini.FRAMES_DIR}/"
-            )
+        if video_on:  # like the model: listening to the camera before Gazebo starts
+            frames_dir = out / goruntu_yayini.FRAMES_DIR if sc.video.mp4 else None
+            frames = goruntu_yayini.FrameRecorder(frames_dir, qgc=sc.video.qgc, share=share)
+            info = frames.start()
+            size = f"{goruntu_yayini.FRAME_SIZE[0]}x{goruntu_yayini.FRAME_SIZE[1]}"
+            if sc.video.mp4:
+                log(
+                    f"Video kare kaydedicisi hazır: kayıt boyunca {goruntu_yayini.FPS} kare/sim-s, {size} JPEG -> "
+                    f"{goruntu_yayini.FRAMES_DIR}/; kareler: {info['kaynak']}"
+                )
+            if sc.video.qgc:
+                none = "" if tracker is not None else " (bu koşuda kutu yok: model ve LOS yok)"
+                log(
+                    f"Canlı yayın hazır: H.264 RTP -> {info['yayin']} ({size}, {goruntu_yayini.FPS} kare/sim-s), "
+                    f"kutular UDP {goruntu_yayini.BOX_PORT}'dan{none}"
+                )
+                log(
+                    "QGC 5.1.4: Uygulama Ayarları -> Video -> 'UDP h.264 Video Stream', port 5600; QGC'siz: "
+                    f"ffplay {goruntu_yayini.FFPLAY_OPTIONS} -i tez/sim/araclar/yayin.sdp"
+                )
         shutil.copy(sc.source, out / "senaryo.yaml")
         check_pos = dogrulama.camera_pose(sc) if verify else None
         world_file = hedef.write_world(sc, out, dogrulama.camera_sdf(check_pos) if verify else "")
@@ -699,6 +726,8 @@ def run(
             tracker.close()
         if detections is not None:
             detections.close()
+        if boxes is not None:
+            boxes.close()
         raise
     sim = simulation(sc, out, world_file, headless)
     completed = False
@@ -727,12 +756,17 @@ def run(
         if detections is not None:
             detections.close()
         video_books = frames.stop() if frames is not None else None
+        if boxes is not None:
+            boxes.close()
     events += sim.problems()
     unresponsive = sim.unresponsive()
     if unresponsive:  # the commander dropped the external mode: the run did not fly the mode it measures
         completed = False
-    if video_books is not None:
+    stream_books = video_books.pop("yayin", None) if video_books is not None else None
+    if video_books is not None and sc.video.mp4:
         _frame_log_line(video_books, events)
+    if sc.video.qgc:
+        stream_books = _stream_log_line(stream_books, video_books, boxes, events)
 
     ulogs = sim.ulogs()
     ulog = ulogs[-1] if ulogs else None
@@ -789,6 +823,8 @@ def run(
     )
     measured, sections = olcum.measure(data)
     more |= measured
+    if stream_books is not None:
+        sections["yayin"] = stream_books
     if sim.external_mode:
         sections["harici_mod"] = {"baslatma": sim.start_results(), "unresponsive": unresponsive}
         log(f"Harici mod: sim.log'da 'unresponsive' satırı {len(unresponsive)}")
@@ -827,7 +863,7 @@ def run(
         run_settings,
         more,
         sections,
-        video=_video_maker(video_books, sc.video.keep_frames) if frames is not None else None,
+        video=_video_maker(video_books, sc.video.keep_frames) if frames is not None and sc.video.mp4 else None,
     )
 
 
@@ -837,16 +873,55 @@ def _frame_log_line(books: dict, events: list[str]) -> None:
         events.append(f"Video kare kaydedicisi: {books['hata']}")
         log(f"UYARI: video kare kaydedicisi: {books['hata']}")
         return
+    shared = books.get("paylasim")
+    source = books.get("kaynak", "?")
+    if shared is not None:
+        source += f": {shared['alinan']} kare alındı, {shared['ezilen']} ezildi"
+        if shared.get("kendi_aboneligi_s") is not None:
+            source += f"; {shared['kendi_aboneligi_s']:.0f}. s'den sonra kendi aboneliği"
     log(
         f"Video kareleri: {books['yazilan']} yazıldı ({books['secilen']} seçildi, {books['dusen']} kuyruk dolu "
-        f"olduğu için düştü, {books['hatali']} hatalı; kameradan {books['kamera_karesi']} kare geldi), kare başına "
-        f"ort. {books['yazma_ms_ort']:.1f} ms (en çok {books['yazma_ms_maks']:.0f})"
+        f"olduğu için düştü, {books['hatali']} hatalı; {books['kamera_karesi']} kare geldi, kaynak {source}), kare "
+        f"başına ort. {books['yazma_ms_ort']:.1f} ms (en çok {books['yazma_ms_maks']:.0f}); kaydedici süreci kayıt "
+        f"boyunca {books.get('surec', {}).get('pencere_cekirdek', math.nan):.2f} çekirdek"
     )
+    if shared is not None and shared["ezilen"]:
+        events.append(f"Video kareleri: paylaşılan halkada {shared['ezilen']} kare ezildi (kaydedici geride kaldı)")
     if books["dusen"] or books["hatali"]:
         events.append(
             f"Video kareleri: {books['dusen']} kare düştü, {books['hatali']} hatalı (videoda önceki kare gösterilir)"
         )
     events += [f"Video kare kaydedicisi: {e}" for e in books.get("hatalar", [])]
+
+
+def _stream_log_line(
+    books: dict | None, recorder: dict | None, sender: goruntu_yayini.BoxSender | None, events: list[str]
+) -> dict:
+    """What the live stream did (ozet.json "yayin"): frames pushed, their rate, how many had fresh boxes, the boxes the
+    tracking thread sent and the stream received, arrival -> push delay, the recorder process' CPU."""
+    if books is None:
+        text = (recorder or {}).get("hata", "kaydedicinin defterinde yayın yok")
+        events.append(f"Canlı yayın: {text}")
+        log(f"UYARI: canlı yayın: {text}")
+        return {"hata": text}
+    heard = books.get("kutu_mesaji", {})
+    books["kutu_gonderimi"] = sender.counts() if sender is not None else {}
+    cpu = (recorder or {}).get("surec", {})
+    books["kaydedici_sureci"] = cpu  # recording and streaming share the process (kosu.mp4 runs: also video.kayit)
+    log(
+        f"Canlı yayın ({books['hedef']}): {books['verilen']} kare ({books['ilk_t']:.1f}–{books['son_t']:.1f} s, "
+        f"{books['hiz_sim_hz']:.1f} kare/sim-s, {books['hiz_duvar_hz']:.1f} kare/s), kutulu {books['kutulu']}, "
+        f"atlanan {books['atlanan']}, kodlayıcı kuyruğu taşması {books['kuyruk_tasmasi']}; kutu mesajı "
+        f"{books['kutu_gonderimi'].get('gonderildi', 0)} gönderildi / {heard.get('alinan', 0)} alındı "
+        f"({heard.get('gecersiz', 0)} geçersiz); varış -> yayın p50 {books['gecikme_ms_p50']:.0f} ms (p95 "
+        f"{books['gecikme_ms_p95']:.0f}), kare başına {books['kare_ms_ort']:.1f} ms; kaydedici süreci kayıt boyunca "
+        f"{cpu.get('pencere_cekirdek', math.nan):.2f} çekirdek"
+    )
+    problems = books["hatalar"] + heard.get("hatalar", []) + (sender.errors if sender is not None else [])
+    if books["verilen"] == 0:
+        events.append("Canlı yayın: hiç kare gönderilmedi")
+    events += [f"Canlı yayın: {e}" for e in problems[:10]]
+    return books
 
 
 def _video_maker(books: dict | None, keep_frames: bool) -> Callable[[Path], dict]:
@@ -953,6 +1028,9 @@ def main() -> int:
         summary = run(sc, out, args.ekransiz, args.dogrula, model_file)
     except algilama.ModelError as e:
         print(f"Model hatası, simülasyon açılmadı: {e}", file=sys.stderr)
+        return 2
+    except goruntu_yayini.RecorderError as e:
+        print(f"Video kaydı / canlı yayın açılamadı, simülasyon açılmadı: {e}", file=sys.stderr)
         return 2
     log(f"Rapor: {out / 'rapor.html'}")
     log(f"SONUÇ: {summary['sonuc']}")

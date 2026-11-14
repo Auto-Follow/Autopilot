@@ -16,7 +16,8 @@ Gazebo Harmonic + PX4 SITL v1.17.0 (stok kod, PX4 dosyası değişmedi) üzerind
 modeline (Ortatepe v0.2, YOLOv8s tabanlı, CPU) veriyor; seçilen kişinin yönü (`TEZ_LOS`) ve yerdeki konumu
 (`FOLLOW_TARGET`) PX4'e gidiyor; PX4'ün takip modu dronu hareket ettiriyor; döngü kapalı. Simülasyon kişinin gerçek
 yerini her karede bildiği için ("hakem") modelin, hedef seçiminin ve uçuşun doğruluğu sayıyla ölçülüyor. Her koşu bir
-video (`kosu.mp4`: kamera + kuşbakışı harita), bir rapor (`rapor.html`) ve ~100 ölçütlük `ozet.json` üretiyor.
+video (`kosu.mp4`: kamera + kuşbakışı harita), bir rapor (`rapor.html`) ve ~100 ölçütlük `ozet.json` üretiyor;
+`--qgc` ile dron kamerası, modelin ve hakemin kutuları çizili olarak QGroundControl'e canlı da gidiyor.
 
 ## 2. Kamera ve montaj (kesinleşen sim varsayılanı, gerçek için öneri)
 
@@ -103,7 +104,14 @@ $P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --los hakem   #
 ```
 
 Önemli bayraklar: `--takip yok|tez_los|follow_me`, `--mod-adi`, `--model`, `--imgsz`, `--conf`, `--modelsiz`,
-`--videosuz`, `--kareleri-sakla`, `--cikti`. Senaryolar `tez/sim/senaryolar/` (`takip_yuruyen` = 35° montaj, 9 m /
+`--videosuz`, `--kareleri-sakla`, `--qgc`, `--cikti`.
+
+**QGC'de canlı görüntü** (m06 görev grubu 11): koşuya `--qgc` ekle; QGC 5.1.4 → Uygulama Ayarları → Video → "UDP h.264
+Video Stream", port 5600 (H.264 RTP, 1280×720, 15 kare/sim-s). Görüntüde modelin kutuları (kırmızı, seçilen kalın) ve
+hakemin hedef kutusu (mavi); kutular modelin işlediği ≈ 0.1–0.2 s önceki kareye ait. Elle uçarken (açık sim + QGC)
+kendi modeliyle: `$P tez/sim/araclar/goruntu_yayini.py --qgc --model <dosya.pt>` (hakem ve LOS yok). QGC'siz:
+`ffplay -protocol_whitelist file,udp,rtp -i tez/sim/araclar/yayin.sdp` (Ubuntu'nun VLC'si bu yayını açamaz).
+Ayrıntı: `tez/sim/README.md` → "Canlı video (QGC)". Senaryolar `tez/sim/senaryolar/` (`takip_yuruyen` = 35° montaj, 9 m /
 12.9 m; `takip_yuruyen_45_10m`, `takip_yuruyen_45_8m` = eski 45° karşılaştırma; `kalabalik_park`, `kivrimli_yuruyus`,
 `yuruyen_insan`). Çıktılar `tez/sim/sonuclar/<klasör>/` (git'e girmez). Aynı anda tek sim çalışır.
 
@@ -113,11 +121,13 @@ $P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --los hakem   #
   `tez/sim/parametreler/` ve senaryolardan `PX4_PARAM_*` ile.
 - Model, video, ULog repoya girmez. Yeni paketler sabit sürümüyle `tez/env/VERSIONS.md`'de (ultralytics, torch, ffmpeg).
 - Simin gerçeği temsil etmediği yanlar: rüzgâr yok; GPS/baro yüksekliği kusursuz; zemin düz; kamera kusursuz (pozlama,
-  bulanıklık, gürültü yok — Faz B); tek insan modeli, tek ışık; model laptop CPU'sunda (Hailo değil); RTF ≈ 0.8 (sim
-  gerçek zamandan yavaş).
+  bulanıklık, gürültü yok — Faz B); tek insan modeli, tek ışık; model laptop CPU'sunda (Hailo değil); RTF ≈ 0.85–0.95
+  (sim gerçek zamandan yavaş; sebebi modelin işlemci yükü, video kaydının ve canlı yayının ölçülebilir payı yok);
+  canlı yayın aynı makinede, ağ kaybı ve gecikmesi yok (Wi-Fi benzetimi Faz B).
 
 ## 9. Karar bekleyenler
 
 Kamera montaj açısı (öneri 35°) · m01'e "en az yatay mesafe" ölçütü (öneri ≥ 3 m) · gerçek uçuşta `follow_target`
 kaydı · ortak model saklama yeri · `TEZ_LOS` biçiminin m05'te kesinleşmesi · yer istasyonunda görüntü/takip gösterim
-yöntemi (öneri: önce QGC video + videoya çizili kutular; gerekirse PySide6 uygulaması; QGC'yi kaynaktan özelleştirmek en son).
+yöntemi (öneri: önce QGC video + videoya çizili kutular, simde `--qgc` ile hazır; gerekirse PySide6 uygulaması; QGC'yi
+kaynaktan özelleştirmek en son) · `--videosuz` kuralının kalkması (11. grupta kaydın RTF payı giderildi; kullanıcı onayı).

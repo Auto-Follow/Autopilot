@@ -412,17 +412,23 @@ def test_settings_of_later_groups_stop_the_run(tmp_path: Path) -> None:
     hedef.check_wired(sc)  # defaults only: the run may start
     assert hedef.settings(sc)["henuz_bagli_degil"] == {}  # kosu.mp4 is made since group 8
     later = [
-        (hedef.CommandLine(qgc=True), "video.qgc: true (--qgc): Görev grubu 11'de"),
         (hedef.CommandLine(delay_ms=200.0), "gecikme.ek_ms: 200.0 (--gecikme-ms): Görev grubu 12'de"),
     ]
     for cli, message in later:
         with pytest.raises(ValueError, match=re.escape(message)):
             hedef.check_wired(hedef.load(good, cli))
     # wired already: start parameters, no model, no video, the model's settings (group 4), TEZ_LOS with an external
-    # mode chosen by name and the referee's LOS (group 5), kept video frames (group 8), PX4 start commands (group 10)
+    # mode chosen by name and the referee's LOS (group 5), kept video frames (group 8), PX4 start commands (group 10),
+    # the live stream to QGC, also without kosu.mp4 (group 11)
     hedef.check_wired(hedef.load(good, hedef.CommandLine(params=("FLW_TGT_DST=10",), no_model=True, no_video=True)))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(px4_start=("x start",))))
     hedef.check_wired(hedef.load(good, hedef.CommandLine(keep_frames=True)))
+    hedef.check_wired(hedef.load(good, hedef.CommandLine(qgc=True)))
+    hedef.check_wired(hedef.load(good, hedef.CommandLine(qgc=True, no_video=True)))
+    (tmp_path / "qgc").mkdir()
+    streamed = hedef.load(write(tmp_path / "qgc", GOOD + "video: {qgc: true}\n"))
+    hedef.check_wired(streamed)
+    assert streamed.video == hedef.Video(mp4=True, qgc=True) and hedef.settings(streamed)["henuz_bagli_degil"] == {}
     hedef.check_wired(hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Hold", los="hakem")))
     hedef.check_wired(
         hedef.load(good, hedef.CommandLine(source="tez_los", mode_name="Yok", no_model=True, los="hakem"))

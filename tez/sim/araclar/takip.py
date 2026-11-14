@@ -28,6 +28,11 @@ FOLLOW_TARGET behind the frame's TEZ_LOS on the same delay line (FollowTargetSen
 none without a position). With the referee as the source (takip.los: hakem) FOLLOW_TARGET carries where the person
 really is, only while the camera sees them: a "perfect detector" reference run. Every FOLLOW_TARGET attempt is a
 follow_target.csv row. The truth columns (gercek_x/y, hatasi) are evaluation only, from the scenario's path.
+
+Live stream (--qgc, task group 11): with `overlay` every processed model frame also becomes a
+goruntu_yayini.BoxMessage (its boxes, the chosen one, the referee's box of the target in that frame, whether its
+TEZ_LOS says no target) for the stream process (UDP 5610); without a model, with the referee as the source, every
+referee frame does.
 """
 
 import csv
@@ -46,6 +51,7 @@ import numpy as np
 import algilama
 import gecikme
 import goruntu
+import goruntu_yayini
 import kamera
 import konumlama
 import px4_baglanti
@@ -301,13 +307,15 @@ class Tracker:
         world: konumlama.WorldGeo | None = None,
         truth: Callable[[float], tuple[float, float]] | None = None,
         mount: np.ndarray = NOMINAL_MOUNT,
+        overlay: Callable[[goruntu_yayini.BoxMessage], None] | None = None,
     ) -> None:
         """clock: sim <-> wall; out: run folder (tez_los.csv, follow_target.csv); detections: algilama.csv (None
         without a model); camera: the drone camera's camera_info once known (Recorder.camera); extra_ms [ms]:
         artificial delay (0 until task group 12); now: monotonic clock [s]; follow: send FOLLOW_TARGET (follow_me);
         locator: flat-ground positions of the model's boxes (None: none); world: the Gazebo world's geodetic origin
         (evaluation columns; the referee's FOLLOW_TARGET); truth: the target's true (x, y) [m] at a sim time
-        (evaluation only); mount: C_cb (optical -> body FRD) of LOS (i), kamera.camera_to_body(the scenario's tilt)."""
+        (evaluation only); mount: C_cb (optical -> body FRD) of LOS (i), kamera.camera_to_body(the scenario's tilt);
+        overlay: the live stream's boxes (goruntu_yayini.BoxSender.send; None: no stream)."""
         if source not in SOURCES:
             raise ValueError(f"takip.los: {list(SOURCES)} olmalı, gelen: {source!r}")
         if follow and source == "hakem" and world is None:
@@ -323,6 +331,7 @@ class Tracker:
         self._world = world
         self._truth = truth
         self.mount = np.asarray(mount, dtype=float)
+        self._overlay = overlay
         self._poses: konumlama.PoseHistory | None = None
         self.poses: konumlama.PoseHistory | None = None  # the last link's history, kept after detach (metrics)
         self.selection = Selection()
@@ -382,6 +391,10 @@ class Tracker:
         if choice.reason == "hakem_yok":
             with self._lock:
                 self._no_referee.append(key)
+        if self._overlay is not None:
+            # what PX4 gets for this frame: the model source sends the chosen box's LOS, the referee source its own
+            no_target = choice.box is None if self.source == "model" else referee is not None and not referee.visible
+            self._show(r.t, r.kutular, choice, no_target, referee)
         camera = self._camera()
         los = los_of_box(camera, choice.box, self.mount) if choice.box is not None and camera is not None else None
         self._note(choice, r.t)
@@ -412,6 +425,8 @@ class Tracker:
                     late = (self._clock.to_sim(ready) - t) * 1000.0
                     with self._lock:
                         self._referee_late_ms.append(late)
+                if self.source == "hakem" and self._detections is None and self._overlay is not None:
+                    self._show(t, (), Choice("hakem"), not (referee is not None and referee.visible), referee)
                 if self.source == "hakem" and not self._closed:
                     seen = referee is not None and referee.visible
                     los = np.array(referee.los_body) if seen else None
@@ -424,6 +439,23 @@ class Tracker:
                 self._error(f"hakem karesi işlenemedi: {type(e).__name__}: {e}")
             finally:
                 self._queue.task_done()
+
+    def _show(self, t: float, boxes: Sequence[Kutu], choice: Choice, no_target: bool, referee: Referee | None) -> None:
+        """The live stream's message of the frame captured at t (never raises: the stream must not stop tracking)."""
+        box = referee.box if referee is not None and all(math.isfinite(c) for c in referee.box) else None
+        chosen = choice.index if choice.index is not None and choice.index < goruntu_yayini.MAX_BOXES else None
+        msg = goruntu_yayini.BoxMessage(
+            t,
+            tuple((b.u0, b.v0, b.u1, b.v1, b.guven) for b in boxes[: goruntu_yayini.MAX_BOXES]),
+            chosen,
+            choice.state,
+            bool(no_target),
+            box,
+        )
+        try:
+            self._overlay(msg)
+        except Exception as e:  # noqa: BLE001 - reported with the run; tracking goes on
+            self._error(f"canlı yayının kutu mesajı gönderilemedi: {type(e).__name__}: {e}")
 
     def _keep(self, referee: Referee) -> None:
         key = algilama.time_key(referee.t)

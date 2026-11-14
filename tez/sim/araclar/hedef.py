@@ -548,11 +548,9 @@ def settings(sc: Scenario) -> dict:
 # that gives one of them a value other than its default, before the simulation starts; nothing is silently ignored.
 # not_in_effect() lists the defaults that do not act yet. Each task group deletes its lines when it wires them in.
 def unwired(sc: Scenario) -> list[str]:
-    """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet."""
-    v = sc.video
+    """'<setting>: Görev grubu N'de bağlanacak' for every setting of the run that is not wired yet (the live stream,
+    video.qgc / --qgc, is wired since task group 11)."""
     found: list[tuple[str, int]] = [(text, 12) for text in _changed("gecikme", sc.delay, Delay(), DELAY_FIELDS)]
-    if v.qgc:
-        found.append(("video.qgc: true (--qgc)", 11))
     return [f"{what}: {in_group(group)} bağlanacak" for what, group in found]
 
 

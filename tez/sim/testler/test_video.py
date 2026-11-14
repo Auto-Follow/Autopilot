@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import pytest
+from PIL import Image, ImageDraw
 
 import goruntu_yayini
 import hedef
@@ -371,3 +372,35 @@ def test_preview_video_is_mp4_through_the_same_pipe(tmp_path: Path, monkeypatch:
     assert cmd[cmd.index("-s") + 1] == "1152x648" and cmd[cmd.index("-r") + 1] == str(onizleme.VIDEO_FPS)
     assert "libx264" in cmd and len(FakeFfmpeg.last.data) == 3 * 1152 * 648 * 3
     assert bytes(FakeFfmpeg.last.data[:3]) == b"\x00\x00\xff"
+
+
+def test_labels_drawn_on_their_own_crop_are_the_whole_frame_pixels() -> None:
+    """render_labels draws each text on the crop of its own text box (the live stream draws 15 frames a second): the
+    pixels must be those of drawing on the whole frame, also at fractional positions whose crop-relative place would
+    be negative (PIL renders from the anchor's fractional part) and for labels half outside the frame."""
+    rng = np.random.default_rng(3)
+    frame = rng.integers(0, 256, (720, 2000, 3), dtype=np.uint8)
+    labels = [
+        video.Label(1750.9, 219.3, "kırmızı: model sonucu", (60, 60, 230), 21, False, "ra"),  # top > 0: the bug
+        video.Label(903.7, 254.0, "HEDEF YOK", video.WARNING_BGR, 44, True, "la", 3, video.WHITE),
+        video.Label(640.0, 120.0, "HEDEF YOK", video.WARNING_BGR, 44, True, "mm", 3, video.WHITE),
+        video.Label(14.0, 8.0, "CANLI   ·   t = 70.2 s (sim)", video.WHITE, 21, True),
+        video.Label(588.6, 377.6, "0.79", video.MODEL_BGR, 18, True, "lb", 2, video.WHITE),
+        video.Label(-12.3, 715.6, "ığşçöü İĞŞ — kenarda", (200, 200, 200), 28, True, "lt"),
+        video.Label(1995.5, -4.2, "sağ üst köşe", (10, 200, 10), 16, False, "la", 2),
+    ]
+    whole = Image.fromarray(frame.copy())
+    draw = ImageDraw.Draw(whole)
+    for lb in labels:
+        draw.text(
+            (lb.x, lb.y),
+            lb.text,
+            fill=lb.colour,
+            font=video.font(lb.size, lb.bold),
+            anchor=lb.anchor,
+            stroke_width=lb.stroke,
+            stroke_fill=lb.stroke_colour,
+        )
+    drawn = video.render_labels(frame.copy(), labels)
+    assert np.array_equal(drawn, np.asarray(whole))
+    assert not np.array_equal(drawn, frame)  # something was drawn

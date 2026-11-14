@@ -29,7 +29,9 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | Laptop analiz/araç Python | `analiz-requirements.txt` (pyulog 1.2.4, MAVProxy 1.8.75, pandas, matplotlib, SciPy…) | venv: `~/Desktop/Projects/Auto-Follow/.venv-tez` |
 | Git | 2.43.0 | Ubuntu paketi |
 | ffmpeg (sim videosu `kosu.mp4`) | **ffmpeg 7:6.1.1-3ubuntu5** (libavcodec60 7:6.1.1-3ubuntu5, libx264-164 2:0.164.3108+git31e19f9-1) | Ubuntu 24.04 paketi (`sudo apt install ffmpeg`, aşağıdaki "Geliştirme araçları"nda); `tez/sim/araclar/video.py` ham BGR kareleri boruyla verir: `libx264`, `yuv420p`, `veryfast`, `crf 23`, `+faststart`. OpenCV'nin `VideoWriter`'ı kullanılmaz (pip OpenCV'de H.264 yok). Kontrol: `dpkg-query -W ffmpeg libx264-164` |
-| VLC (videoyu izlemek için) | 3.0.20-3build6 | Ubuntu paketi; `kosu.mp4` bununla denendi. Uçbirimdeki "Timestamp conversion failed" satırları VLC'nin kendisinden gelir |
+| VLC (videoyu izlemek için) | 3.0.20-3build6 | Ubuntu paketi; `kosu.mp4` bununla denendi. Uçbirimdeki "Timestamp conversion failed" satırları VLC'nin kendisinden gelir. **Canlı yayını (`yayin.sdp`, H.264 RTP) açamaz:** paket live555'siz derlenmiş (`--disable-live555`), SDP'den RTP alamıyor; QGC'siz izlemek için ffmpeg paketinin `ffplay`'i (`ffplay -protocol_whitelist file,udp,rtp -i tez/sim/araclar/yayin.sdp`) ya da `gst-launch-1.0` |
+| GStreamer (sim'den QGC'ye canlı video, `senaryo.py --qgc` / `goruntu_yayini.py --qgc`) | **GStreamer 1.24.2**: libgstreamer1.0-0 1.24.2-1ubuntu0.1, gir1.2-gstreamer-1.0 1.24.2-1ubuntu0.1, gir1.2-gst-plugins-base-1.0 1.24.2-1ubuntu0.6, gstreamer1.0-plugins-base 1.24.2-1ubuntu0.6, gstreamer1.0-plugins-good 1.24.2-1ubuntu1.8 (`rtph264pay`, `udpsink`), gstreamer1.0-plugins-ugly 1.24.1-1build1 (`x264enc`, libx264-164 2:0.164.3108+git31e19f9-1), gstreamer1.0-libav 1.24.1-1build1 (`avdec_h264`, yalnız `gst-launch-1.0` ile izlemek için), gstreamer1.0-tools 1.24.2-1ubuntu0.1, gstreamer1.0-x 1.24.2-1ubuntu0.6 (`autovideosink` penceresi); Python bağı **python3-gi 3.48.2-1** (ekip venv'i `--system-site-packages` ile görür) | Ubuntu 24.04 paketleri (aşağıdaki "Canlı video paketleri"); hat: `appsrc` → `queue leaky=downstream` → `videoconvert` → `x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=15` → `rtph264pay config-interval=1 pt=96 mtu=1400` → `udpsink 127.0.0.1:5600`. Kontrol: `dpkg-query -W python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-plugins-ugly gstreamer1.0-libav` |
+| libfuse2t64 (QGC AppImage'ı için) | 2.9.9-8.1build1 | Ubuntu 24.04 paketi; AppImage FUSE 2 ister (yoksa "dlopen(): error loading libfuse.so.2"). Kontrol: `dpkg-query -W libfuse2t64` |
 
 ## 3. Kişiden kişiye farklı olabilir (proje sonucunu etkilemez)
 
@@ -72,6 +74,18 @@ sudo apt install -y --no-install-recommends clangd valgrind python3-venv python3
   rpi-imager v4l-utils ffmpeg gstreamer1.0-tools bear mesa-utils
 sudo apt-mark hold python3-gz-transport13 python3-gz-msgs10 python3-gz-sim8
 ```
+
+### Canlı video paketleri (sim → QGC, `--qgc`) ve QGC AppImage
+Sürümleri yukarıdaki tabloda ("Aynı olması önerilir"); Ubuntu 24.04'ün kendi paketleridir:
+```bash
+sudo apt install -y --no-install-recommends python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+  gstreamer1.0-tools gstreamer1.0-x libfuse2t64
+dpkg-query -W python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools libfuse2t64
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -c "import gi; gi.require_version('Gst', '1.0'); from gi.repository import Gst; Gst.init(None); print(Gst.version_string(), all(Gst.ElementFactory.find(e) for e in ('x264enc', 'rtph264pay', 'avdec_h264')))"   # GStreamer 1.24.2 True
+```
+`gstreamer1.0-plugins-bad` (`netsim`, Wi-Fi benzetimi) Faz B'de gerekir; şimdilik kurulmaz.
 
 ## Laptop analiz/araç Python ortamı (Pi kodu için `Vision` reposuna bakın)
 ```bash

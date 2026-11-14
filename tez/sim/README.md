@@ -11,7 +11,8 @@ Görüntü işleme (Vision) ve kontrol (PX4 içindeki tez modu) ekiplerinin kodl
 > Follow Target, `tez_los` → `--mod-adi`), ULog, spec'teki bütün ölçütler, kontroller ve uyarılarla HTML rapor, aynı
 > senaryonun N koşusu ve dağılımı (`toplu.py`), her koşunun VLC'de açılan videosu (`kosu.mp4`: dron kamerası +
 > kuşbakışı harita), ağaç dışı bir PX4 modülünü (ör. m15'in takip modu) derleyip başlatarak aynı senaryo, ölçüt ve
-> videoyla denemek (Görev grubu 10; aşağıda "C. Kendi PX4 modülünü takmak"). m06'nın devamı (QGC yayını):
+> videoyla denemek (Görev grubu 10; aşağıda "C. Kendi PX4 modülünü takmak"), dron kamerasını kutularla birlikte
+> QGroundControl'e canlı yayınlamak (Görev grubu 11; aşağıda "Canlı video (QGC)"). m06'nın devamı:
 > `agent-os/specs/2026-11-10-m06-sim-ortami/`.
 
 > **Ekip için kısa özet** (kamera ve montaj, eksenler, PX4'e giden mesajlar, kendi modunu takmak, model ölçümleri,
@@ -113,12 +114,12 @@ Bayraklar senaryodaki değeri ezer: `--model`, `--imgsz`, `--conf`, `--sinif`, `
 `--qgc`, `--videosuz`, `--kareleri-sakla`. Koşunun geçerli ayarlarının hepsi `ozet.json` → `ayarlar`'a yazılır.
 
 **Ara durum (m06 sürerken):** m06'nın sonraki görev gruplarında bağlanacak bir ayar varsayılan dışında verilirse
-koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (ör. `video.qgc: true (--qgc): Görev grubu
-11'de bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok`, `follow_me` ve
-`tez_los` (`--mod-adi`), `takip.los: model | hakem` (`--los`), algılama (`algilama.*`, `--model`, `--imgsz`, `--conf`,
-`--sinif`, `--modelsiz`), `kusurlar` (Faz A: boş), `video.mp4` / `--videosuz`, `--kareleri-sakla`,
-`takip.px4_parametreleri` ve `--param`, `takip.px4_baslat` ve `--px4-baslat` (10. grup). `ozet.json` →
-`ayarlar.henuz_bagli_degil` 8. gruptan beri boştur.
+koşu simülasyon açılmadan durur ve hangi grupta bağlanacağını söyler (ör. `gecikme.ek_ms: 200.0 (--gecikme-ms):
+Görev grubu 12'de bağlanacak`); hiçbir ayar sessizce yok sayılmaz. Bugün bağlı olanlar: `takip.kaynak: yok`,
+`follow_me` ve `tez_los` (`--mod-adi`), `takip.los: model | hakem` (`--los`), algılama (`algilama.*`, `--model`,
+`--imgsz`, `--conf`, `--sinif`, `--modelsiz`), `kusurlar` (Faz A: boş), `video.mp4` / `--videosuz`,
+`--kareleri-sakla`, `takip.px4_parametreleri` ve `--param`, `takip.px4_baslat` ve `--px4-baslat` (10. grup),
+`video.qgc` / `--qgc` (11. grup). `ozet.json` → `ayarlar.henuz_bagli_degil` 8. gruptan beri boştur.
 
 **Mod her zaman adıyla seçilir** (`yok` → "Hold", `follow_me` → "Follow Target", `tez_los` → `takip.mod_adi` /
 `--mod-adi`); numarası koda
@@ -416,6 +417,46 @@ vlc tez/sim/sonuclar/<klasör>/kosu.mp4 2>/dev/null
   `$P tez/sim/araclar/video.py tez/sim/sonuclar/<klasör>`.
 - VLC'nin uçbirime yazdığı "Timestamp conversion failed" satırları VLC 3.0.20'nin kendisinden gelir; video sağlamdır.
 
+### Canlı video (QGC)
+
+Dron kamerasının görüntüsü, kutular çizili olarak QGroundControl'e canlı gider (H.264 RTP, UDP 5600; m06 Görev
+grubu 11). Paketler: `tez/env/VERSIONS.md` → "Canlı video paketleri".
+
+```bash
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --qgc             # senaryo koşusu + canlı yayın (Gazebo penceresiyle)
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --qgc  # pencere yok, yayın yine gider
+$P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --qgc --videosuz  # yalnız yayın, kosu.mp4 yok
+```
+
+- **QGC 5.1.4'te:** sol üstteki QGC simgesi → **Uygulama Ayarları** (Application Settings) → **Video** →
+  **Kaynak** (Video Source): **UDP h.264 Video Stream**; altında çıkan port / adres alanı **5600** olmalı (QGC'nin
+  varsayılanı; yeni sürümlerde alanın adı "UDP URL", değeri `0.0.0.0:5600`). Sonra uçuş ekranına dönün (sol üstteki
+  QGC simgesi → Fly); görüntü sol alttaki küçük pencerede, tıklayınca büyür. Ayar kalıcıdır.
+- **QGC'siz:** `ffplay -protocol_whitelist file,udp,rtp -fflags nobuffer -flags low_delay -i tez/sim/araclar/yayin.sdp`
+  (ffmpeg paketinin ffplay'i, `VERSIONS.md`) ya da
+  `gst-launch-1.0 udpsrc port=5600 caps="application/x-rtp,media=video,encoding-name=H264,payload=96" ! rtph264depay ! avdec_h264 ! videoconvert ! autovideosink sync=false`.
+  **VLC bu yayını açamaz:** Ubuntu'nun VLC 3.0.20 paketi live555'siz derlenmiş, SDP'den RTP alamıyor ("A description
+  in SDP format is required"). UDP 5600'ü aynı anda tek bir program dinleyebilir: QGC açıkken ffplay görüntü almaz.
+  Pencere açılmadan ~1 s siyah / bozuk görünebilir (ilk anahtar kare 1 s'de bir gelir).
+- **Görüntüde:** üstte "CANLI · t = … s (sim)" ve modelin durumu ("model: … ms önceki kare, … kutu, hedef
+  izleniyor"); **mavi kutu** hakemin hedef kutusu, **kırmızı kutular** modelin kutuları (kalın: seçilen, yanında
+  güveni); PX4'e "hedef yok" gidiyorsa büyük kırmızı **HEDEF YOK**. Kutular modelin işlediği daha eski kareye aittir
+  (≈ 0.1 s): kişinin biraz gerisinde kalırlar, `kosu.mp4`'teki gibi. 1 s'den eski kutu çizilmez ("kutu bilgisi eski").
+- **Nasıl çalışır:** `kosu.mp4`'ün karelerini yazan süreç (`goruntu_yayini.py`) aynı kareleri yayına da verir:
+  her kare bir kez okunur ve küçültülür; yayın simin başından sonuna (kalkış dahil) gider, kayıt yalnız hakemin
+  kayıt penceresindedir. Model açıkken bu süreç kameraya ayrıca abone olmaz: kareleri model sürecinin zaten aldığı
+  mesajlardan paylaşılan bellekle alır (ikinci bir 9 MB × 30 Hz abonelik RTF'i ≈ 0.06 düşürüyordu; modelsiz koşuda ve
+  modelin kapandığı inişte kendi aboneliği). Kaydın ve yayının ölçülebilir bir RTF payı kalmadı. Ana süreç işlenen her model karesinin kutularını, seçilen kutuyu ve o karenin hakem kutusunu
+  `127.0.0.1:5610`'a UDP JSON olarak gönderir. Hat: `appsrc` → `queue leaky=downstream max-size-buffers=2` →
+  `videoconvert` (I420) → `x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=15 threads=1`
+  (constrained-baseline) → `rtph264pay config-interval=1 pt=96 mtu=1400` → `udpsink 127.0.0.1:5600`. Yayının
+  defteri (gönderilen kare, hızı, kutulu kare, kutu mesajları, gecikme, sürecin CPU'su) `ozet.json` → `yayin`.
+- **Tek başına (elle uçuş):** açık bir sim (`tez/sim/calistir.sh`) + QGC ile elle uçarken, ikinci bir terminalde
+  `$P tez/sim/araclar/goruntu_yayini.py --qgc --model ~/auto-follow-modeller/person_detection_model_v0.2.pt`.
+  Model kendi sürecinde kendi kutularını bulur; hakem kutusu, hedef seçimi ve PX4'e giden bir şey (LOS) yoktur.
+  `--model` olmadan kutusuz görüntü. Durdurmak için Ctrl+C. Senaryo koşusuyla aynı anda çalıştırılmaz (UDP 5610).
+- Yayının sime bedeli ve gecikmesi: `agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-11.md`.
+
 Doğru cevap hakkında: Gazebo Harmonic insan (actor) konumunu yayınlamaz; hedefin konumu senaryodaki yoldan
 hesaplanır. `--dogrula` bunu tepe segmentasyon kamerasıyla kontrol eder (zemin dokusu, gölge ve diğer insanlar
 karışmaz; ağaç altında kalan anlar sayılmaz); yürürken gövde merkezi yolun 0.05–0.19 m önündedir. Ayrıntı:
@@ -565,7 +606,7 @@ Elle (Gazebo penceresi + QGC): `tez/sim/derle.sh --harici ...` sonrası `tez/sim
 | `tez/sim/senaryolar/` | Senaryo dosyaları (YAML) |
 | `tez/sim/modeller.yaml` | Bilinen model dosyaları (ad, sha256, boyut, kaynak); dosyalar repo dışında, `~/auto-follow-modeller/` |
 | `tez/env/model-requirements.txt` | Model paketleri (ultralytics, CPU torch/torchvision) ve bağımlılıkları, sabit sürümle |
-| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, konum, takip iş parçacığı, `tez_los.csv`, `follow_target.csv`), `konumlama.py` (düz zemin konum hesabı, EKF poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `gecikme.py` (sıra koruyan gecikme hattı), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor: kontroller, gruplu ölçümler, grafikler), `olcum.py` (bütün ölçütler, ULog özeti), `toplu.py` (aynı senaryonun N koşusu ve dağılımı), `tarama.py` (kamera eğimi × yükseklik × mesafe taraması, karar kuralı), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, `FOLLOW_TARGET`, poz kancası, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/MP4), `goruntu_yayini.py` (videonun kamera karelerini koşu sırasında ayrı süreçte kaydeder), `video.py` (`kosu.mp4`: kamera + kuşbakışı, çevrimdışı), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
+| `tez/sim/araclar/senaryo.py` | Senaryo yöneticisi; `takip.py` (hedef seçimi, LOS i/ii, konum, takip iş parçacığı, `tez_los.csv`, `follow_target.csv`), `konumlama.py` (düz zemin konum hesabı, EKF poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `gecikme.py` (sıra koruyan gecikme hattı), `hedef.py` (yol, doğru cevap, dünya), `kayit.py` (kare kare kayıt, canlı hakem akışı), `kamera.py` (kamera modeli, eksen dönüşümleri), `dogrulama.py` (tepe kamerası), `rapor.py` (rapor: kontroller, gruplu ölçümler, grafikler), `olcum.py` (bütün ölçütler, ULog özeti), `toplu.py` (aynı senaryonun N koşusu ve dağılımı), `tarama.py` (kamera eğimi × yükseklik × mesafe taraması, karar kuralı), `simulasyon.py` (simi açar/kapatır), `parametreler.py` (başlangıç parametreleri), `px4_baglanti.py` (MAVLink: tek gönderim kilidi, `TEZ_LOS`, `FOLLOW_TARGET`, poz kancası, adla mod), `dunya.py` (dokulu dünya üretici), `onizleme.py` (PX4'süz fotoğraf/MP4), `goruntu_yayini.py` (videonun kamera karelerini koşu sırasında ayrı süreçte kaydeder; `--qgc`: QGC'ye canlı H.264 RTP, kutular UDP 5610'dan; tek başına `--qgc --model`), `yayin.sdp` (yayını QGC'siz ffplay'de açmak için), `video.py` (`kosu.mp4`: kamera + kuşbakışı, çevrimdışı), `algilama.py` (algılayıcı arayüzü, model dosyası, YOLO, model süreci, `algilama.csv`), `goruntu.py` (kare okuyucu: yalnız en yeni kare, atlanan kareler, sim ↔ duvar saati), `kusurlar.py` (kamera kusurları aşaması, Faz A'da kapalı), `model_dene.py` (modeli resimde/senaryoda dener) |
 | `tez/sim/araclar/f0_kabul.sh`, `f1_kabul.sh` | Kabul testleri (`f0_testi.py`, `f1_testi.py`) |
 | `tez/sim/testler/` | Donanımsız birim testleri (pytest) |
 

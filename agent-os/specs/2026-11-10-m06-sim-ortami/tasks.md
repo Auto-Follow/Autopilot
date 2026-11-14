@@ -462,13 +462,19 @@ F0 GEÇTİ. Ayrıntı: `implementation/gorev-grubu-10.md`. Kurt/Algan'ın modül
 #### Görev Grubu 11: QGC'ye canlı video (H.264 RTP, UDP 5600)
 **Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.6 gün
 
-- [ ] 11.0 Model ve hakem kutuları çizilmiş görüntünün QGC'de canlı izlenmesi
-  - [ ] 11.1 Testleri yaz (2–4 test): UDP 5610 JSON mesajının paketlenmesi/çözülmesi (son model sonucu + hakem kutusu); GStreamer hattı metninde gerekli öğeler ve ayarlar (`leaky=downstream`, `tune=zerolatency`, `key-int-max=15`, `config-interval=1`, `pt=96`, `sync=false`); tek başına modda LOS gönderilmemesi
-  - [ ] 11.2 apt paketlerini sabitle (kullanılmadan önce): `python3-gi`, `gir1.2-gstreamer-1.0`, `gir1.2-gst-plugins-base-1.0`, `gstreamer1.0-plugins-base`, `-good`, `-ugly`, `gstreamer1.0-libav`, `libfuse2t64`. Sürümler `dpkg-query -W` ile okunup `VERSIONS.md`'ye yazılır.
-  - [ ] 11.3 `goruntu_yayini.py`, yayın kısmı: `appsrc` (BGR, 1280×720, 15/1, canlı) → `queue leaky=downstream max-size-buffers=2` → `videoconvert` (I420) → `x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=15` (`constrained-baseline`) → `rtph264pay config-interval=1 pt=96 mtu=1400` → `udpsink host=127.0.0.1 port=5600 sync=false`. Deney dalındaki sabit `x500_mono_cam_0` kullanılmaz.
-  - [ ] 11.4 Kutular: senaryo koşusunda ana süreçten `127.0.0.1:5610` UDP JSON; tek başına modda `--model` ile kendi algılayıcısı (hakem kutusu yok, LOS yok)
-  - [ ] 11.5 `araclar/yayin.sdp`; `--qgc` / `video.qgc` bağlanır (ayrı süreç, sızdıran kuyruk). 2. gruptaki `--qgc` ara hatası kaldırılır.
-  - [ ] 11.6 Kare kaydının RTF payı (kullanıcı kararı 13.11, 9. grupta alındı): 8. grupta ölçülen ≈ 0.05'lik payı (dönüşümlü 3 + 3 koşu: videolu 0.788 / `--videosuz` 0.836; kaynağı abonelik mi JPEG işi mi ayrılamadı) QGC yayınıyla birlikte ele al: kayıt ve yayın aynı süreçte olacağı için ikisinin toplam payını ölç; seçenekler (`implementation/gorev-grubu-08.md`, "Ne yapılabilir"): kareleri model sürecinin zaten aldığı abonelikten almak, kaydı/yayını ayrı çekirdeğe almak, 3'ten fazla dönüşümlü koşuyla payı abonelik / işleme diye ayırmak. Karar verilene kadar RTF'in önemli olduğu ölçümlerde `--videosuz`; sonucu `implementation/`'a ve spec 9. maddeye yaz
+- [ ] 11.0 Model ve hakem kutuları çizilmiş görüntünün QGC'de canlı izlenmesi (14.11: 11.7'deki Ahmet'in QGC görsel kontrolü dışında tamam)
+  - [x] 11.1 Testleri yaz (2–4 test): UDP 5610 JSON mesajının paketlenmesi/çözülmesi (son model sonucu + hakem kutusu); GStreamer hattı metninde gerekli öğeler ve ayarlar (`leaky=downstream`, `tune=zerolatency`, `key-int-max=15`, `config-interval=1`, `pt=96`, `sync=false`); tek başına modda LOS gönderilmemesi
+    (Uygulamada: `test_goruntu_yayini.py` +5: kutu mesajı gidiş-dönüşü, iki taraflı ret, gerçek UDP soketi ve `Tracker`'ın mesajı; hattın öğeleri + `yayin.sdp` + gerçek hatla H.264 RTP alıcısından kutuların doğru yerde çıkması; tek başına modun MAVLink'siz olması; tek işçinin yayın ve kayda hizmeti; 11.6 için kareleri model sürecinden paylaşılan bellekle alma. `test_video.py` +1 (etiketin kendi kutusunda çizimi = bütün karede çizim), `test_hedef.py` güncellendi. 289 → 295.)
+  - [x] 11.2 apt paketlerini sabitle (kullanılmadan önce): `python3-gi`, `gir1.2-gstreamer-1.0`, `gir1.2-gst-plugins-base-1.0`, `gstreamer1.0-plugins-base`, `-good`, `-ugly`, `gstreamer1.0-libav`, `libfuse2t64`. Sürümler `dpkg-query -W` ile okunup `VERSIONS.md`'ye yazılır.
+    (Uygulamada: GStreamer 1.24.2 — gir1.2-gstreamer-1.0 1.24.2-1ubuntu0.1, gir1.2-gst-plugins-base-1.0 / -base 1.24.2-1ubuntu0.6, -good 1.24.2-1ubuntu1.8, -ugly 1.24.1-1build1, -libav 1.24.1-1build1, -tools 1.24.2-1ubuntu0.1, -x 1.24.2-1ubuntu0.6; `python3-gi` 3.48.2-1; `libfuse2t64` 2.9.9-8.1build1; yeni paket kurulmadı.)
+  - [x] 11.3 `goruntu_yayini.py`, yayın kısmı: `appsrc` (BGR, 1280×720, 15/1, canlı) → `queue leaky=downstream max-size-buffers=2` → `videoconvert` (I420) → `x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=15` (`constrained-baseline`) → `rtph264pay config-interval=1 pt=96 mtu=1400` → `udpsink host=127.0.0.1 port=5600 sync=false`. Deney dalındaki sabit `x500_mono_cam_0` kullanılmaz.
+    (Uygulamada: `LiveStream`, `pipeline_description`; ek olarak `x264enc threads=1` (≈ %20 daha az işlemci, +1.3 ms), `do-timestamp=true`; yayın simin başından sonuna gider.)
+  - [x] 11.4 Kutular: senaryo koşusunda ana süreçten `127.0.0.1:5610` UDP JSON; tek başına modda `--model` ile kendi algılayıcısı (hakem kutusu yok, LOS yok)
+    (Uygulamada: `BoxMessage` / `BoxSender` / `BoxListener`, `takip.Tracker(overlay=...)`, `video.draw_live`; tek başına `goruntu_yayini.py --qgc --model <dosya>` açık bir simde denendi: 659 / 659 kare, 616'sında kutu.)
+  - [x] 11.5 `araclar/yayin.sdp`; `--qgc` / `video.qgc` bağlanır (ayrı süreç, sızdıran kuyruk). 2. gruptaki `--qgc` ara hatası kaldırıldı.
+    (Uygulamada: kayıtla aynı süreç; `--videosuz --qgc` yalnız yayın; `ozet.json` → `yayin`. **Sabit VLC 3.0.20-3build6 bu yayını açamıyor** (Ubuntu paketi live555'siz); `yayin.sdp`'yi ffmpeg paketinin `ffplay`'i açar, `gst-launch-1.0` da çalışır.)
+  - [x] 11.6 Kare kaydının RTF payı (kullanıcı kararı 13.11, 9. grupta alındı): 8. grupta ölçülen ≈ 0.05'lik payı (dönüşümlü 3 + 3 koşu: videolu 0.788 / `--videosuz` 0.836; kaynağı abonelik mi JPEG işi mi ayrılamadı) QGC yayınıyla birlikte ele al: kayıt ve yayın aynı süreçte olacağı için ikisinin toplam payını ölç; seçenekler (`implementation/gorev-grubu-08.md`, "Ne yapılabilir"): kareleri model sürecinin zaten aldığı abonelikten almak, kaydı/yayını ayrı çekirdeğe almak, 3'ten fazla dönüşümlü koşuyla payı abonelik / işleme diye ayırmak. Karar verilene kadar RTF'in önemli olduğu ölçümlerde `--videosuz`; sonucu `implementation/`'a ve spec 9. maddeye yaz
+    (Uygulamada: üç dönüşümlü seri, 40 koşu. Önce: tur içi pay video −0.084, video + `--qgc` −0.114, kameraya pasif abone tek başına −0.062: payın çoğu ikinci aboneliğin kendisi. Kaydedici artık kareleri model sürecinin aboneliğinden paylaşılan bellekle alır (seçenek 2), kareyi kopyasız okuyup tamponlara küçültür; yayının yazıları kendi kutularında, x264 tek iş parçacığında. Sonra: video −0.027 ± 0.067, video + `--qgc` +0.001 ± 0.027; kaydedici + yayın süreci 0.48 → 0.30 çekirdek. Ölçülebilir pay kalmadı; `--videosuz` kuralının kalkması kullanıcı onayı bekliyor. `implementation/gorev-grubu-11.md` 5, spec 9. madde.)
   - [ ] 11.7 Doğrulama
 
     ```bash
@@ -482,9 +488,16 @@ F0 GEÇTİ. Ayrıntı: `implementation/gorev-grubu-10.md`. Kurt/Algan'ın modül
 
     **Görsel kontrol (Ahmet):** QGC 5.1.4 → Uygulama Ayarları → Video → "UDP h.264 Video Stream", port 5600; görüntü akar, kutular çizilidir. `--qgc`'li koşunun `islenen_kare_hizi_hz` ve RTF değerleri 9. gruptaki koşuyla `karsilastir.py` (12. grup) ya da `ozet.json` üzerinden karşılaştırılır; belirgin düşüş varsa `implementation/`'a yazılır.
 
+    (Uygulamada 14.11: 295 test geçti, ruff temiz, KILIT SAGLAM, F0 GEÇTİ. `takip_yuruyen --ekransiz --qgc --cikti tez/sim/sonuclar/g11_qgc` GEÇTİ: yayın 1583 kare = UDP 5600 alıcısı 1583 (kayıp 0), 15.0 kare/sim-s, kutu mesajı 948 / 948, alıcının karesinde kırmızı seçili kutu + mavi hakem kutusu (`~/Desktop/Follow/3_m06_Simulasyon/g11_qgc_yayin_karesi.jpg`); `kosu.mp4` h264 / yuv420p / 2000×720. `--qgc`'nin işlenen kare hızına ve RTF'e ölçülebilir etkisi yok (11.6). `gst-launch-1.0` alıcı hattı çalıştı; `vlc tez/sim/araclar/yayin.sdp` sabit VLC'de çalışmıyor, yerine `ffplay -protocol_whitelist file,udp,rtp -fflags nobuffer -flags low_delay -i tez/sim/araclar/yayin.sdp`. Ahmet'in QGC kontrolü bekleniyor: `implementation/gorev-grubu-11.md` "Kendin dene" 2.)
+
 **Kabul Ölçütleri:**
 - 11.1'deki testler geçer; apt sürümleri `VERSIONS.md`'dedir
 - QGC'de canlı görüntü vardır; yayın model ve kayıt hattını belirgin yavaşlatmaz
+
+**Durum (14.11):** uygulandı, test edildi, koşuldu; QGC'deki görsel kontrol Ahmet'te. 295 test, ruff temiz, KILIT
+SAGLAM, F0 GEÇTİ; doğrulama koşusu GEÇTİ (yayın kayıpsız alındı, kutular çizili); 11.6'da kayıt + yayının RTF payı
+−0.114'ten +0.001 ± 0.027'ye indi. Kullanıcıya sorular: `--videosuz` kuralının kalkması, VLC yerine ffplay. Ayrıntı:
+`implementation/gorev-grubu-11.md`.
 
 ### Gecikme ve Karşılaştırma
 

@@ -403,17 +403,20 @@ def _error_text(e: BaseException) -> str:
     return str(e) if isinstance(e, ValueError | FileNotFoundError) else f"{type(e).__name__}: {e}"
 
 
-def model_process(settings: ModelSettings, results: "mp.Queue", stop: "mp.synchronize.Event") -> None:
+def model_process(
+    settings: ModelSettings, results: "mp.Queue", stop: "mp.synchronize.Event", tap: object | None = None
+) -> None:
     """Entry of the model process. Messages to the main process, in this order through the FIFO `results`:
     ("hazir", info) or ("hata", text); then ("kare", FrameResult) per processed frame; then ("hata", text) if a
-    frame failed and ("bitti", books) when `stop` is set."""
+    frame failed and ("bitti", books) when `stop` is set. tap (goruntu_yayini.FrameTap): every camera message the
+    reader gets is also offered to it (the video's frames without a second subscription to the camera)."""
     # Ctrl+C in the terminal reaches the whole process group: the main process stops this one through `stop`, so the
     # books still come
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         defects = kusurlar.KameraKusurlari(settings.kusurlar)
         detector = YoloAlgilayici(settings.model, settings.imgsz, settings.conf, settings.sinif, settings.cekirdek)
-        reader = goruntu.FrameReader(settings.topic)
+        reader = goruntu.FrameReader(settings.topic, tap.offer if tap is not None else None)
     except Exception as e:  # noqa: BLE001 - the main process reports it and starts nothing
         results.put(("hata", _error_text(e)))
         return
@@ -444,19 +447,23 @@ def model_process(settings: ModelSettings, results: "mp.Queue", stop: "mp.synchr
     except Exception:  # noqa: BLE001 - reported with the books; the main process marks the run
         results.put(("hata", "model süreci bir karede durdu:\n" + traceback.format_exc()))
     reader.close()
-    results.put(("bitti", reader.slot.counts() | {"islenen": processed}))
+    shared = {"video_paylasimi": tap.close()} if tap is not None else {}
+    results.put(("bitti", reader.slot.counts() | {"islenen": processed} | shared))
 
 
 class ModelProcess:
     """The model process seen from the main process. start() waits until the detector is loaded; a thread then hands
     every FrameResult to on_result(result, alinma) in order (alinma: monotonic time it reached the main process)."""
 
-    def __init__(self, settings: ModelSettings, on_result: Callable[[FrameResult, float], None]) -> None:
+    def __init__(
+        self, settings: ModelSettings, on_result: Callable[[FrameResult, float], None], tap: object | None = None
+    ) -> None:
+        """tap: goruntu_yayini.FrameTap (the video's frames from this process' subscription), None: none."""
         ctx = mp.get_context("spawn")
         self._queue = ctx.Queue()
         self._stop = ctx.Event()
         self._proc = ctx.Process(
-            target=model_process, args=(settings, self._queue, self._stop), name="tez-model", daemon=True
+            target=model_process, args=(settings, self._queue, self._stop, tap), name="tez-model", daemon=True
         )
         self._on_result = on_result
         self._thread: threading.Thread | None = None

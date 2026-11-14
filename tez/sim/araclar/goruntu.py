@@ -21,6 +21,7 @@ import os
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")  # protobuf 7.x in ~/.local
@@ -160,19 +161,24 @@ def decode(raw: bytes, arrival: Arrival) -> Frame:
 
 
 class FrameReader:
-    """The drone camera through gz-transport (subscribe_raw); the callback only fills a LatestFrame."""
+    """The drone camera through gz-transport (subscribe_raw); the callback only fills a LatestFrame and, with `also`,
+    hands the message on (goruntu_yayini.FrameTap: the video's frames without a second subscription)."""
 
-    def __init__(self, topic: str = CAMERA_TOPIC) -> None:
+    def __init__(self, topic: str = CAMERA_TOPIC, also: Callable[[bytes, float], None] | None = None) -> None:
         from gz.transport13 import Node, SubscribeOptions
 
         self.topic = topic
         self.slot = LatestFrame()
+        self._also = also
         self._node = Node()
         if not self._node.subscribe_raw(topic, self._on_image, IMAGE_TYPE, SubscribeOptions()):
             raise RuntimeError(f"{topic} konusuna abone olunamadı")
 
     def _on_image(self, raw: bytes, _info: object) -> None:
-        self.slot.put(raw, time.monotonic())
+        arrival = time.monotonic()
+        self.slot.put(raw, arrival)
+        if self._also is not None:
+            self._also(raw, arrival)
 
     def take(self, timeout: float) -> tuple[bytes, Arrival, list[Arrival]] | None:
         return self.slot.take(timeout)
