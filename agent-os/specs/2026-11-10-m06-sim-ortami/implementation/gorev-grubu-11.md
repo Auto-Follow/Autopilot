@@ -326,6 +326,21 @@ olduğu için tek commit önerilir. Repo dışı: görseller (aşağıda), koşu
   (`sonuclar/pencere_duzeltme_dogrulama`): pencere açıldı (Ahmet ekranda gördü), koşu boyunca `gz sim -g` süreci canlı,
   uyarı yok, GEÇTİ. 298 test, ruff temiz, KILIT SAGLAM.
 
+## 11. QGC'deki takılma denemesi (15.11, 11.7)
+
+- Ahmet'in ilk QGC denemesinde (`g11_kendin_dene_qgc`, Gazebo penceresi açık) canlı görüntü bir kez belirgin takıldı.
+  O koşunun kayıtlarında gönderen tarafta sorun yok: 1582 kare gönderildi, atlanan / taşan 0, yayına itme en çok
+  33 ms; kamera kareleri düzenli (en uzun aralık 0.25 s, kaydın başında); RTF 0.87 (en düşük 5 s: 0.83).
+- İşletim sisteminin UDP alım kaybı sayacı (`/proc/net/snmp` RcvbufErrors) açılıştan beri 20 813 idi; hangi
+  programa ve ana ait olduğu bilinmiyor (11. grubun ölçüm denemelerinden olabilir).
+- Tekrar: QGC 5.1.4, Low Latency Mode kapalı. `qgc_takilma_pencereli` (pencere açık, RTF 0.76) ve
+  `qgc_takilma_ekransiz` (RTF 0.89): ikisi de GEÇTİ, 1598 / 1598 kare, takılma yok; sayaç iki koşu boyunca
+  20 813'te kaldı (0 kayıp).
+- Sonuç: kalıcı bir hata değil; tek seferlik bir yük ya da QGC'nin anlık meşguliyeti. Gazebo penceresi RTF'i
+  belirgin düşürüyor (0.89 → 0.76); canlı görüntü duvar saatinde aktığı için o zaman hareket ağır çekim görünür.
+  Ölçüm koşuları `--ekransiz` kalır. x264 `intra-refresh` ve Low Latency Mode Faz B'de, Wi-Fi grubunda (16)
+  ölçülecek (tasks.md 16.0a).
+
 ## Kendin dene
 
 **Başlamadan:** Terminal açmak için **Ctrl+Alt+T**. Aşağıdaki gri kutulardaki satırları **tek tek** kopyala, terminale

@@ -463,7 +463,7 @@ F0 GEÇTİ. Ayrıntı: `implementation/gorev-grubu-10.md`. Kurt/Algan'ın modül
 #### Görev Grubu 11: QGC'ye canlı video (H.264 RTP, UDP 5600)
 **Bağımlılık:** Görev Grubu 9 · **Emek:** ~0.6 gün
 
-- [ ] 11.0 Model ve hakem kutuları çizilmiş görüntünün QGC'de canlı izlenmesi (14.11: 11.7'deki Ahmet'in QGC görsel kontrolü dışında tamam)
+- [x] 11.0 Model ve hakem kutuları çizilmiş görüntünün QGC'de canlı izlenmesi (15.11: 11.7 dahil tamam)
   - [x] 11.1 Testleri yaz (2–4 test): UDP 5610 JSON mesajının paketlenmesi/çözülmesi (son model sonucu + hakem kutusu); GStreamer hattı metninde gerekli öğeler ve ayarlar (`leaky=downstream`, `tune=zerolatency`, `key-int-max=15`, `config-interval=1`, `pt=96`, `sync=false`); tek başına modda LOS gönderilmemesi
     (Uygulamada: `test_goruntu_yayini.py` +5: kutu mesajı gidiş-dönüşü, iki taraflı ret, gerçek UDP soketi ve `Tracker`'ın mesajı; hattın öğeleri + `yayin.sdp` + gerçek hatla H.264 RTP alıcısından kutuların doğru yerde çıkması; tek başına modun MAVLink'siz olması; tek işçinin yayın ve kayda hizmeti; 11.6 için kareleri model sürecinden paylaşılan bellekle alma. `test_video.py` +1 (etiketin kendi kutusunda çizimi = bütün karede çizim), `test_hedef.py` güncellendi. 289 → 295.)
   - [x] 11.2 apt paketlerini sabitle (kullanılmadan önce): `python3-gi`, `gir1.2-gstreamer-1.0`, `gir1.2-gst-plugins-base-1.0`, `gstreamer1.0-plugins-base`, `-good`, `-ugly`, `gstreamer1.0-libav`, `libfuse2t64`. Sürümler `dpkg-query -W` ile okunup `VERSIONS.md`'ye yazılır.
@@ -476,7 +476,7 @@ F0 GEÇTİ. Ayrıntı: `implementation/gorev-grubu-10.md`. Kurt/Algan'ın modül
     (Uygulamada: kayıtla aynı süreç; `--videosuz --qgc` yalnız yayın; `ozet.json` → `yayin`. **Sabit VLC 3.0.20-3build6 bu yayını açamıyor** (Ubuntu paketi live555'siz); `yayin.sdp`'yi ffmpeg paketinin `ffplay`'i açar, `gst-launch-1.0` da çalışır.)
   - [x] 11.6 Kare kaydının RTF payı (kullanıcı kararı 13.11, 9. grupta alındı): 8. grupta ölçülen ≈ 0.05'lik payı (dönüşümlü 3 + 3 koşu: videolu 0.788 / `--videosuz` 0.836; kaynağı abonelik mi JPEG işi mi ayrılamadı) QGC yayınıyla birlikte ele al: kayıt ve yayın aynı süreçte olacağı için ikisinin toplam payını ölç; seçenekler (`implementation/gorev-grubu-08.md`, "Ne yapılabilir"): kareleri model sürecinin zaten aldığı abonelikten almak, kaydı/yayını ayrı çekirdeğe almak, 3'ten fazla dönüşümlü koşuyla payı abonelik / işleme diye ayırmak. Karar verilene kadar RTF'in önemli olduğu ölçümlerde `--videosuz`; sonucu `implementation/`'a ve spec 9. maddeye yaz
     (Uygulamada: üç dönüşümlü seri, 40 koşu. Önce: tur içi pay video −0.084, video + `--qgc` −0.114, kameraya pasif abone tek başına −0.062: payın çoğu ikinci aboneliğin kendisi. Kaydedici artık kareleri model sürecinin aboneliğinden paylaşılan bellekle alır (seçenek 2), kareyi kopyasız okuyup tamponlara küçültür; yayının yazıları kendi kutularında, x264 tek iş parçacığında. Sonra: video −0.027 ± 0.067, video + `--qgc` +0.001 ± 0.027; kaydedici + yayın süreci 0.48 → 0.30 çekirdek. Ölçülebilir pay kalmadı; `--videosuz` kuralının kalkması kullanıcı onayı bekliyor. `implementation/gorev-grubu-11.md` 5, spec 9. madde.)
-  - [ ] 11.7 Doğrulama
+  - [x] 11.7 Doğrulama (15.11, Ahmet QGC'de gördü: görüntü ve kutular var. İlk denemede bir kez takılma görüldü; iki tekrar koşuda (pencereli ve `--ekransiz`) takılma yok, işletim sisteminin UDP alım kaybı sayacı değişmedi (0 paket). Ayrıntı: `implementation/gorev-grubu-11.md` bölüm 11)
 
     ```bash
     $P -m pytest tez/sim/testler -q
@@ -605,6 +605,7 @@ Faz B aynı spec'e bağlıdır, ilk PR merge edildikten sonra yeni bir dalda (`o
 **Bağımlılık:** Görev Grubu 11 · **Emek:** ~0.5 gün
 
 - [ ] 16.0 QGC video yoluna gerçekçi bağlantı kusurları
+  - [ ] 16.0a (15.11 notu) Paket kaybında görüntünün donmaması için x264 `intra-refresh` (anahtar kareyi karelere yaymak) ve QGC'nin Low Latency Mode açık / kapalı farkı bu grupta ölçülür ve karara bağlanır; 11.7'de bir kez görülen takılma (tekrar etmedi) ve gerçek Wi-Fi bağlantısı için.
   - [ ] 16.1 Testleri yaz (2–4 test): Gilbert-Elliott kayıp modeli (tohumlu, deneydeki `LinkImpairment` deseni yeniden yazılır); `video.wifi.{gecikme_ms, kayip, patlama}` alan doğrulaması
   - [ ] 16.2 `gstreamer1.0-plugins-bad` sürümü `VERSIONS.md`'ye yazılır, sonra `netsim` hatta eklenir
   - [ ] 16.3 Doğrulama: pytest + ruff + `verify_pin.sh --worktree`; QGC'de görüntü gecikmesi ve donma süreleri ölçülüp `implementation/`'a yazılır
