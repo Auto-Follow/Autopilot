@@ -17,7 +17,7 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | Python (laptop) | 3.12.3 + `requirements-lock.txt` (PX4 derleme paketleri: empy 3.3.4, pymavlink 2.4.50…) | `pip install --user --break-system-packages -r tez/env/requirements-lock.txt` |
 | Raspberry Pi 5 işletim sistemi | **Raspberry Pi OS (64-bit) masaüstlü**, Debian 13 Trixie — imaj `2026-09-15-raspios-trixie-arm64.img.xz` (sha256 `61d95799550aac32788bb3cacc3d471dcc860f8053ce989dec4aecc388b799dd`), Python 3.13.5 | İmaj dosyası Imager'da "Use custom" ile yazılır (listeden seçilmez) |
 | Pi / görüntü işleme Python | **`Vision` reposunda**: NumPy 2.4.6 · OpenCV 5.0.0.93 · pymavlink 2.4.50 · pyserial 3.5 · PyYAML 6.0.3 (laptop 3.12 + Pi 3.13) · picamera2 (Pi'de apt) | `Vision/requirements/*.txt`, repo içi `.venv` |
-| Sim model paketleri (laptop CPU) | **ultralytics 8.4.174 · torch 2.14.1+cpu · torchvision 0.29.2+cpu** (Python 3.12, x86_64) ve bütün bağımlılıkları; sim'deki algılama ölçütleri bunlara bağlıdır | `tez/env/model-requirements.txt`, venv `.venv-tez`, PyTorch CPU dizini (aşağıda) |
+| Sim model paketleri (laptop CPU) | **ultralytics 8.4.174 · torch 2.14.1+cpu · torchvision 0.29.2+cpu** (Python 3.12, x86_64) ve bütün bağımlılıkları; sim'deki algılama ölçütleri bunlara bağlıdır. **Lisans:** Ultralytics AGPL-3.0 (yalnız yerel simde çalışır, dağıtılmaz) | `tez/env/model-requirements.txt`, venv `.venv-tez`, PyTorch CPU dizini (aşağıda); model dosyaları repo dışında (`~/auto-follow-modeller/`, `tez/sim/modeller.yaml`) |
 | Agent OS | **v2.1.1** (`6a6495111e`) — v3 kullanılmıyor; profiller `auto-follow` (çatı) + `auto-follow-repo` (Autopilot, Vision) | Çatı repo: `kurulum.sh` → `kurulum/install-agent-os.sh` (resmi `base-install.sh` main=v3 indirir, kullanmayın) |
 
 ## 2. Aynı olması önerilir
@@ -38,6 +38,7 @@ Kendi makinende kontrol etmek için bu dosyanın sonundaki "Sürüm kontrolü" k
 | Bileşen | Not |
 |---|---|
 | NVIDIA sürücüsü | Donanıma bağlı (referans makine: 595.91.07). NVIDIA kartı yoksa gerekmez. |
+| AMD ekran kartı (Mesa) | Ubuntu 24.04'ün kendi Mesa sürücüsü; ayrı kurulum yok. Hibrit AMD laptopta Gazebo için `DRI_PRIME=1` (aşağıda). |
 | VS Code, Claude Code | Kendi kendini günceller. |
 | Linux çekirdeği | Ubuntu güncellemeleriyle değişir. |
 
@@ -54,6 +55,7 @@ curl -L -o QGroundControl-v5.1.4-x86_64.AppImage \
   https://github.com/mavlink/qgroundcontrol/releases/download/v5.1.4/QGroundControl-x86_64.AppImage
 echo "1c4ac089abfaac6c6fcd75c7b477ea18da1bc3592cddca5ab1a19c1a13410e65  QGroundControl-v5.1.4-x86_64.AppImage" | sha256sum -c
 chmod +x QGroundControl-v5.1.4-x86_64.AppImage
+sudo apt install -y libfuse2t64        # AppImage FUSE 2 ister (yoksa "dlopen(): error loading libfuse.so.2"); 2.9.9-8.1build1
 sudo usermod -aG dialout $USER && sudo apt remove -y modemmanager   # sonra oturumu kapat/aç
 ```
 
@@ -66,6 +68,18 @@ export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.js
 ```
 Kontrol: `glxinfo -B | grep "OpenGL renderer"` → NVIDIA görünmeli; simülasyon açıkken `nvidia-smi`'de `gz sim -g` listelenmeli.
 Oturum X11 olmalı (Ubuntu giriş ekranında "Ubuntu on Xorg").
+
+## Hibrit ekran kartlı laptop (AMD + AMD, ör. Ryzen iGPU + Radeon RX 6600M): `DRI_PRIME=1`
+Mesa varsayılan olarak işlemcinin içindeki kartı (iGPU) seçer; Gazebo orada yavaş çalışır. Ayrık kartı seçmek için
+Gazebo'yu (ve QGC'yi) açan terminalde `export DRI_PRIME=1` (kalıcı olsun diye `~/.bashrc` sonuna da yazılabilir):
+```bash
+echo 'export DRI_PRIME=1            # Gazebo/QGC: ayrık AMD kartı' >> ~/.bashrc   # yeni terminallerde geçerli
+glxinfo -B | grep "OpenGL renderer"   # ayrık kart görünmeli, ör. "AMD Radeon RX 6600M (radeonsi, navi23 ...)"
+env -u DRI_PRIME glxinfo -B | grep "OpenGL renderer"   # karşılaştırma: iGPU, ör. "AMD Radeon Graphics (... renoir ...)"
+```
+`glxinfo` `mesa-utils` paketindedir (9.0.0-2, aşağıdaki "Geliştirme araçları"). Aynı terminalden başlatılan
+penceresiz koşular (`--ekransiz`, kabul testleri) da bu değişkeni devralır. Referans makinenin (Ryzen 7 5800H +
+RX 6600M) `~/.bashrc`'sinde bu satır vardır.
 
 ## Geliştirme araçları (apt)
 ```bash
@@ -117,7 +131,18 @@ Pi'ye kurulmaz (orada Hailo, yol haritası m02/m07), CI'da gerekmez (birim testl
   `import` etmeyin, `yolo` komutunu çalıştırmayın: o zaman ayar dosyası `~/.config/Ultralytics`'e yazılır ve internete
   bakılır. Modeli denemek için: `tez/sim/araclar/model_dene.py`.
 - Model dosyaları repoya girmez (kural 9): `~/auto-follow-modeller/`; bilinen dosyalar ve sha256 özetleri
-  `tez/sim/modeller.yaml`'dadır.
+  `tez/sim/modeller.yaml`'dadır. `tez/sim/kur.sh` sonunda klasörü bu kayıtlara göre denetler ve her dosyanın sha256'sını
+  yazar (indirmez; eksik dosya uyarıdır ve nereden alınacağını söyler). Yalnız denetim:
+  `~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/algilama.py`.
+  - `person_detection_model_v0.2.pt` (sim'in varsayılan modeli; Yusuf Ortatepe): sha256
+    `c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440`, 22 525 930 bayt; geçici kaynak Vision
+    `model-training` dalı, commit `ebff718` (ortak depolama yeri kararı bekliyor).
+  - `yolov8s.pt` (kıyas için stok COCO modeli, AGPL-3.0): ultralytics 8.4.174'ün kendisinin kullanacağı adres
+    `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt` (`ultralytics/utils/downloads.py`,
+    `attempt_download_asset(release="v8.4.0")`). Elle indirilir; sha256 ve boyutu indirilince `modeller.yaml`'a
+    yazılır (henüz indirilmedi: m06 Görev grubu 13.4).
+- Bu dosyadaki model sürümleri `model-requirements.txt` ile aynıdır (15.11.2026'da ekip venv'inde denetlendi: üç
+  dosyadaki her sabit sürüm kurulu olanla aynı; `pip check` temiz).
 
 ## VS Code eklentileri
 ```bash
@@ -141,4 +166,8 @@ ls ~/Applications/                                     # QGroundControl-v5.1.4..
 grep ^version ~/agent-os/config.yml                    # 2.1.1
 ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -c "from importlib.metadata import version as v; print(v('torch'), v('torchvision'), v('ultralytics'))"   # 2.14.1+cpu 0.29.2+cpu 8.4.174
 sha256sum ~/auto-follow-modeller/person_detection_model_v0.2.pt   # c5f6838b... (tez/sim/modeller.yaml)
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pip check     # No broken requirements found.
+~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/algilama.py   # model klasörü: TAMAM / EKSİK satırları
+dpkg-query -W libfuse2t64 ffmpeg gstreamer1.0-plugins-ugly python3-gi   # 2.9.9-8.1build1, 7:6.1.1-3ubuntu5, 1.24.1-1build1, 3.48.2-1
+glxinfo -B | grep "OpenGL renderer"                    # hibrit laptop: ayrık kart (NVIDIA ya da DRI_PRIME=1 ile AMD)
 ```
