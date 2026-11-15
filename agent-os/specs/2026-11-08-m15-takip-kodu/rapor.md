@@ -1,57 +1,72 @@
 # AUTO FOLLOW (M15): Yapılanlar, kararlar ve oluşan sistem
 
-> **Sürüm:** 12 (Görev grubu 6 ek iş: `AF_K_FF` / `AF_BETA` taraması), 2026-11-12
->
-> **Hazırlayan:** Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması)
->
-> **Durum:** Uygulama başladı. **Görev grubu 1 (iskelet) bitti:** modül kendini AUTO FOLLOW olarak kaydediyor, açılışta `AF_ENABLE` = 1 ise başlıyor, arming check'e cevap veriyor, 50 Hz dönüyor; henüz uçurmuyor (guidance Grup 2'de). **Görev grubu 2 (guidance, filtre, log mesajı) bitti:** modül Pi'nin mesajını 9 kontrolden geçiriyor, hedefin yerini bulup alpha-beta ile yumuşatıyor, mod açıkken hız/irtifa/yaw isteğini PX4'e veriyor, hedef kaybında yerinde bekliyor ve her çevrimde `auto_follow_status` log mesajını yayınlıyor. **Görev grubu 3 (kısa birim testi) bitti:** 7 test spec'in sayısal örneklerini (12,0 m, −1,8 m/s, 2 m/s kırpma, ivme sınırı, bozuk veri, 0,5 s / +1,0 s / hedef yok) doğruladı, hepsi geçti, kod değişmedi. **Grup 2 düzeltme turu bitti:** kullanıcının Grup 2 sonrası kararlarıyla filtre uzun veri kesintisinde, Pi'nin sıra no hafızası `AF_DATA_TOUT` sonra sıfırlanıyor; EKF konum sıfırlamasında tutulan nokta kaydırılıyor; 2 test eklendi (9/9 geçti). **Görev grubu 4 (SITL açık çevrim) bitti:** test göndericisi `tez/sitl/af_los_gonder.py` yazıldı; Gazebo'da ön kontroller ve S1a, S1b, S2, S3, S4 (yerinde bekleme kısmı), S5 uçuldu ve loglardan sayıyla ölçüldü; spec'in beklediği değerler görüldü, modül kodunda hata çıkmadı; açık çevrime özgü 2 davranış (S1b salınımı, S3 dönmesi) görüldü; 5 sorusu cevaplandı (§5.1 U4.16–U4.21). **Görev grubu 5 (Hold geçişi) bitti:** hedef kaybında süre dolunca modül PX4'ten Hold istiyor (reddedilirse 1 s arayla en fazla 3 kez, sonra QGC uyarısı); Gazebo'da S4'ün dört varyantı Hold dahil ölçüldü (veri kesilince son geçerli mesajdan Hold'a 1,53 s), Hold'dan sonra mod kendiliğinden açılmıyor, RC anahtarı aç-kapa ve QGC ile yeniden giriliyor; donmuş Pi artık 1,5 s'de Hold'a gidiyor (sıra no kuralı, karar 1a); yeni parametre `AF_YAWRATE_MAX` (60°/s) ile drone 60°/s dönüyor (önce 192°/s); EKF yön sıfırlamasında tutulan yaw kaydırılıyor; 12/12 birim testi; 6C flash %98,53; 3 yeni soru (§11). **Görev grubu 6 (analiz script'i, kapalı çevrim) bitti:** log analiz script'i `tez/analiz/af_log_analiz.py` ve rehberi `tez/analiz/BENIOKU.md` yazıldı (Grup 4–5'in elle ölçülen sayılarıyla aynı sonucu veriyor); kapalı çevrimde duran hedef (S6) beş başlangıç mesafesinde de 15,5 m'ye aşmasız ve salınımsız yerleşti (en sakin başlangıç istenen mesafeye en yakın olanı); yürüyen hedefte (S7, L yolu, 1,4 m/s) `AF_K_FF` = 0'da drone beklendiği gibi 2,8 m geride kaldı, 1,0'da geride kalmadı ama filtrenin hız kestirimi titreşti (kullanıcıya soruldu); batarya failsafe'inde (`COM_LOW_BAT_ACT` = 3) kritik seviyede 5 s Hold + RTL, acil seviyede Land görüldü, modül hemen PASIF oldu; GPS arızası komutu Gazebo Harmonic'te çalışmadı, ek denemede GPS kaybında PX4 4 s'de Descend yaptı; PX4 kodu değişmedi; 4 yeni soru (§11). Sürüm 1 planlamanın (shape-spec) sonunu, sürüm 2 write-spec turundaki kararları, sürüm 3 Grup 1'in, sürüm 4 Grup 2'nin, sürüm 5 Grup 3'ün, sürüm 6 düzeltme turunun, sürüm 7 Grup 4'ün, sürüm 8 Grup 5'in, sürüm 9–10 Grup 5 sorularının cevaplarını, sürüm 11 Grup 6'nın sonucunu anlatır; uygulama sırasında verilen bütün kararlar §5.1'de. Her grubun ayrıntılı notu `implementation/` klasöründe (bkz. "Belge geçmişi").
+| | |
+|---|---|
+| **İş** | Issue #6 [M15] "Body frame hedef vektöründen PWM'e: PX4 takip kodu" |
+| **Repo / dal** | `Auto-Follow/Autopilot` · `ozellik/m15-takip-kodu` |
+| **Hazırlayan** | Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması) |
+| **Sürüm / tarih** | 13 · 15 Kasım 2026 |
+| **Durum** | **Kod, testler ve son doğrulama bitti.** Push + PR bekliyor; PR'da kilitli PX4 dosyaları için repo sorumlusunun onayı gerekiyor |
 
-Bu rapor kod okumadan anlaşılacak şekilde yazıldı. Amaç, bir sorun çıktığında "bu neden böyle?" sorusunun cevabını tek yerde bulmak. Teknik terimlerin açıklamaları sondaki **Terimler sözlüğü**nde.
+**Bu rapor ne için?** M15'te ne yapıldığını, neden böyle yapıldığını ve ortaya çıkan sistemin nasıl çalıştığını tek yerde anlatır. Kod okumadan anlaşılacak şekilde yazıldı. Bir sorun çıktığında "bu neden böyle?" sorusunun cevabı burada bulunur. Teknik terimler sondaki **Terimler sözlüğü**nde (Bölüm 13) açıklanıyor; sürümlerin hikâyesi en sondaki **Belge geçmişi**nde.
 
-İlgili dosyalar (hepsi bu klasörde):
+**İlgili dosyalar** (spec klasörü `agent-os/specs/2026-11-08-m15-takip-kodu/`):
 
 | Dosya | İçerik |
 |---|---|
 | `rapor.md` (bu dosya) | Bütün hikâye ve oluşan sistem |
-| `spec.md` | Resmî spesifikasyon: kodun ne yapacağı, `dosya:satır` kanıtlarıyla |
-| `log-sozlugu.md` | Bizim verdiğimiz bütün adların sözlüğü: mod, modül, parametreler, log alanları, durumlar, dosyalar |
-| `planning/requirements.md` | Gereksinimler: write-spec'in girdisi, geçerli kararların resmî listesi |
-| `planning/karar-gunlugu.md` | Her soru, seçenek, cevap ve gerekçe, kronolojik sırayla |
-| `planning/tur1-cevaplar.md` | 1. tur cevaplarının kısa tablosu (tarihsel kayıt) |
-| `planning/raw-idea.md` | Görevin ilk tanımı |
-| `planning/visuals/` | İki akış şeması (Mermaid) |
-| `implementation/` | Görev grubu notları: ne yapıldı, neden, nasıl test edildi, sorunlar (`grup-1-iskelet-mod-kaydi.md`, `grup-2-guidance-filtre-log.md`, `grup-3-birim-testi.md`, `grup-4-sitl-acik-cevrim.md`, `grup-5-hold-gecisi.md`, `grup-6-kapali-cevrim-analiz.md`) ve PR açıklaması taslağı `pr-aciklamasi-taslak.md` |
+| `spec.md` | Resmî spesifikasyon: kodun ne yapacağı, PX4 `dosya:satır` kanıtlarıyla |
+| `log-sozlugu.md` | Bizim verdiğimiz bütün adların sözlüğü: mod, parametreler, log alanları, durumlar |
+| `planning/karar-gunlugu.md` | Her soru, seçenek, cevap ve gerekçe, tarih sırasıyla |
+| `planning/requirements.md` | Gereksinimler ve kararların resmî listesi |
+| `planning/visuals/` | İki akış şeması |
+| `implementation/` | Görev grubu notları (Grup 0–6) ve PR açıklaması taslağı |
+| `verifications/final-verification.md` | Son doğrulama raporu |
+
+**Repo dışında:** uçuş logları `~/Desktop/AUTO-FOLLOW LOG/` (29 adet) · test yardımcı script'leri `~/m15-sitl-araclari/`
 
 ---
 
 ## 1. Özet
 
-Drone'daki Raspberry Pi, kamerada insanı bulur ve Pixhawk'a yalnızca **"hedef, drone'a göre şu yönde"** bilgisini (body FRD LOS birim vektörü) ve bu bilginin **ne kadar eski olduğunu** gönderir. M15'te Pixhawk'ın içine **AUTO FOLLOW** adlı yeni bir uçuş modu yazılacak. Bu mod:
+**Ne yapıldı?** Drone'daki Raspberry Pi kamerada insanı bulur ve Pixhawk'a yalnızca **"hedef, drone'a göre şu yönde"** bilgisini (body FRD LOS birim vektörü) ve bu bilginin **ne kadar eski olduğunu** gönderir. M15'te Pixhawk'ın içine bu yönü kullanan **AUTO FOLLOW** adlı yeni bir uçuş modu yazıldı. Mod QGC'de ve RC kumandada diğer modlar gibi seçiliyor. Çalışırken her döngüde (saniyede 50 kez):
 
-1. gelen yönü kontrol eder (bozuk veya eski veriyi atar),
-2. yönü dünyaya göre çevirir ve düz zemin kabulüyle hedefin uzaklığını ve yerini hesaplar,
-3. hedefin konumunu ve hızını **alpha-beta filtresiyle** yumuşatır,
-4. **hız tabanlı** bir kuralla drone'un ne hızla nereye gideceğine ve burnunu nereye çevireceğine karar verir (guidance),
-5. bu isteği PX4'e verir. PX4 kendi kontrol zinciriyle motorlara kadar götürür.
+1. Gelen yönü **9 kontrolden** geçirir; bozuk, eski ya da tekrar eden veriyi atar.
+2. Yönü dünyaya göre çevirir ve düz zemin kabulüyle hedefin uzaklığını ve yerini hesaplar.
+3. Hedefin konumunu ve hızını **alpha-beta filtresiyle** yumuşatır.
+4. **Hız tabanlı** bir kuralla drone'un ne hızla nereye gideceğine ve burnunu nereye çevireceğine karar verir (guidance).
+5. Bu isteği sınırlayıp (hız, ivme, dönüş) PX4'e verir. PX4 kendi kontrol zinciriyle motorlara kadar götürür.
 
-Hedef kaybolursa drone önce yerinde bekler, kısa sürede hedef gelmezse **Hold** moduna geçer ve pilot modu yeniden açana kadar takibe dönmez. Modun her iç durumu, logda **kendi adlarıyla** her uçuşta kaydedilir.
+**Hedef kaybolursa** drone önce yerinde bekler. Hedef 1,5 s içinde dönmezse PX4'ün **Hold** moduna geçer ve pilot modu yeniden açana kadar takibe dönmez. Drone disarm iken (masa testi) Hold'a geçilmez, mod hedefi beklemeye devam eder. Modun her iç durumu ve hesabı uçuş loguna **kendi adlarıyla** yazılır.
 
-**En önemli kararlar:**
+**Sonuç (Gazebo simülasyonunda, 29 uçuş logu ve 13 birim testiyle):**
+
+| Ölçü | Sonuç |
+|---|---|
+| Duran hedefe mesafe tutma | 5 farklı başlangıçtan da 15,5 m'ye oturdu; hata ±3 cm, salınım yok |
+| Yürüyen hedef (1,4 m/s) | `AF_K_FF` = 0'da 2,8 m geride kalıyor (hesapla aynı); 1,0'da geride kalmıyor |
+| Hedef kaybı | Veri kesilince 0,51 s'de yerinde bekleme, 1,53 s'de Hold (hedef 0,5 / 1,5 s) |
+| Bozuk ve donmuş veri | Hepsi atıldı; donmuş Pi'de 1,54 s'de Hold |
+| Batarya güvenliği | PX4'ün kendi batarya kuralı modu yeniyor: kritikte RTL, acilde Land |
+| Pixhawk 6C flash | %98,48 → **%98,54** (modül ~11 KB), taşma yok |
+| Son doğrulama | Bütün görevler, testler ve iki derleme tamam. Yalnızca CI bekliyor (PR açılınca) |
+
+**En önemli kararlar** (hepsi Bölüm 5'te, gerekçeleriyle):
 
 | Konu | Karar |
 |---|---|
 | PX4'e bağlanma | **External mode** modülü (`mc_nn_control` kalıbı) |
 | Kodun yeri | `src/modules/auto_follow/`, SITL ve Pixhawk 6C firmware'ine girer |
-| Girdi | MAVLink `DEBUG_FLOAT_ARRAY`, adı `AF_LOS`: LOS x/y/z + yaş + sıra no + hedef var/yok (varsayım; ICD bekleniyor) |
-| Guidance | Hız tabanlı: hız = c·hedef hızı + K·(mesafe − istenen mesafe), alpha-beta filtresi |
-| İstenen mesafe | Takip açısından: yükseklik farkı / tan(takip açısı) |
-| PX4'e verilen | `trajectory_setpoint`: yatay hız + sabit irtifa + mutlak yaw |
-| Hedef kaybı | Kademeli (D): 0.5 s veri yoksa yerinde bekle, 1.0 s daha gelmezse Hold |
-| Log | Kendi mesajımız `auto_follow_status`, her zaman kaydedilir, log sözlüğü yazılır |
-| Test | Kısa birim testi + Gazebo SITL'de S1–S7 senaryoları, sonuçlar pyulog ile ölçülür |
-| Güvenlik | Bu modda arm yasak, kalkış Position'da; yerde arm'lıyken moda geçiş engellenir; modül açılışta kendiliğinden başlar |
-| Adlar | Mod `AUTO FOLLOW`, parametreler `AF_*` |
-
+| Girdi | MAVLink `DEBUG_FLOAT_ARRAY`, adı `AF_LOS`: yön x/y/z + yaş + sıra no + hedef var/yok (varsayım; ortak arayüz dokümanı bekleniyor) |
+| Guidance | Hız tabanlı: hız = `AF_K_FF`·hedef hızı + `AF_K_DIST`·(mesafe − istenen mesafe); alpha-beta filtresi (`AF_BETA` = 0,10) |
+| İstenen mesafe | Yükseklik farkı / tan(takip açısı); 10 m irtifa ve 30°'de ≈ 15,6 m |
+| PX4'e verilen | `trajectory_setpoint`: yatay hız + sabit irtifa + burun açısı (dönüş ≤ 60°/s) |
+| Hedef kaybı | 0,5 s veri yoksa yerinde bekle, 1,0 s daha gelmezse Hold (disarm iken Hold yok) |
+| Log | Kendi mesajımız `auto_follow_status` (39 alan, 50 Hz) + analiz script'i `tez/analiz/af_log_analiz.py` |
+| Test | 13 birim testi + Gazebo'da S1–S7, batarya ve GPS testleri |
+| Güvenlik | Bu modda arm yasak, kalkış Position'da; yerde arm'lıyken moda geçiş reddedilir; çubuğa dokunmak modu bitirir |
+| Açma / kapama | `AF_ENABLE` (varsayılan 1); 0 + reboot ile mod tamamen kalkar |
+| Adlar | Mod `AUTO FOLLOW`, modül `auto_follow`, parametreler `AF_*` |
 ---
 
 ## 2. Görev ve bağlam
@@ -980,3 +995,4 @@ Bekleyen dış bağımlılıklar:
 | 14 | 2026-11-12 | Grup 6 soru 5-b: `AF_BETA` varsayılanı 0.10 (`AF_K_FF` 0 kalır; §4.6, §5.1 G6.18, §11); iki derleme, 6C flash 1 937 316 B (%98,54); S6 yeni değerle yeniden koşuldu (`19_26_43.ulg`), sonuçlar eskisiyle aynı (grup 6 notu 12.8) |
 | 15 | 2026-11-12 | Son doğrulamanın bulduğu metin düzeltmeleri (sözlük belge geçmişi ve `latency` tablosu, `BENIOKU.md` `AF_BETA`, §11 çelişkili cümleler, tasks/spec/şema eski ifadeleri, V3 tutum anı); Hüseyin notu (kullanıcı konuştu, push'ta onaylayacak); **`AF_ENABLE` varsayılanı 1** (G6.19) |
 | 16 | 2026-11-12 | Disarm iken hedef kaybında Hold istenmez, KAYIP_BEKLE'de beklenir (G6.20; arm'lıyken davranış aynı); birim testi 13/13 |
+| 17 | 2026-11-15 | Kapak kısmı sadeleştirildi (uzun "Durum" paragrafı yerine tablo; hikâye §3.2 ve belge geçmişinde) ve §1 Özet son hâline getirildi (geçmiş zaman, sonuç tablosu, güncel kararlar); kullanıcı raporu baştan sona okuyup not alacak |
