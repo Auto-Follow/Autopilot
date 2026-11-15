@@ -88,6 +88,13 @@ QGC 14550'de. Kod: `tez/sim/araclar/px4_baglanti.py` (`send_los`, `send_follow_t
 
 ## 6. Model ve görüntü işleme için ölçülenler (m08/m10/m11 — Yusuf Ortatepe)
 
+- **Başlamak için (Claude'u `Autopilot`'ta açıp söyleyin; `Vision/`'da açılan Claude simi bilmez):** *"m06
+  simülasyonunda insan algılama modelimi denemek ve v0.2 ile karşılaştırmak istiyorum; `EKIP_ICIN_OZET.md` 2, 3, 6, 7.
+  bölümleri ve `tez/sim/README.md` A ile "Model (PX4'süz deneme)" bölümüne göre adım adım yol göster."* Hızlı deneme
+  `model_dene.py --kare / --senaryo` (PX4'süz); ölçüm `toplu.py --senaryo kalabalik_park --tekrar 3 -- --model <.pt>`
+  + `karsilastir.py`. m10 (piksel → gövde FRD): koşu klasöründeki `dogru_cevap.csv` → `los_govde_*` hakemin doğru
+  LOS'udur, `kutular.csv` modelin kutuları; kamera `tez/sim/kamera_montaji.yaml`.
+
 - Model: `person_detection_model_v0.2.pt` (sha256 `c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440`),
   imgsz 640, conf 0.25, laptop CPU ≈ 85–100 ms/kare; kameradan PX4'e uçtan uca ≈ 120 ms. Repoda değil; yolu `--model`.
 - Bulma oranı kişinin görüntüdeki boyuna bağlı (~104 000 kare): 150–180 px **%61**, 120–150 px **%25**, < 120 px **%3**.
