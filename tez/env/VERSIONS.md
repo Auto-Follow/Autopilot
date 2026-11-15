@@ -139,8 +139,8 @@ Pi'ye kurulmaz (orada Hailo, yol haritası m02/m07), CI'da gerekmez (birim testl
     `model-training` dalı, commit `ebff718` (ortak depolama yeri kararı bekliyor).
   - `yolov8s.pt` (kıyas için stok COCO modeli, AGPL-3.0): ultralytics 8.4.174'ün kendisinin kullanacağı adres
     `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt` (`ultralytics/utils/downloads.py`,
-    `attempt_download_asset(release="v8.4.0")`). Elle indirilir; sha256 ve boyutu indirilince `modeller.yaml`'a
-    yazılır (henüz indirilmedi: m06 Görev grubu 13.4).
+    `attempt_download_asset(release="v8.4.0")`). Elle indirilir (15.11.2026): sha256
+    `1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a`, 22 588 772 bayt (`modeller.yaml`).
 - Bu dosyadaki model sürümleri `model-requirements.txt` ile aynıdır (15.11.2026'da ekip venv'inde denetlendi: üç
   dosyadaki her sabit sürüm kurulu olanla aynı; `pip check` temiz).
 

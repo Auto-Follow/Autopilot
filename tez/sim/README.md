@@ -115,6 +115,8 @@ Model dosyaları: /home/<kullanıcı>/auto-follow-modeller (kayıtlar: modeller.
   EKSİK    yolov8s.pt: dosya yok            ← isteğe bağlı kıyas modeli; "Almak için:" satırı nasıl alınacağını söyler
 ```
 
+(`yolov8s.pt` indirildiyse o satır da `TAMAM` olur.)
+
 `EKSİK` ve `FARKLI` (kayıttakinden başka bir dosya) uyarıdır, kurulum yine tamamdır; varsayılan model eksikse modelli
 koşular sim açılmadan durur ve aynı "Almak için" satırını yazar. Yalnız denetim: `$P tez/sim/araclar/algilama.py`.
 

@@ -58,6 +58,12 @@ QGC 14550'de. Kod: `tez/sim/araclar/px4_baglanti.py` (`send_los`, `send_follow_t
 
 ## 5. Takip modu ve kendi modunu takmak (m15 — Yusuf Kurt / Yusuf Algan)
 
+- **Başlamak için (Claude'a söyleyin):** *"Autopilot'ta takip modumu (ağaç dışı PX4 modülü) m06 simülasyonunda denemek
+  istiyorum; `EKIP_ICIN_OZET.md` 5. bölümü ve `tez/sim/README.md` A ile C bölümlerine göre adım adım yol göster."*
+  Sırası: README A (bir kez kurulum: PX4 derleme ortamı, Gazebo Harmonic, `.venv-tez`, `kur.sh`, model dosyası) → C
+  (modülü koy, derle, başlat, `--los hakem` ile koş, sonra `--los model`, `karsilastir.py` ile stok Follow Me'yle
+  kıyasla). m06 main'e girene kadar bu dosyalar `ozellik/m06-sim-ortami` dalındadır.
+
 - Sim modu **adıyla** seçer (`AVAILABLE_MODES`); numara koda gömülü değil. Ekipten gelen bilgi (09.11, kesin değil;
   m15/m16 spec'inde kesinleşecek): mod adı **"AUTO FOLLOW"**, parametreler **`AF_XXX`**. Hazır olunca:
   `senaryo.py --senaryo takip_yuruyen --takip tez_los --mod-adi "AUTO FOLLOW" --px4-baslat "<başlatma komutu>"`
@@ -139,6 +145,7 @@ Ayrıntı: `tez/sim/README.md` → "Canlı video (QGC)". Senaryolar `tez/sim/sen
 
 ## 9. Karar bekleyenler
 
+m15 modülünün yeri, mod adı ve başlatma komutu (Kurt / Algan; öneri: Autopilot'ta kendi dalları, `tez/px4/src/modules/<ad>/`) ·
 Kamera montaj açısı (öneri 35°) · m01'e "en az yatay mesafe" ölçütü (öneri ≥ 3 m) · gerçek uçuşta `follow_target`
 kaydı · ortak model saklama yeri · `TEZ_LOS` biçiminin m05'te kesinleşmesi · yer istasyonunda görüntü/takip gösterim
 yöntemi (öneri: önce QGC video + videoya çizili kutular, simde `--qgc` ile hazır; gerekirse PySide6 uygulaması; QGC'yi
