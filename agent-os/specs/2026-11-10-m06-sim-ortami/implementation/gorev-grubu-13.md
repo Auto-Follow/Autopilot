@@ -187,7 +187,7 @@ README A bir takım arkadaşı gibi satır satır izlendi; bitince klon silindi.
 
 Klonda `dunya.py` (sistem `python3`) "güncel" dedi; bu makinede sistem `python3` PIL ve PyYAML'ı apt'ten (`python3-pil`
 10.2.0, `python3-yaml` 6.0.1), numpy'ı `~/.local`'dan alıyor. Temiz bir Ubuntu'da `python3-pil` kurulu değilse ilk
-`kur.sh` dünya üretiminde durabilir (denenmedi): bölüm 10, öneri 1.
+`kur.sh` dünya üretiminde durabilir (denenmedi): bölüm 10, öneri 1. → 15.11'de uygulandı (bölüm 12).
 
 ## 7. 13.4: `yolov8s.pt` ve kıyas koşusu (açık)
 
@@ -222,8 +222,8 @@ denenmedi (dosya yok). Yüklenmezse koşu sim açılmadan "Model hatası" ile du
 
 1. **`~/.local` sürüm kayması (bu makine, kural 4):** `requirements-lock.txt` `coverage==7.16.1`, `fonttools==4.66.0`
    der; kurulu 7.16.2 ve 4.66.1. Üç dosyanın kalan her sabit sürümü kurulu olanla aynı (`model-requirements.txt` 29/29,
-   `analiz-requirements.txt` 24/24, kilit 27/29); `pip check` temiz. Dosya değiştirilmedi, sürüm düzeltilmedi (karar
-   kullanıcının; komut bölüm 10).
+   `analiz-requirements.txt` 24/24, kilit 27/29); `pip check` temiz. Dosya değiştirilmedi. → 15.11'de kullanıcı
+   kararıyla düzeltildi (bölüm 12).
 2. **ULog birikmesi:** `build/px4_sitl_tez/rootfs/log/` 14 GB (her açılışın ULog'u; koşular kopyasını alır). Silinmedi;
    README "Sorun giderme"ye yazıldı.
 3. **README'deki iki eski ifade zaten yoktu** (önceki gruplarda kalkmış); `../Vision/.venv` yalnız `ruff.toml`
@@ -234,13 +234,12 @@ denenmedi (dosya yok). Yüklenmezse koşu sim açılmadan "Model hatası" ile du
 ## 10. Açık konular ve sorulacaklar
 
 - **13.4 (kullanıcı):** `yolov8s.pt`'yi indirmek, sha256 / boyutu yazmak, kıyas koşusu (bölüm 7).
-- **Öneri 1 (onay bekliyor, uygulanmadı):** `kur.sh`'ın `animasyon.py` ve `dunya.py` çağrılarını sistem `python3`
+- **Öneri 1 → uygulandı 15.11 (bölüm 12):** `kur.sh`'ın `animasyon.py` ve `dunya.py` çağrılarını sistem `python3`
   yerine `TEZ_PYTHON` / ekip venv'iyle çalıştırmak (spec 7. gereksinimin sözü; dünyalar sabit sürümlü numpy / pillow ile
   üretilir, temiz makinede `python3-pil` gerekmez). Bu makinede dünya yeniden üretilmez (girdi özeti değişmez).
 - **Öneri 2 (onay bekliyor):** ULog birikmesi için bir temizlik (ör. koşu kopyasını aldıktan sonra rootfs'teki ULog'u
   silmek ya da `derle.sh --temiz`'e eklemek); şimdilik yalnız belgede.
-- **Kullanıcıya:** `~/.local` kayması için `pip install --user --break-system-packages -r tez/env/requirements-lock.txt`
-  (yalnız bu iki paketi kilitteki sürüme döndürür).
+- ~~**Kullanıcıya:** `~/.local` kayması~~ → düzeltildi 15.11 (bölüm 12).
 - **Hüseyin'e (değişmedi):** ortak model depolama yeri (`modeller.yaml` `kaynak`), m06/m08 sınırı, çatı
   `tech-stack.md` / `docs/02` (Görev Grubu 14: model paketleri, AGPL, GStreamer / ffmpeg, `libfuse2t64`, `DRI_PRIME`).
 - **Ortatepe'den (değişmedi):** v0.2 üst verisinin teyidi.
@@ -385,3 +384,16 @@ cd /home/ahmet/Desktop/Projects/Auto-Follow/Autopilot && tez/pin/verify_pin.sh -
 ```
 
 Beklenen: `312 passed`; `KILIT SAGLAM (v1.17.0)`.
+
+## 12. Ek: kullanıcı kararları 15.11 (ana oturum)
+
+- **`kur.sh` ekip venv'iyle (öneri 1, onaylandı):** `PY="${TEZ_PYTHON:-…/.venv-tez/bin/python}"` betiğin başında
+  tanımlanır; yoksa `kur.sh` "HATA: Python ortamı yok …" ile 1 döner (eskiden yalnız model denetimi atlanıyordu, dünya
+  üretimi sistem `python3`'üyle sürüyordu). `animasyon.py`, `dunya.py`, `algilama.py` hep `"$PY"` ile. Doğrulama:
+  `bash -n` ve `shellcheck` temiz; `tez/sim/kur.sh` çıkış 0 (insan modeli, dokular, ağaçlar kurulu, `cayir` güncel,
+  model satırları); venv'le scratchpad'e üretilen `walk_tez.dae` / `run_tez.dae` kurulu olanlarla `cmp` ile bit bit
+  aynı. Bu makinede sistem `python3` ile venv aynı numpy 2.5.3 (`~/.local`), PyYAML 6.0.1 ve Pillow 10.2.0 (apt)
+  dosyalarını kullanıyor, dolayısıyla dünya çıktısı da aynı. README "Sorun giderme" satırı güncellendi.
+- **`~/.local` sürüm kayması (onaylandı):** `python3 -m pip install --user --break-system-packages -r
+  tez/env/requirements-lock.txt` → `coverage` 7.16.2 → 7.16.1, `fonttools` 4.66.1 → 4.66.0 (`pip show` ile doğrulandı).
+- **Öneri 2 (ULog birikmesi):** karar bekliyor.

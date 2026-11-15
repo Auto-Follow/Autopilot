@@ -760,7 +760,7 @@ Gerçek uçuş için öneri ve ilk uçuşta doğrulama planı (doğrulanmadı): 
 | Belirti | Ne yapılır |
 |---|---|
 | `verify_pin.sh --worktree` → "KILIT BOZULMUS", satırların başında `-` ile submodule'ler | Submodule'ler indirilmemiş: `git submodule update --init --recursive` (A1; `--remote` ASLA), sonra yeniden `verify_pin.sh --worktree` |
-| `kur.sh`: "UYARI: Python ortamı yok …: model dosyaları denetlenmedi" | Ekip venv'i yok ya da Autopilot ekibin klasör yapısında değil (`~/Desktop/Projects/Auto-Follow/Autopilot` + `.venv-tez`). A3'ü yapın ya da yorumlayıcıyı verin: `TEZ_PYTHON=/yol/python tez/sim/kur.sh` (bütün betikler aynı değişkeni okur) |
+| `kur.sh`: "HATA: Python ortamı yok …" (hemen durur) | Ekip venv'i yok ya da Autopilot ekibin klasör yapısında değil (`~/Desktop/Projects/Auto-Follow/Autopilot` + `.venv-tez`). `kur.sh`'ın bütün Python adımları (animasyon, dünya üretimi, model denetimi) bu venv'le çalışır. A3'ü yapın ya da yorumlayıcıyı verin: `TEZ_PYTHON=/yol/python tez/sim/kur.sh` (bütün betikler aynı değişkeni okur) |
 | `kur.sh` ilk kurulumda `curl: (6)` / `(7)` ile duruyor | İnsan modeli, dokular ve ağaçlar ilk seferde indirilir: internet gerekir; dosyalar sha256 ile denetlenir, ikinci çalıştırmada yalnız eksikler iner |
 | "Zaten çalışan bir PX4 veya Gazebo var" | Önceki sim kapanmamış: `pgrep -a px4; pgrep -af "gz sim"`. Kendi açtığınız simse `pxh>` içinde `shutdown` ya da o terminalde Ctrl+C; bir koşu sürüyorsa bitmesini bekleyin. Aynı anda tek sim çalışır |
 | "Model dosyası yok: …" (sim açılmadan) | A4; mesajdaki "Almak için" satırı. Modelsiz koşmak için `--modelsiz` |

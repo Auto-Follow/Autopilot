@@ -1587,15 +1587,14 @@ mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Ya
   `torch`/`torchvision` ve bağımlılıkları 3. grupta (ekip venv'inde `model-requirements.txt` 29/29, `pip check` temiz),
   `ffmpeg` 7:6.1.1-3ubuntu5 (libx264-164 2:0.164.3108+git31e19f9-1) 8. grupta, GStreamer 1.24.2 apt paketleri,
   `python3-gi` 3.48.2-1 ve `libfuse2t64` 2.9.9-8.1build1 11. grupta (`dpkg-query -W` ile aynı).
-- **`kur.sh`'ın eski adımları sistemin `python3`'üyle (13. grupta bulundu, karar kullanıcı / Hüseyin):** 7. özel
-  gereksinim "Python betikleri yorumlayıcıyı `TEZ_PYTHON`'dan alır, varsayılan ekip venv'i" der; `kur.sh`'ın yeni model
-  denetimi buna uyar, ama eski `animasyon.py` ve `dunya.py` çağrıları hâlâ `python3` ile (sistem numpy / PIL / PyYAML).
-  Ekip venv'ine geçirmek dünyaların sabit sürümlerle üretilmesini sağlar; bu makinede dünya yeniden üretilmez (girdi
-  özeti değişmez) ama yeni bir makinede çıktı venv'in numpy / pillow'uyla üretilir. Önerildi, uygulanmadı.
-- **Bu makinede `~/.local` sürüm kayması (13. grupta bulundu, rapor edildi):** `requirements-lock.txt` `coverage==7.16.1`
-  ve `fonttools==4.66.0` der; `~/.local`'da 7.16.2 ve 4.66.1 kurulu (kural 4). m06'nın sonuçlarını etkilemesi
-  beklenmez (pytest kapsamı ve matplotlib'in yazı tipi aracı); düzeltmek kullanıcının kararı:
-  `pip install --user --break-system-packages -r tez/env/requirements-lock.txt`.
+- ~~**`kur.sh`'ın eski adımları sistemin `python3`'üyle**~~ → **kapandı** (kullanıcı kararı 15.11): `kur.sh`'ın bütün
+  Python adımları (`animasyon.py`, `dunya.py`, `algilama.py`) `TEZ_PYTHON` ya da ekip venv'iyle çalışır (7. özel
+  gereksinim); venv yoksa `kur.sh` başta "HATA: Python ortamı yok" ile durur. Venv'le üretilen yürüme/koşma kopyaları
+  bu makinede bit bit aynı (bu makinede sistem `python3` ile venv aynı numpy 2.5.3 / PyYAML 6.0.1 / Pillow 10.2.0
+  dosyalarını kullanıyor).
+- ~~**Bu makinede `~/.local` sürüm kayması**~~ → **kapandı** (kullanıcı kararı 15.11): `pip install --user
+  --break-system-packages -r tez/env/requirements-lock.txt` ile `coverage` 7.16.1, `fonttools` 4.66.0 (kilitteki
+  sürümler); dosya değişmedi.
 - **ULog birikmesi (13. grupta bulundu):** PX4 her açılışın ULog'unu `build/px4_sitl_tez/rootfs/log/` altında tutar
   (koşular kopyasını kendi klasörüne alır); bu makinede 14 GB birikmiş. README "Sorun giderme"de yazılı; kendiliğinden
   temizleme eklenmedi (karar kullanıcının).

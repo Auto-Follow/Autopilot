@@ -8,11 +8,18 @@
 # Every download is pinned by sha256 like the other downloads in tez/env/VERSIONS.md. Running it again only does
 # what is missing or out of date.
 # At the end it checks the model folder (~/auto-follow-modeller/) against tez/sim/modeller.yaml and prints each
-# file's sha256 (araclar/algilama.py with TEZ_PYTHON or the team venv). Model files are never downloaded here: a
-# missing one is a warning with where to get it, the setup is still done.
+# file's sha256 (araclar/algilama.py). Model files are never downloaded here: a missing one is a warning with where to
+# get it, the setup is still done.
+# Every Python step (animasyon.py, dunya.py, algilama.py) runs with TEZ_PYTHON or the team venv (spec, 7th specific
+# requirement): the walk copies and the worlds are made with the pinned numpy / Pillow / PyYAML, not the system's.
 set -euo pipefail
 
 SIM="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="${TEZ_PYTHON:-$SIM/../../../.venv-tez/bin/python}"
+if [ ! -x "$PY" ]; then
+	echo "HATA: Python ortamı yok ($PY). Önce ekip venv'ini kurun (tez/sim/README.md A3, tez/env/VERSIONS.md) ya da yorumlayıcıyı verin: TEZ_PYTHON=/yol/python tez/sim/kur.sh" >&2
+	exit 1
+fi
 ACTOR_URL="https://fuel.gazebosim.org/1.0/Mingfei/models/actor/1/actor.zip"
 ACTOR_SHA256="edd48c4e609c32e88ab63dc770c1fd0a6c7847d28340a3ce88b65f01ae04e5b4"
 ACTOR_FILES=(walk.dae stand.dae run.dae)
@@ -26,8 +33,8 @@ STRIDE_SCALE=0.91
 INSTALLED="$ACTOR_SHA256 animasyon-2"
 
 make_copies() {
-	python3 "$SIM/araclar/animasyon.py" "$DEST/walk.dae" "$DEST/walk_tez.dae" "$WALK_START_M" "$STRIDE_SCALE"
-	python3 "$SIM/araclar/animasyon.py" "$DEST/run.dae" "$DEST/run_tez.dae" "$RUN_START_M" "$STRIDE_SCALE"
+	"$PY" "$SIM/araclar/animasyon.py" "$DEST/walk.dae" "$DEST/walk_tez.dae" "$WALK_START_M" "$STRIDE_SCALE"
+	"$PY" "$SIM/araclar/animasyon.py" "$DEST/run.dae" "$DEST/run_tez.dae" "$RUN_START_M" "$STRIDE_SCALE"
 	echo "$INSTALLED" > "$DEST/.tamam"
 }
 
@@ -126,12 +133,7 @@ install_trees
 # Worlds with a description file get their ground and trees generated (only when something changed)
 for spec in "$SIM"/worlds/*.yaml; do
 	[ -e "$spec" ] || continue
-	python3 "$SIM/araclar/dunya.py" "$(basename "$spec" .yaml)"
+	"$PY" "$SIM/araclar/dunya.py" "$(basename "$spec" .yaml)"
 done
 # Model files (spec "Model dosyası", rule 9: outside every repo): checked, never downloaded
-PY="${TEZ_PYTHON:-$SIM/../../../.venv-tez/bin/python}"
-if [ -x "$PY" ]; then
-	"$PY" "$SIM/araclar/algilama.py"
-else
-	echo "UYARI: Python ortamı yok ($PY): model dosyaları denetlenmedi; ekip venv'i tez/env/VERSIONS.md'de (ya da TEZ_PYTHON)" >&2
-fi
+"$PY" "$SIM/araclar/algilama.py"
