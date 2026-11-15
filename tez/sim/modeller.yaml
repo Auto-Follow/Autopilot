@@ -17,9 +17,12 @@ modeller:
     alma: "mkdir -p ~/auto-follow-modeller && git -C <Vision klasörü> show ebff718:models/person_detection_model_v0.2.pt > ~/auto-follow-modeller/person_detection_model_v0.2.pt"
     aciklama: "Ultralytics YOLOv8s (yolov8s.pt'den), tek sınıf {0: Person}, eğitim imgsz 640, 100 epoch; kaydeden ultralytics 8.4.174, 2026-10-09; AGPL-3.0"
 
+  # The address is the one the pinned ultralytics 8.4.174 itself would use (utils/downloads.py:
+  # attempt_download_asset(release="v8.4.0"), yolov8s.pt is in GITHUB_ASSETS_NAMES); the simulation never downloads.
+  # sha256 and boyut_bayt: null until the file is fetched by hand (tasks.md 13.4); kur.sh then prints both.
   - ad: yolov8s.pt
-    sha256: null  # recorded in task group 13 (tasks.md 13.4), when the file is fetched by hand
+    sha256: null
     boyut_bayt: null
-    kaynak: "Ultralytics stok COCO YOLOv8s; kıyas için. Adres, boyut ve sha256 Görev grubu 13'te yazılacak"
-    alma: "Görev grubu 13'te yazılacak (elle indirilir; kod indirmez)"
-    aciklama: "COCO, 80 sınıf, 0: person"
+    kaynak: "Ultralytics stok COCO YOLOv8s, GitHub ultralytics/assets sürümü v8.4.0 (ultralytics 8.4.174'ün kendi indireceği adres); kıyas için; AGPL-3.0"
+    alma: "mkdir -p ~/auto-follow-modeller && curl -fL -o ~/auto-follow-modeller/yolov8s.pt https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt"
+    aciklama: "COCO, 80 sınıf, 0: person; v0.2'nin eğitimine başlanan ağırlık (taban yolov8s.pt)"

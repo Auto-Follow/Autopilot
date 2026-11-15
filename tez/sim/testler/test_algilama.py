@@ -89,7 +89,9 @@ def test_catalog_in_the_repo_and_its_checks(tmp_path: Path) -> None:
     v02 = known[algilama.DEFAULT_MODEL]
     assert v02.sha256 == "c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440"
     assert v02.size == 22_525_930 and "ebff718" in v02.source
-    assert known["yolov8s.pt"].sha256 is None  # task group 13
+    coco = known["yolov8s.pt"]  # the comparison model: its address is known, its digest once fetched (tasks.md 13.4)
+    assert coco.sha256 is None and coco.size is None
+    assert "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt" in coco.fetch
 
     bad = tmp_path / "modeller.yaml"
     entry = "  - {ad: a.pt, sha256: null, kaynak: x, alma: y}\n"
@@ -102,6 +104,48 @@ def test_catalog_in_the_repo_and_its_checks(tmp_path: Path) -> None:
         bad.write_text("modeller:\n" + text, encoding="utf-8")
         with pytest.raises(ValueError, match=message):
             algilama.load_catalog(bad)
+
+
+def test_model_folder_check_of_kur_sh(tmp_path: Path) -> None:
+    """kur.sh ends with algilama.py: every file modeller.yaml records, as found in the model folder (same sha256 and
+    size, another file, no digest recorded yet, missing: with where to get it), then the folder's unrecorded .pt
+    files; nothing is fetched and a missing model is a warning, not an error (exit code 0)."""
+    folder = tmp_path / "modeller"
+    folder.mkdir()
+    (folder / "a.pt").write_bytes(b"model")
+    (folder / "b.pt").write_bytes(b"other")
+    (folder / "c.pt").write_bytes(b"coco")
+    (folder / "x.pt").write_bytes(b"model")  # an unrecorded copy of a.pt
+    path = tmp_path / "modeller.yaml"
+    digest = hashlib.sha256(b"model").hexdigest()
+    path.write_text(
+        "modeller:\n"
+        f"  - {{ad: a.pt, sha256: '{digest}', boyut_bayt: 5, kaynak: Vision ebff718, alma: git show a}}\n"
+        f"  - {{ad: b.pt, sha256: '{'e' * 64}', boyut_bayt: 5, kaynak: Vision, alma: git show b}}\n"
+        "  - {ad: c.pt, sha256: null, kaynak: GitHub, alma: curl c}\n"
+        "  - {ad: d.pt, sha256: null, kaynak: GitHub v8.4.0, alma: curl -fL -o d.pt https://example.org/d.pt}\n",
+        encoding="utf-8",
+    )
+    catalog = algilama.load_catalog(path)
+    entries = algilama.check_folder(folder, catalog)
+    assert [(e.name, e.state) for e in entries] == [
+        ("a.pt", "tamam"),
+        ("b.pt", "farkli"),
+        ("c.pt", "ozetsiz"),
+        ("d.pt", "eksik"),
+        ("x.pt", "kayitsiz"),
+    ]
+    assert entries[2].sha256 == hashlib.sha256(b"coco").hexdigest() and entries[2].size == 4
+    text = "\n".join(algilama.folder_lines(entries, folder))
+    assert "TAMAM" in text and "FARKLI" in text and "EKSİK" in text and "KAYITSIZ" in text
+    assert entries[2].sha256 in text  # the digest to write into modeller.yaml
+    assert "curl -fL -o d.pt https://example.org/d.pt" in text and "GitHub v8.4.0" in text  # where to get it
+    assert "a.pt'nin kopyası" in text and "1 tamam" in text and "1 eksik" in text
+
+    nothing = algilama.check_folder(tmp_path / "yok", catalog)  # no folder yet: every recorded file is missing
+    assert {e.state for e in nothing} == {"eksik"}
+    assert "mkdir -p" in "\n".join(algilama.folder_lines(nothing, tmp_path / "yok"))
+    assert algilama.main(["--klasor", str(folder)]) == 0
 
 
 def test_class_is_resolved_from_the_model_names() -> None:

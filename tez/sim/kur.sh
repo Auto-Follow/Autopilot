@@ -7,6 +7,9 @@
 # Ground textures (ambientCG, Poly Haven) and trees (Gazebo Fuel OpenRobotics), all CC0: models/dokular/KAYNAK.md.
 # Every download is pinned by sha256 like the other downloads in tez/env/VERSIONS.md. Running it again only does
 # what is missing or out of date.
+# At the end it checks the model folder (~/auto-follow-modeller/) against tez/sim/modeller.yaml and prints each
+# file's sha256 (araclar/algilama.py with TEZ_PYTHON or the team venv). Model files are never downloaded here: a
+# missing one is a warning with where to get it, the setup is still done.
 set -euo pipefail
 
 SIM="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -125,3 +128,10 @@ for spec in "$SIM"/worlds/*.yaml; do
 	[ -e "$spec" ] || continue
 	python3 "$SIM/araclar/dunya.py" "$(basename "$spec" .yaml)"
 done
+# Model files (spec "Model dosyası", rule 9: outside every repo): checked, never downloaded
+PY="${TEZ_PYTHON:-$SIM/../../../.venv-tez/bin/python}"
+if [ -x "$PY" ]; then
+	"$PY" "$SIM/araclar/algilama.py"
+else
+	echo "UYARI: Python ortamı yok ($PY): model dosyaları denetlenmedi; ekip venv'i tez/env/VERSIONS.md'de (ya da TEZ_PYTHON)" >&2
+fi

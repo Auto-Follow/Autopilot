@@ -7,11 +7,18 @@ class out. Vision's detector (m08/m10) plugs in as another class with the same m
 Model file: --model > algilama.model (hedef.load already puts the first over the second) > MODEL_DIR/DEFAULT_MODEL.
 Model files never go into a repo (rule 9); tez/sim/modeller.yaml records the known ones with their sha256.
 
+    python tez/sim/araclar/algilama.py [--klasor KLASÖR]     (tez/sim/kur.sh runs it at its end)
+
+checks the model folder (default MODEL_DIR) against modeller.yaml: every recorded file with its sha256 and size, how
+to get a missing one, the digest of a file whose record has none yet. It never downloads; a missing model is a
+warning (exit code 0), only a broken modeller.yaml is an error (1).
+
 In a scenario run the detector works in its own process (ModelProcess, "spawn"): frame reader (goruntu.py) -> camera
 defects (kusurlar.py) -> detector, one FrameResult per processed frame to the main process through a FIFO queue.
 DetectionLog writes them to algilama.csv / kutular.csv with the round(t * 1e6) key of dogru_cevap.csv.
 """
 
+import argparse
 import atexit
 import csv
 import functools
@@ -173,6 +180,90 @@ def _missing_text(path: Path, catalog: Mapping[str, KnownModel]) -> str:
         f"Model dosyası yok: {path}\n  Bu ad {CATALOG.name}'da kayıtlı değil; kayıtlı modeller: {names} "
         f"({CATALOG}).\n  Dosyayı {MODEL_DIR}/ altına koyun ya da yolunu --model ile verin."
     )
+
+
+@dataclass(frozen=True)
+class FolderEntry:
+    """One model file of the model folder as kur.sh reports it (check_folder)."""
+
+    name: str
+    state: str  # tamam | farkli | ozetsiz | eksik | kayitsiz
+    sha256: str | None = None  # of the file in the folder
+    size: int | None = None  # [byte] of the file in the folder
+    known: KnownModel | None = None  # its modeller.yaml record
+
+
+FOLDER_STATE_TEXT = {
+    "tamam": "TAMAM",
+    "farkli": "FARKLI",
+    "ozetsiz": "ÖZETSİZ",
+    "eksik": "EKSİK",
+    "kayitsiz": "KAYITSIZ",
+}
+
+
+def check_folder(folder: Path, catalog: Mapping[str, KnownModel]) -> list[FolderEntry]:
+    """Every file modeller.yaml records, as found in `folder`, then the folder's .pt files it does not record.
+
+    tamam: the recorded sha256 (and size); farkli: another file under that name; ozetsiz: there, but modeller.yaml
+    has no sha256 for it yet; eksik: not in the folder; kayitsiz: a .pt file modeller.yaml does not name. Reads the
+    files only, nothing is fetched."""
+    entries = []
+    for known in catalog.values():
+        path = folder / known.name
+        if not path.is_file():
+            entries.append(FolderEntry(known.name, "eksik", known=known))
+            continue
+        digest, size = file_sha256(path), path.stat().st_size
+        if known.sha256 is None:
+            state = "ozetsiz"
+        elif digest == known.sha256 and known.size in (None, size):
+            state = "tamam"
+        else:
+            state = "farkli"
+        entries.append(FolderEntry(known.name, state, digest, size, known))
+    extra = sorted(p for p in folder.glob("*.pt") if p.is_file() and p.name not in catalog) if folder.is_dir() else []
+    entries += [FolderEntry(p.name, "kayitsiz", file_sha256(p), p.stat().st_size) for p in extra]
+    return entries
+
+
+def folder_lines(entries: list[FolderEntry], folder: Path) -> list[str]:
+    """kur.sh's lines about the model folder: one per file (and how to get a missing one), then the counts."""
+    recorded = {e.known.sha256: e.known.name for e in entries if e.known is not None and e.known.sha256}
+    lines = [f"Model dosyaları: {folder} (kayıtlar: {CATALOG.name}; bu kontrol model indirmez)"]
+    if not folder.is_dir():
+        lines.append(f"  Klasör yok: mkdir -p {folder}")
+    for e in entries:
+        head = f"  {FOLDER_STATE_TEXT[e.state]:<8} {e.name}"
+        found = f"sha256 {e.sha256}, {e.size} bayt"
+        if e.state == "tamam":
+            lines.append(f"{head}: {found}, kayıtla aynı")
+        elif e.state == "farkli":
+            lines.append(
+                f"{head}: {found}; {CATALOG.name}'daki kayıt sha256 {e.known.sha256}, {e.known.size} bayt: dosya "
+                "değişmiş ya da başka bir model (koşular uyarır, sonuçlar bu dosyaya aittir)"
+            )
+        elif e.state == "ozetsiz":
+            lines.append(f"{head}: {found}; {CATALOG.name}'da özeti yok: bu sha256'yı ve boyutu oraya ve spec'e yazın")
+        elif e.state == "eksik":
+            lines += [
+                f"{head}: dosya yok",
+                f"           Kaynak: {e.known.source}",
+                f"           Almak için: {e.known.fetch}",
+            ]
+        else:
+            copy = f" ({recorded[e.sha256]}'nin kopyası)" if e.sha256 in recorded else ""
+            lines.append(f"{head}: {found}; {CATALOG.name}'da kayıtlı değil{copy}")
+    counts = {state: sum(e.state == state for e in entries) for state in FOLDER_STATE_TEXT}
+    summary = ", ".join(f"{n} {state}" for state, n in counts.items() if n)
+    note = (
+        f"; eksik dosya bir uyarıdır, kurulum yine tamam (senaryolar varsayılan olarak {DEFAULT_MODEL}'yi ister, "
+        "--modelsiz koşular modelsiz çalışır)"
+        if counts["eksik"]
+        else ""
+    )
+    lines.append(f"  Sonuç: {summary or 'kayıtlı model yok'}{note}")
+    return lines
 
 
 def resolve_class(names: Mapping[int, str], wanted: str | int | None) -> int:
@@ -649,3 +740,24 @@ class DetectionLog:
         with self._lock:
             for f in self._files:
                 f.close()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """The model folder against modeller.yaml (kur.sh's last step): 0 even with a missing model, 1 if modeller.yaml
+    itself is broken."""
+    ap = argparse.ArgumentParser(
+        description="Model klasörünü modeller.yaml'a göre denetler (indirmez; kur.sh sonda çalıştırır)"
+    )
+    ap.add_argument("--klasor", type=Path, default=MODEL_DIR, help=f"model klasörü (varsayılan {MODEL_DIR})")
+    args = ap.parse_args(argv)
+    try:
+        catalog = load_catalog()
+    except (OSError, ValueError) as e:
+        print(f"HATA: {CATALOG} okunamadı: {e}", file=sys.stderr)
+        return 1
+    print("\n".join(folder_lines(check_folder(args.klasor, catalog), args.klasor)), flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
