@@ -111,9 +111,9 @@
     Uygulamada (13. grup): adres, sabit ultralytics 8.4.174'ün kendisinin kullanacağı adrestir
     (`ultralytics/utils/downloads.py`: `attempt_download_asset(release="v8.4.0")`, `yolov8s.pt` `GITHUB_ASSETS_NAMES`'te):
     `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt`; `modeller.yaml` → `kaynak` / `alma`
-    (`mkdir -p ~/auto-follow-modeller && curl -fL -o ~/auto-follow-modeller/yolov8s.pt <adres>`). Dosya bu grupta
-    **indirilmedi** (ajan ağdan indirmez); sha256 ve boyut `null` kalır, dosya elle indirilince `kur.sh` ikisini yazar,
-    `modeller.yaml`'a ve buraya işlenir (`tasks.md` 13.4 açık).
+    (`mkdir -p ~/auto-follow-modeller && curl -fL -o ~/auto-follow-modeller/yolov8s.pt <adres>`). 15.11'de Ahmet elle
+    indirdi: sha256 `1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a`, 22 588 772 bayt (`modeller.yaml`; ultralytics 8.4.174 sorunsuz yükledi: sınıf 0
+    `person`, imgsz 640).
 - Model ayrı bir süreçte çalışır (`multiprocessing`, "spawn" başlatma).
   - Amaç: GIL çekişmesinden ve gz-transport'un fork sonrası sorunlarından kaçınmak.
   - Sonuçlar ana sürece FIFO kuyrukla gelir.
@@ -1172,7 +1172,7 @@ bileşim 3'er koşu (+ mükemmel algılayıcı ve kıvrımlı yol). Kapı: her k
 | Ultralytics ile yükleyince (11.11, 3. grup) | Üst satırın hepsi doğrulandı (ultralytics 8.4.174 + torch 2.14.1+cpu). Ek olarak: adım (stride) 32 px; 11.1 M parametre; optimizer SGD, `lr0` 0.002, `seed` 42, önceden eğitilmiş ağırlıkla; `conf` eğitimde verilmemiş (önerilen değer yok, varsayılan 0.25 kalır); son (sadeleştirilmiş) checkpoint. Dosyadaki eğitim doğrulama ölçütleri (Ortatepe'nin veri setinde, bizim ölçümümüz değil): precision 0.949, recall 0.878, mAP50 0.933, mAP50-95 0.582 |
 | Okunma şekli | İlk satır bayt taramasıyla okundu; 11.11'de dosya ultralytics ile yüklenerek doğrulandı. Ortatepe'nin teyidi (önerdiği `conf`/`iou`, eğitimdeki torch sürümü, veri setinde eğik/üstten görüntü olup olmadığı) bekleniyor |
 | Ortatepe'nin teyidi (13. grup, 15.11) | **Gelmedi.** Tablo dosyadan okunan ve ultralytics ile doğrulanan değerlerle kalır; `conf` 0.25 ve `imgsz` 640 varsayılanları değişmedi. Teyit gelince bu tablo güncellenir |
-| Kıyas modeli `yolov8s.pt` (13. grup) | Stok COCO YOLOv8s (v0.2'nin eğitimine başlanan ağırlık). Adres `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt` (ultralytics 8.4.174'ün kendi adresi); sha256 ve boyut dosya elle indirilince yazılacak (`modeller.yaml`, `tasks.md` 13.4) |
+| Kıyas modeli `yolov8s.pt` (13. grup) | Stok COCO YOLOv8s (v0.2'nin eğitimine başlanan ağırlık). Adres `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt` (ultralytics 8.4.174'ün kendi adresi); sha256 `1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a`, 22 588 772 bayt (15.11, elle indirildi). Simde kıyas: COCO `yolov8s.pt` ile `kalabalik_park` × 3 (15.11, `sonuclar/gorev13_yolov8s_kalabalik_park_x3`), v0.2'nin × 3'üyle (`gorev17_varsayilan_kalabalik_park_x3`) karşılaştırma: bulma %79.3 (77.0–82.5) / %63.5, seçim doğru %73.7 (66.2–78.2) / %48.7, yanlış kişi %4.5 (0.5–12.3) / %15.8, aynı kıyafetli yanlış kişi %0 / %4.9, kilit kaybı 1.33 / 1.67, `model_ms` 91.5 / 88.0, RTF 0.81 / 0.85 (ayrıntı `implementation/gorev-grubu-13.md` 7) |
 | Laptop CPU'sunda hız (11.11, Ryzen 7 5800H, Gazebo kapalıyken) | `imgsz` 640, 4 çekirdek: kare başına `model_ms` ≈ 56–66 ms (kare ortalaması; ilk çağrı ≈ 1.0–1.1 s, kurucuda ısınma olarak); 8 çekirdek ≈ 46 ms; `imgsz` 1280, 4 çekirdek ≈ 230–475 ms |
 | Sim koşusu sırasında (11.11, 4. grup, `kalabalik_park`, PX4 + Gazebo açık, kayıt penceresi) | 4 çekirdek: `model_ms` ort. 85 ms (p95 92), işlenen 13.7 kare/sim-s, atlanan %55, RTF 0.84; 2 çekirdek: `model_ms` 135 ms, 7.8 kare/sim-s, atlanan %74, RTF 0.93. Kare model sürecine ≈ 31 ms'de ulaşır, modeli ≈ 18 ms bekler; sonuç kareden ≈ 120–140 sim-ms sonra hazırdır. Geçici IoU kontrolü: hedefin göründüğü 325 işlenmiş karenin 237'sinde bir model kutusu hedefle IoU ≥ 0.5 (en iyi 0.94) |
 
@@ -1580,10 +1580,9 @@ mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Ya
   listeler. Ayrıca bu durumda rapor yazılmadan çıkan bir hata vardı (ULog'da `debug_vect` yokken); düzeltildi, testli.
 - **Model bu açıdan kişiyi sık kaçırıyor (6. grupta ölçüldü, m08 / Ortatepe):** `takip_yuruyen`'de (8 m / 45°) hedef
   açıkça görünürken işlenen karelerin %26–34'ünde hiç kutu yok (dört koşu).
-- **Uygulamada sabitlenecek sürümler:** kalan tek boşluk COCO `yolov8s.pt`'nin sha256 özeti ve boyutu (bir paket
-  sürümü değil, kıyas modelinin dosyası). 13. grupta adresi yazıldı (ultralytics 8.4.174'ün kendi adresi, "Model
-  dosyası"); dosya ajan tarafından indirilmedi, elle indirilince `kur.sh` ikisini yazar ve `modeller.yaml` ile buraya
-  işlenir (`tasks.md` 13.4 açık). Geri kalan her şey sabit ve 15.11'de yeniden doğrulandı: `ultralytics`,
+- **Uygulamada sabitlenecek sürümler:** TBD kalmadı. Son boşluk COCO `yolov8s.pt`'nin sha256 özeti ve boyutuydu
+  (kıyas modelinin dosyası): 15.11'de elle indirildi, `1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a`, 22 588 772 bayt (`modeller.yaml`, "Model
+  dosyası"). Geri kalan her şey sabit ve 15.11'de yeniden doğrulandı: `ultralytics`,
   `torch`/`torchvision` ve bağımlılıkları 3. grupta (ekip venv'inde `model-requirements.txt` 29/29, `pip check` temiz),
   `ffmpeg` 7:6.1.1-3ubuntu5 (libx264-164 2:0.164.3108+git31e19f9-1) 8. grupta, GStreamer 1.24.2 apt paketleri,
   `python3-gi` 3.48.2-1 ve `libfuse2t64` 2.9.9-8.1build1 11. grupta (`dpkg-query -W` ile aynı).
@@ -1596,8 +1595,10 @@ mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Ya
   --break-system-packages -r tez/env/requirements-lock.txt` ile `coverage` 7.16.1, `fonttools` 4.66.0 (kilitteki
   sürümler); dosya değişmedi.
 - **ULog birikmesi (13. grupta bulundu):** PX4 her açılışın ULog'unu `build/px4_sitl_tez/rootfs/log/` altında tutar
-  (koşular kopyasını kendi klasörüne alır); bu makinede 14 GB birikmiş. README "Sorun giderme"de yazılı; kendiliğinden
-  temizleme eklenmedi (karar kullanıcının).
+  (koşular kopyasını kendi klasörüne alır); bu makinede 14 GB birikmişti. Kullanıcı kararı 15.11: yalnız kopyası
+  `tez/sim/sonuclar/` altında olanlar (boyut + sha256 aynı) bir kez elle silindi (803 dosya, 12.7 GB); kopyası olmayan
+  95 dosya (elle açılan simler, yarıda kalan denemeler) kaldı. Kendiliğinden temizleme eklenmedi; README "Sorun
+  giderme"de yazılı.
 - **Yeniden kilidin zamanı (5. grupta, karar m11 / kullanıcı ile):** kilit düşünce hakem bir sonraki işlenen karede
   yeniden kilitler; operatörün tepki süresi 0'dır (iyimser). `kalabalik_park`'ın ilk denemelerinde kısmi örtülmede kilit
   kaybından 70–200 ms sonra yeniden kilit görüldü. Gerçekte operatör ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi devreye girer.

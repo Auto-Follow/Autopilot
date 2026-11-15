@@ -21,8 +21,8 @@ modeller:
   # attempt_download_asset(release="v8.4.0"), yolov8s.pt is in GITHUB_ASSETS_NAMES); the simulation never downloads.
   # sha256 and boyut_bayt: null until the file is fetched by hand (tasks.md 13.4); kur.sh then prints both.
   - ad: yolov8s.pt
-    sha256: null
-    boyut_bayt: null
+    sha256: 1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a
+    boyut_bayt: 22588772
     kaynak: "Ultralytics stok COCO YOLOv8s, GitHub ultralytics/assets sürümü v8.4.0 (ultralytics 8.4.174'ün kendi indireceği adres); kıyas için; AGPL-3.0"
     alma: "mkdir -p ~/auto-follow-modeller && curl -fL -o ~/auto-follow-modeller/yolov8s.pt https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt"
     aciklama: "COCO, 80 sınıf, 0: person; v0.2'nin eğitimine başlanan ağırlık (taban yolov8s.pt)"

@@ -89,8 +89,9 @@ def test_catalog_in_the_repo_and_its_checks(tmp_path: Path) -> None:
     v02 = known[algilama.DEFAULT_MODEL]
     assert v02.sha256 == "c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440"
     assert v02.size == 22_525_930 and "ebff718" in v02.source
-    coco = known["yolov8s.pt"]  # the comparison model: its address is known, its digest once fetched (tasks.md 13.4)
-    assert coco.sha256 is None and coco.size is None
+    coco = known["yolov8s.pt"]  # comparison model, fetched by hand from ultralytics 8.4.174's address (tasks.md 13.4)
+    assert coco.sha256 == "1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a"
+    assert coco.size == 22_588_772
     assert "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt" in coco.fetch
 
     bad = tmp_path / "modeller.yaml"

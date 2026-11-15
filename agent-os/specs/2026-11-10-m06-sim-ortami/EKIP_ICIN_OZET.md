@@ -87,6 +87,10 @@ QGC 14550'de. Kod: `tez/sim/araclar/px4_baglanti.py` (`send_los`, `send_follow_t
 - Bulma oranı kişinin görüntüdeki boyuna bağlı (~104 000 kare): 150–180 px **%61**, 120–150 px **%25**, < 120 px **%3**.
   Daha zor: yandan görünen kişi, kısmen örtülen, başka biriyle yan yana (kutu birleşiyor), kadraj kenarında kesik.
   Aynı boyda 30° bakış 45°'ten iyi. Kalabalıkta 35°'de yanlış kişiye geçme %16 (45°'de %6–12).
+- **Stok COCO `yolov8s.pt` ile kıyas (15.11, `kalabalik_park` × 3):** simdeki insanlarda stok model v0.2'den belirgin
+  iyi: bulma %79 / %64, doğru kişi %74 / %49, yanlış kişi %4.5 / %16; süre benzer (92 / 88 ms). Yalnız sim insanında
+  ölçüldü (v0.2 gerçek görüntüyle eğitildi); gerçek CM3 görüntüsünde aynı kıyas yapılmalı. Ayrıntı
+  `implementation/gorev-grubu-13.md` 7.
 - Veri toplama / eğitim önerileri: 30–40° yukarıdan bakış, kişi 120–200 px, yandan görünüm, yan yana duran kişiler;
   simin segmentasyon kamerası otomatik etiketli sentetik veri üretebilir (gerçek veriyle karıştırılarak; istenirse m06 aracı yazar).
 - m11 için: kişi bulunamayan kareler %27–47; konum titreşimi PX4'te sahte hız üretiyor; PX4'e süzülmüş hız gönderilirse

@@ -189,7 +189,35 @@ Klonda `dunya.py` (sistem `python3`) "güncel" dedi; bu makinede sistem `python3
 10.2.0, `python3-yaml` 6.0.1), numpy'ı `~/.local`'dan alıyor. Temiz bir Ubuntu'da `python3-pil` kurulu değilse ilk
 `kur.sh` dünya üretiminde durabilir (denenmedi): bölüm 10, öneri 1. → 15.11'de uygulandı (bölüm 12).
 
-## 7. 13.4: `yolov8s.pt` ve kıyas koşusu (açık)
+## 7. 13.4: `yolov8s.pt` ve kıyas koşusu (kapandı 15.11)
+
+**Sonuç (ana oturum, 15.11):** Ahmet dosyayı aşağıdaki 1. komutla indirdi (22 588 772 bayt, sha256 `1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a`);
+`modeller.yaml`'a yazıldı, `kur.sh` iki model için `TAMAM` diyor; dosya v0.2 gibi salt okunur yapıldı. ultralytics
+8.4.174 dosyayı sorunsuz yükledi (sınıf 0 `person`, imgsz 640, ilk çağrı 1046 ms). Tek koşu
+(`sonuclar/gorev13_yolov8s_kalabalik_park`) ve m06 kuralıyla 3 koşu (`toplu.py --senaryo kalabalik_park --tekrar 3
+-- --model ~/auto-follow-modeller/yolov8s.pt`, `sonuclar/gorev13_yolov8s_kalabalik_park_x3`, 3/3 GEÇTİ), v0.2'nin aynı
+senaryodaki 3 koşusuyla (`gorev17_varsayilan_kalabalik_park_x3`; `karsilastir.py ... --html
+sonuclar/gorev13_yolov8s_kalabalik_park_x3/karsilastirma.html`):
+
+| Ölçüt (ort., en az–en çok) | v0.2 × 3 | COCO `yolov8s.pt` × 3 | Δ |
+|---|---|---|---|
+| Bulma (IoU ≥ 0.5, hedef görünürken) | %63.5 (61.2–66.5) | **%79.3** (77.0–82.5) | +15.8 puan |
+| Seçim doğru | %48.7 (46.5–52.8) | **%73.7** (66.2–78.2) | +25.0 puan |
+| Yanlış kişi | %15.8 (12.2–18.6) | **%4.5** (0.5–12.3) | −11.3 puan |
+| Aynı kıyafetli yanlış kişi | %4.9 (0.0–7.4) | %0.0 | −4.9 puan |
+| Yanlış pozitif / kare | 0.01 | 0.01 | |
+| Kilit kaybı | 1.67 (1–3) | 1.33 (1–2) | −0.33 |
+| Konum hatası ort. | 0.15 m | 0.21 m | +0.06 m |
+| `model_ms` ort. | 88.0 | 91.5 | +3.5 |
+| RTF | 0.85 | 0.81 | −0.05 |
+
+Yorum: simdeki insanlarda (Gazebo Fuel "actor" ağı ve dokusu) stok COCO modeli v0.2'den belirgin biçimde iyi: daha sık
+buluyor, yanlış kişiye çok daha az geçiyor; üç koşunun aralıkları örtüşmüyor. Bu bir sim ölçümüdür: v0.2 gerçek
+görüntülerle eğitildi ve sim insanı gerçek görüntüden farklıdır, sonuç gerçek uçuşta aynı çıkmayabilir. m10 / m08 için
+(Ortatepe) bilgi olarak iletilir: v0.2'nin ince ayarı sim insanında stok ağırlığın gerisinde kalıyor; gerçek CM3
+görüntüleriyle aynı kıyas yapılmalı.
+
+Aşağısı 13. grubun ajan notudur (dosya indirilmeden önce yazıldı).
 
 Adres yazıldı (bölüm 2, karar 10), dosya indirilmedi. Kalan iş (kullanıcı; tam komutlar "Kendin dene" 6):
 
@@ -233,11 +261,11 @@ denenmedi (dosya yok). Yüklenmezse koşu sim açılmadan "Model hatası" ile du
 
 ## 10. Açık konular ve sorulacaklar
 
-- **13.4 (kullanıcı):** `yolov8s.pt`'yi indirmek, sha256 / boyutu yazmak, kıyas koşusu (bölüm 7).
+- ~~**13.4 (kullanıcı)**~~ → kapandı 15.11 (bölüm 7).
 - **Öneri 1 → uygulandı 15.11 (bölüm 12):** `kur.sh`'ın `animasyon.py` ve `dunya.py` çağrılarını sistem `python3`
   yerine `TEZ_PYTHON` / ekip venv'iyle çalıştırmak (spec 7. gereksinimin sözü; dünyalar sabit sürümlü numpy / pillow ile
   üretilir, temiz makinede `python3-pil` gerekmez). Bu makinede dünya yeniden üretilmez (girdi özeti değişmez).
-- **Öneri 2 (onay bekliyor):** ULog birikmesi için bir temizlik (ör. koşu kopyasını aldıktan sonra rootfs'teki ULog'u
+- **Öneri 2 → kullanıcı kararı 15.11 (bölüm 12): kopyalar bir kez elle silindi, otomatik temizlik yok.** ULog birikmesi için bir temizlik (ör. koşu kopyasını aldıktan sonra rootfs'teki ULog'u
   silmek ya da `derle.sh --temiz`'e eklemek); şimdilik yalnız belgede.
 - ~~**Kullanıcıya:** `~/.local` kayması~~ → düzeltildi 15.11 (bölüm 12).
 - **Hüseyin'e (değişmedi):** ortak model depolama yeri (`modeller.yaml` `kaynak`), m06/m08 sınırı, çatı
@@ -396,4 +424,9 @@ Beklenen: `312 passed`; `KILIT SAGLAM (v1.17.0)`.
   dosyalarını kullanıyor, dolayısıyla dünya çıktısı da aynı. README "Sorun giderme" satırı güncellendi.
 - **`~/.local` sürüm kayması (onaylandı):** `python3 -m pip install --user --break-system-packages -r
   tez/env/requirements-lock.txt` → `coverage` 7.16.2 → 7.16.1, `fonttools` 4.66.1 → 4.66.0 (`pip show` ile doğrulandı).
-- **Öneri 2 (ULog birikmesi):** karar bekliyor.
+- **Öneri 2 (ULog birikmesi), kullanıcı kararı:** önce "şimdilik bırak", sonra "yalnız kopyaları sil". Bir kez elle,
+  scratchpad'deki bir betikle: `build/px4_sitl_tez/rootfs/log/` altındaki her `.ulg`, `tez/sim/sonuclar/` altında aynı
+  boyut ve sha256'lı bir kopyası varsa silindi. Önce deneme modu (803 kopya / 12.66 GB, 95 kopyasız), sonra silme:
+  klasör 14 GB → 2.1 GB, 95 dosya kaldı (2026-10-11'den 2026-11-15'e, elle açılan simler ve yarıda kalan denemeler);
+  disk boş alanı 39 → 51 GB. Otomatik temizlik eklenmedi.
+- **13.4 kapandı:** bölüm 7.
