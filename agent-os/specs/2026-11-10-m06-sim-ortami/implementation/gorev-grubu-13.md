@@ -217,6 +217,33 @@ görüntülerle eğitildi ve sim insanı gerçek görüntüden farklıdır, sonu
 (Ortatepe) bilgi olarak iletilir: v0.2'nin ince ayarı sim insanında stok ağırlığın gerisinde kalıyor; gerçek CM3
 görüntüleriyle aynı kıyas yapılmalı.
 
+**Takip senaryosunda da (kullanıcı isteği 15.11):** `toplu.py --senaryo takip_yuruyen --tekrar 3 -- --model
+~/auto-follow-modeller/yolov8s.pt` (`sonuclar/gorev13_yolov8s_takip_yuruyen_x3`, 3/3 GEÇTİ; stok Follow Me, 9 m /
+12.9 m), v0.2'nin aynı ayarlı 3 koşusuyla (`gorev17_varsayilan_takip_yuruyen_x3`; `karsilastirma.html` aynı klasörde):
+
+| Ölçüt (ort., en az–en çok) | v0.2 × 3 | COCO `yolov8s.pt` × 3 | Δ |
+|---|---|---|---|
+| Kişi sonuna kadar izlendi | 3/3 | 3/3 | |
+| Bulma (IoU ≥ 0.5) | %62.2 (58.2–65.3) | **%96.5** (96.1–97.3) | +34.4 puan |
+| Seçim doğru | %60.1 (56.5–62.6) | **%95.5** (94.4–97.3) | +35.4 puan |
+| Kilit kaybı | 4.00 (3–5) | **1.33** (1–2) | −2.67 |
+| En az yatay mesafe | 6.63 m (5.68–7.12) | 6.63 m (6.50–6.74) | 0 |
+| Yatay mesafe ort. | 12.08 m | 12.04 m | |
+| Köşede PX4'ün yetişmesi ort. / en çok | 2.29 / 2.91 s | **1.77 / 2.11 s** | −0.53 / −0.80 s |
+| En uzun kayıp | 0.54 s (0.00–0.86) | 0.84 s (0.76–0.99) | +0.30 s |
+| Konum hatası ort. | 0.36 m | 0.44 m | +0.09 m |
+| Hedef kadrajda | %95.0 | %92.5 | −2.5 puan |
+| Uçtan uca gecikme ort. | 137 ms | 144 ms | +7 ms |
+| `model_ms` ort. | 90 ms | 104 ms (98–114) | +14 ms |
+| RTF | 0.95 | 0.89 | −0.06 |
+
+Yorum: takip senaryosunda fark kalabalıktakinden de büyük: COCO kişiyi neredeyse her karede buluyor (%96 / %62), kilit
+3 kat daha az düşüyor ve PX4 köşelerde ~0.5–0.8 s daha erken yetişiyor (konum daha sürekli geliyor). Takibin ana
+sonucu (izlendi 3/3, mesafe) değişmiyor. COCO'nun konum hatası biraz büyük (+0.09 m; kutusu ayak hizasını farklı
+çiziyor olabilir, incelenmedi) ve modeli ~14 ms yavaş (bu laptop CPU'sunda, koşular arası yayılım da büyük). Aynı
+çekince geçerli: yalnız sim insanında ölçüldü. v0.2'nin 17. grup koşuları `b6b299aff9`'da; o zamandan beri varsayılan
+yol değişmedi (12. grubun 0 ms koşusu o aralıkta).
+
 Aşağısı 13. grubun ajan notudur (dosya indirilmeden önce yazıldı).
 
 Adres yazıldı (bölüm 2, karar 10), dosya indirilmedi. Kalan iş (kullanıcı; tam komutlar "Kendin dene" 6):
