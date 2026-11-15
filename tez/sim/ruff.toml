@@ -1,0 +1,13 @@
+# Same rules as Vision/pyproject.toml; longer lines because the tools print Turkish report lines.
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m ruff format --config tez/sim/ruff.toml tez/sim
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m ruff check --config tez/sim/ruff.toml tez/sim
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "ANN"]
+ignore = ["ANN401"]
+
+[lint.isort]
+# modules in araclar/ import each other by plain name (the scripts run from that folder)
+known-first-party = ["algilama", "animasyon", "dogrulama", "gecikme", "goruntu", "goruntu_yayini", "hedef", "kamera", "karsilastir", "kayit", "konumlama", "kusurlar", "m06_testi", "model_dene", "olcum", "onizleme", "parametreler", "px4_baglanti", "rapor", "senaryo", "simulasyon", "takip", "tarama", "toplu", "video", "yuruyus"]

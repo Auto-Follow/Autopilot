@@ -1,0 +1,52 @@
+# Model packages for the simulation's person detector on the laptop CPU (tez/sim/araclar/algilama.py,
+# spec agent-os/specs/2026-11-10-m06-sim-ortami). Laptop only: Ubuntu 24.04, Python 3.12.3, x86_64.
+# Not for the Raspberry Pi (Hailo there, roadmap m02/m07) and not for CI (the unit tests do not need torch).
+#
+# torch and torchvision are the CPU builds; "+cpu" versions exist only on the PyTorch CPU index:
+#   https://download.pytorch.org/whl/cpu
+# Install into the team venv after analiz-requirements.txt (tez/env/VERSIONS.md):
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python -m pip install -r tez/env/model-requirements.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# Every dependency of torch, torchvision and ultralytics is pinned in exactly one file (tested 11.11.2026 with
+# pip check in a copy of the team venv and in an isolated venv):
+#   requirements-lock.txt (~/.local): numpy, matplotlib (contourpy, cycler, fonttools, kiwisolver), packaging,
+#                                     psutil, sympy, mpmath
+#   analiz-requirements.txt (venv):   opencv-python 5.0.0.93 (ultralytics needs >=4.7.0, !=4.13.0.90)
+#   this file:                        everything else, below
+# Ultralytics is AGPL-3.0: the model runs only in the local simulation and is not distributed.
+
+# The model stack
+torch==2.14.1+cpu                # torchvision 0.29 is built for torch 2.14 (pip would also take 2.15 with it)
+torchvision==0.29.2+cpu
+ultralytics==8.4.174             # the version that saved person_detection_model_v0.2.pt
+ultralytics-thop==2.2.5
+ultralytics-platform==0.1.109
+nvidia-ml-py==13.615.71
+polars==2.1.0
+polars-runtime-32==2.1.0
+filelock==4.2.10
+fsspec==2026.9.0
+networkx==3.7
+httpx==0.28.1
+httpcore==1.0.9
+h11==0.16.0
+anyio==4.16.0
+setuptools==80.10.2              # torch needs >=77.0.3; the last series that still ships pkg_resources (MAVProxy)
+typing_extensions==4.16.0        # anyio needs >=4.16.0 (Ubuntu's python3-typing-extensions is 4.10.0)
+
+# Ubuntu 24.04 provides these in the team venv (apt, --system-site-packages) at exactly these versions, so pip
+# leaves them alone there; the pins only act in a venv without the system packages. charset-normalizer is the
+# exception: PyPI's requests needs it, Ubuntu's requests uses python3-chardet, so the team venv gets it unused.
+certifi==2023.11.17
+charset-normalizer==3.5.2
+idna==3.6
+Jinja2==3.1.2
+MarkupSafe==2.1.5
+pillow==10.2.0
+pyparsing==3.1.1
+python-dateutil==2.8.2
+PyYAML==6.0.1
+requests==2.31.0
+six==1.16.0
+urllib3==2.0.7

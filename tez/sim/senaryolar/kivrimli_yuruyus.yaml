@@ -1,0 +1,40 @@
+# Kıvrımlı yürüyüş: insan bir alanda dolaşır gibi yürür — yön değiştirir, hızlanır, durup etrafına bakar,
+# koşar, geri döner. Takip kontrolcüsü için zorlayıcı ama gerçekçi bir yol.
+#
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo kivrimli_yuruyus
+#
+# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
+
+ad: kivrimli_yuruyus
+aciklama: >
+  İnsan dronun 10 m önünden yola çıkar; kıvrılarak kuzeydoğuya yürür, durur, yavaş yürür, kısa bir koşu yapar,
+  sert bir dönüşle geri yürür. Dron takip etmez (takip kaynağı yok: PX4 Hold'da yerinde bekler), yani hedef
+  kadrajdan çıkar.
+
+dunya: duz_alan
+
+drone:
+  yukseklik_m: 10
+
+takip:
+  kaynak: yok
+
+hedef:
+  tur: insan
+  baslangic: [10, 0]
+  davranis: {tohum: 7}
+  yol:
+    - {nokta: [16, 1], hiz_mps: 1.4}
+    - {nokta: [20, 4], hiz_mps: 1.5}
+    - {nokta: [22, 9], hiz_mps: 1.3}
+    - {dur_s: 4}
+    - {nokta: [19, 13], hiz_mps: 0.9}       # yavaş, etrafına bakarak
+    - {nokta: [13, 15], hiz_mps: 3.5}       # kısa koşu
+    - {nokta: [10, 12], hiz_mps: 1.4}
+    - {nokta: [16, 9], hiz_mps: 1.4}        # sert dönüş: yavaşlar, dar yayda adım atarak döner, devam eder
+
+zamanlama:
+  baslama_s: 60
+  son_bekleme_s: 5
+
+basari: {}

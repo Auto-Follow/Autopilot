@@ -1,0 +1,41 @@
+# Yürüyen insan: dronun 10 m önünde başlar, uzaklaşır, durur, kuzeye koşar, batıya yürür.
+#
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo yuruyen_insan
+#
+# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
+# Varsayılan 35° kamera (kamera.NOMINAL_TILT_DEG) 10 m'de yeri ≈ 7.3 m'den ≈ 38 m'ye kadar görür: hedef başta
+# görüntünün alt yarısındadır (45° kamerada ortasındaydı).
+
+ad: yuruyen_insan
+aciklama: >
+  İnsan dronun 10 m önünde durur; 60. saniyede doğuya yürür, 3 s durur, kuzeye koşar, sonra batıya yürür.
+  Dron senaryo boyunca takip etmez (takip kaynağı yok: PX4 Hold'da yerinde bekler), yani hedef kadrajdan çıkar.
+
+dunya: duz_alan
+
+drone:
+  yukseklik_m: 10
+
+takip:
+  kaynak: yok               # yok: dron PX4 Hold'da bekler (açık döngü, takip yok)
+
+hedef:
+  tur: insan
+  baslangic: [10, 0]
+  # İnsan gibi hareket (tez/sim/araclar/yuruyus.py): ilk adımda hızlanır, köşeyi yayla döner, keskin dönüşte ve
+  # beklemeden sonra kalkarken dar bir yayda adım atarak döner, hızı ve çizgisi hafifçe dalgalanır.
+  # Hepsi varsayılan; değiştirmek için:
+  # davranis: {dogal: true, tohum: 0, hiz_dalgalanma: 0.05, yol_sapmasi_m: 0.08}
+  #   dogal: false -> eski ideal hareket (düz çizgi, sabit hız, anında dönüş); hata ayıklamak için
+  #   tohum: aynı tohum her koşuda aynı yürüyüşü verir; farklı tohum = aynı yolda biraz farklı bir yürüyüş
+  yol:                      # sırayla: {nokta, hiz_mps} yürü (hız > 2 m/s ise koşu animasyonu), {dur_s} bekle
+    - {nokta: [22, 0], hiz_mps: 1.4}
+    - {dur_s: 3}
+    - {nokta: [22, 10], hiz_mps: 3.0}
+    - {nokta: [12, 10], hiz_mps: 1.4}
+
+zamanlama:
+  baslama_s: 60             # hedef bu simülasyon zamanında yürümeye başlar; dron o ana kadar hazır olmalı
+  son_bekleme_s: 5          # son adımdan sonra kayda devam süresi
+
+basari: {}                  # F2'den itibaren, ör. {kadrajda_kalma_min: 0.9, en_uzun_kayip_max_s: 3}

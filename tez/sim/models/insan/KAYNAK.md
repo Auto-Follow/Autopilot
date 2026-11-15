@@ -1,0 +1,35 @@
+# İnsan hedef modeli
+
+Animasyonlu insan (yürü, dur, koş) — Gazebo Fuel **"actor"**, yazar **Mingfei**, sürüm 1:
+https://app.gazebosim.org/Mingfei/fuel/models/actor
+
+Lisans: **Creative Commons Attribution 4.0 International (CC BY 4.0)** —
+http://creativecommons.org/licenses/by/4.0/ . Kullanırken kaynak gösterilmelidir (tezde de).
+
+`meshes/` git'e girmez (büyük ikili dosyalar); `tez/sim/kur.sh` sha256 ile doğrulayarak indirir.
+İndirilen `walk.dae`, `stand.dae`, `run.dae` değiştirilmez. **Uyarlama (CC BY 4.0'ın izin verdiği):** `kur.sh`,
+`araclar/animasyon.py` ile `walk_tez.dae` ve `run_tez.dae` kopyalarını üretir. Bunlar aynı yürüme/koşu
+döngüsüdür; sadece animasyon kareleri, döngü ayakların yan yana geldiği andan başlayacak şekilde kaydırılmıştır
+(yürüme 0.37 m, koşu 0.24 m kalça ilerlemesi). Orijinal döngü adım ortasında başladığı için duruştan kalkan insan
+"donmuş bir hamle" pozunda kayıyor gibi görünüyordu (2026-10-11, yandan kamera ölçümü). Ayrıca kopyalarda kalçanın
+ilerlemesi 0.91 ile ölçeklenmiştir: hareket yakalama verisi başka oranlı bir iskelete aktarıldığı için kalça,
+bacakların attığı adımdan ~%9 fazla ilerliyordu ve Gazebo insanı kalça ilerlemesine göre taşıdığından basan ayak
+1.4 m/s'de ~0.12 m/s ileri kayıyordu; ölçekli kopyada 0.00 m/s.
+
+Not: Gazebo Harmonic'te bu model `<script><loop>false</loop>` ile kullanılırsa kamera sensörü açıkken
+sunucu kilitleniyor (2026-10-11 denemesi). Senaryo yöneticisi bu yüzden `loop=true` + sonda uzun bir
+"dur" parçası kullanır.
+
+**Gazebo hatası (gz-sim 8, 9 ve geliştirme dalında var, 2026-10-11):** `interpolate_x` (bacakları yürünen
+mesafeye kilitler) her animasyon **dosya yolu** için yalnızca ilk yörüngede açılır (`SceneManager.cc`,
+`animInterpolateCheck`). Sonraki yörüngeler zamana göre oynar; bu modelin döngüsü ~0.22 m/s'lik bir yürüyüşe göre
+olduğundan 1.4 m/s'de bacaklar ~6 kat yavaş kalır ve insan süzülür. `hedef.py` her hareketli yörüngeye aynı
+dosyanın farklı yazımını verir (`./walk_tez.dae`, `././walk_tez.dae`, …); 0.9 m/s'de ikinci yürüme bacağında
+karşılaştırıldı: önlemsiz kayıyor, önlemle yerinde.
+
+Alternatif model: MakeHuman (CC0) + CMU hareket kaydıyla üretilen bir insan da denendi ve çalışıyor (commit
+`50fdfc7eb3`: `tez/sim/insan/uret.py`, `uret.sh`). Kullanıcı düzeltilmiş Mingfei modelini tercih etti (2026-10-11).
+
+Gazebo bir rotayı Catmull-Rom eğrisiyle doldurur: sadece iki uç noktası olan bir yürüyüşte insan
+yavaş-hızlı-yavaş gider ve hesaplanan yerden ±0.5 m sapar. `hedef.py` bu yüzden her yürüyüş/koşu parçasına
+0.2 s arayla ara nokta yazar; ölçülen fark 0.05–0.19 m'ye iner (gövde merkezi yolun biraz önünde).

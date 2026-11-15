@@ -1,0 +1,25 @@
+# Settings of the real vehicle (Holybro X500 V2, Pixhawk 6C, PX4 v1.17.0) for the simulated drone.
+# Loaded at every PX4 start by tez/sim/calistir.sh (araclar/parametreler.py -> PX4_PARAM_<NAME>, posix rcS).
+# Order, the last one wins: gercek_dron.params -> sim.params -> scenario takip.px4_parametreleri -> --param.
+# Format: NAME VALUE  # source. Selection rule and the comparison with the v1.17.0 defaults:
+# agent-os/specs/2026-11-10-m06-sim-ortami (spec.md "Başlangıç parametreleri", implementation/gorev-grubu-01.md).
+
+# Rate controller gains of airframe 4019_x500_v2 (ROMFS/px4fmu_common/init.d/airframes); the real vehicle
+# runs 4019 and its 22.08.2026 parameter dump has the same values. These change the behaviour against stock 4001.
+IMU_GYRO_CUTOFF   30      # 4019_x500_v2 + 22.08.2026.params [Hz] (v1.17.0 default 40)
+MC_ROLLRATE_P     0.14    # 4019_x500_v2 + 22.08.2026.params (default 0.15)
+MC_PITCHRATE_P    0.14    # 4019_x500_v2 + 22.08.2026.params (default 0.15)
+MC_ROLLRATE_I     0.3     # 4019_x500_v2 + 22.08.2026.params (default 0.2)
+MC_PITCHRATE_I    0.3     # 4019_x500_v2 + 22.08.2026.params (default 0.2)
+MC_ROLLRATE_D     0.004   # 4019_x500_v2 + 22.08.2026.params (default 0.003)
+MC_PITCHRATE_D    0.004   # 4019_x500_v2 + 22.08.2026.params (default 0.003)
+
+# Behaviour settings of the real vehicle. Equal to the v1.17.0 defaults; written so that the sim keeps them
+# if a default ever differs and so that every run shows where they come from.
+FLW_TGT_HT        8       # 22.08.2026.params: Follow Me height [m] (45 deg camera report, stadium setting 8/8)
+FLW_TGT_DST       8       # 22.08.2026.params: Follow Me distance to the target [m]
+FLW_TGT_ALT_M     0       # 22.08.2026.params: 0 = 2D tracking, constant altitude above home
+EKF2_HGT_REF      1       # 22.08.2026.params: height reference 1 = GPS
+EKF2_MAG_TYPE     0       # 22.08.2026.params: magnetometer fusion 0 = automatic
+MPC_YAWRAUTO_MAX  60      # 22.08.2026.params: max yaw rate in auto modes [deg/s]
+MPC_TILTMAX_AIR   45      # 22.08.2026.params: max tilt in the air [deg]

@@ -1,0 +1,66 @@
+# Takip eden yürüyüş: yuruyen_insan'ın yolu, bu kez dron hedefi stok PX4 Follow Me ile 9 m yükseklikten, 12.9 m geriden
+# izler; kamera simin varsayılan montajında, 35° aşağı (kamera.NOMINAL_TILT_DEG, models/x500_tez).
+#
+#   ~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python tez/sim/araclar/senaryo.py --senaryo takip_yuruyen
+#
+# Koordinatlar: Gazebo dünyası, x doğu, y kuzey [m]. Dron (0, 0)'dan doğuya bakarak kalkar.
+# Karar 14.11: kamera eğimi × yükseklik × mesafe taraması (v0.2 modeli CPU'da, stok Follow Me, FLW_TGT_RS 0.3) ve son
+# karar agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-17-on-kamera-acisi.md bölüm 17-18:
+# 35° · 9 m / 12.9 m, takip yolunda ve kıvrımlı yolda kapıyı (köşede ≥ 3 m, kişi sonuna kadar izlendi) kuralın üçer
+# koşusunun hepsinde geçen tek ayar (ek koşularla 10 koşunun 9'unda). Geride durma = yükseklik / tan 35° ≈ 1.43 × yükseklik: kişi düz uçuşta görüntünün ortasındadır.
+# Yolun biçimi ve zamanlaması yuruyen_insan'ınki; yol 2.9 m doğuya kaydırıldı, kişi dronun 12.9 m önünde başlar
+# (taramadaki gibi; kalkışta görüntünün ortasında).
+# 35° kamera 9 m'de yeri ≈ 6.6 m'den (yakın görüş sınırı) ≈ 34.6 m'ye kadar görür; kişi ≈ 180 px boyunda.
+# 45° montajla karşılaştırma: takip_yuruyen_45_10m (14.11'e kadarki takip_yuruyen) ve takip_yuruyen_45_8m.
+# Gerçek montaj henüz yapılmadı; gerçek uçuş ayarı ekip kararıdır (gerçek dronun 22.08 dosyasında 8/8,
+# gercek_dron.params değişmedi; öneri ve ilk uçuşta doğrulama planı belgenin 19. bölümünde, doğrulanmadı).
+# Döngü: Gazebo kamerası → model (kutu) → düz zemin konum hesabı → FOLLOW_TARGET → PX4 "Follow Target" → dron.
+# --los hakem: model yerine hedefin gerçek konumu gider (yalnız göründüğü karelerde, "mükemmel algılayıcı").
+
+ad: takip_yuruyen
+aciklama: >
+  İnsan dronun 12.9 m önünde durur; 60. saniyede doğuya yürür, 3 s durur, kuzeye koşar, sonra batıya yürür
+  (yuruyen_insan'ın yolu, 2.9 m doğuya kaydırılmış). Dron 9 m yükseklikten stok PX4 Follow Me ile hedefi 12.9 m
+  geriden izler; kamera 35° aşağı bakar (simin varsayılanı); hedefin konumu model kutusundan düz zemin hesabıyla
+  bulunur.
+
+dunya: duz_alan
+
+drone:
+  yukseklik_m: 9            # FLW_TGT_HT verilmediği için Follow Me yüksekliği de 9 m
+
+takip:
+  kaynak: follow_me         # yok | follow_me (stok Follow Me, PX4 "Follow Target") | tez_los (+ mod_adi)
+  los: model                # TEZ_LOS'un kaynağı: model (model kutusu) | hakem (doğru cevap, "mükemmel algılayıcı")
+  px4_parametreleri:        # parametre dosyalarından sonra, --param'dan önce yüklenir; koşuda PX4'ten geri okunur
+    FLW_TGT_DST: 12.9       # Follow Me: hedefin 12.9 m gerisinde dur (yükseklik / tan 35°; karar 14.11)
+    FLW_TGT_RS: 0.3         # sim seçimi, kullanıcı kararı 13.11 ("0.2 veya 0.3"); gerçek dronda 0.1 (aşağıda)
+  # FLW_TGT_RS: PX4'ün hedef kestiricisinin gürültü bastırması (PX4 0.1–1.0'a kısar; küçük = tepkisel, gürültüyü az
+  # bastırır). Varsayılan 0.1'de model kutusundan bulunan konumun bakış yönüne bağlı kayması (≈ 0.5 m) PX4'te duran
+  # kişiye ≈ 0.6 m/s'lik sahte hız yaptırıyor, PX4 kişinin rotasını değiştiriyor ve dron duran kişinin etrafında
+  # dönüyor (salınım). 0.3 bunu ölçülen her koşuda gideriyor; 0.2 üç koşunun ikisinde gidermedi. Bedeli köşelerde: PX4
+  # yeni yöne 0.5–1 s geç yetişiyor ve dron köşede kişiye daha yakın geçiyor (en az mesafe ölçülür, raporda uyarı).
+  # Gerçek dronun parametre dosyasında (22.08) 0.1; gercek_dron.params değişmedi. Ölçüm ve karar:
+  # agent-os/specs/2026-11-10-m06-sim-ortami/implementation/gorev-grubu-09.md (ve -09-on-followme-ayar.md).
+
+# Diğer bloklar varsayılanlarıyla (spec "Senaryo alanları"; komut satırı bayrakları bunları ezer):
+# kamera: {egim_deg: 35}  (varsayılan kamera.NOMINAL_TILT_DEG; tek kaynak olsun diye burada yazılmaz, --kamera-egim)
+# algilama: {etkin: true, model: ~/auto-follow-modeller/person_detection_model_v0.2.pt, conf: 0.25, cekirdek: 4}
+# gecikme: {ek_ms: 0, titresim_ms: 0, saat_ofset_ms: 0, saat_kayma_ppm: 0}
+# kusurlar: {}
+# video: {mp4: true, qgc: false}
+
+hedef:
+  tur: insan
+  baslangic: [12.9, 0]
+  yol:
+    - {nokta: [24.9, 0], hiz_mps: 1.4}
+    - {dur_s: 3}
+    - {nokta: [24.9, 10], hiz_mps: 3.0}
+    - {nokta: [14.9, 10], hiz_mps: 1.4}
+
+zamanlama:
+  baslama_s: 60
+  son_bekleme_s: 5
+
+basari: {}

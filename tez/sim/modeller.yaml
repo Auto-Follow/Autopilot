@@ -1,0 +1,28 @@
+# Model files the simulation knows (spec agent-os/specs/2026-11-10-m06-sim-ortami, "Model dosyası").
+#
+# The files themselves never go into a repo (rule 9): they live in ~/auto-follow-modeller/ (default folder,
+# araclar/algilama.py MODEL_DIR) or wherever --model / algilama.model points. araclar/algilama.py compares the sha256
+# of the file a run uses with the record here: a different digest is reported as a warning, a missing file says
+# where to get it (kaynak, alma). The shared storage place for model files is not decided yet (Hüseyin); until then
+# the source is the Vision branch below.
+#
+# Fields: ad (file name), sha256 (64 hex digits; null = not recorded yet), boyut_bayt, kaynak (where it comes
+# from), alma (how to put it into ~/auto-follow-modeller/), aciklama.
+
+modeller:
+  - ad: person_detection_model_v0.2.pt
+    sha256: c5f6838be50c2c09ca788e97381b68567f0df3f20e430905142ce88f8abaa440
+    boyut_bayt: 22525930
+    kaynak: "Vision reposu, model-training dalı, commit ebff718, models/ (Yusuf Ortatepe; geçici, ortak depolama yeri kararı bekliyor)"
+    alma: "mkdir -p ~/auto-follow-modeller && git -C <Vision klasörü> show ebff718:models/person_detection_model_v0.2.pt > ~/auto-follow-modeller/person_detection_model_v0.2.pt"
+    aciklama: "Ultralytics YOLOv8s (yolov8s.pt'den), tek sınıf {0: Person}, eğitim imgsz 640, 100 epoch; kaydeden ultralytics 8.4.174, 2026-10-09; AGPL-3.0"
+
+  # The address is the one the pinned ultralytics 8.4.174 itself would use (utils/downloads.py:
+  # attempt_download_asset(release="v8.4.0"), yolov8s.pt is in GITHUB_ASSETS_NAMES); the simulation never downloads.
+  # sha256 and boyut_bayt: null until the file is fetched by hand (tasks.md 13.4); kur.sh then prints both.
+  - ad: yolov8s.pt
+    sha256: 1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a
+    boyut_bayt: 22588772
+    kaynak: "Ultralytics stok COCO YOLOv8s, GitHub ultralytics/assets sürümü v8.4.0 (ultralytics 8.4.174'ün kendi indireceği adres); kıyas için; AGPL-3.0"
+    alma: "mkdir -p ~/auto-follow-modeller && curl -fL -o ~/auto-follow-modeller/yolov8s.pt https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt"
+    aciklama: "COCO, 80 sınıf, 0: person; v0.2'nin eğitimine başlanan ağırlık (taban yolov8s.pt)"
