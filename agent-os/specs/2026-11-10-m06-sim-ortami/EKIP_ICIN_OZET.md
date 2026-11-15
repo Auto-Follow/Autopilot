@@ -95,8 +95,11 @@ QGC 14550'de. Kod: `tez/sim/araclar/px4_baglanti.py` (`send_los`, `send_follow_t
 
 ## 7. Simi çalıştırmak (Autopilot kökünden)
 
+Kurulum adım adım (apt paketleri, venv, model dosyası, AMD `DRI_PRIME=1`): `tez/sim/README.md` → "A. Kurulum".
+
 ```bash
-tez/sim/derle.sh && tez/sim/kur.sh                     # bir kere (kurulum betiği 13. grupta tamamlanacak)
+tez/sim/derle.sh && tez/sim/kur.sh                     # bir kere; kur.sh sonda model klasörünü denetler (indirmez)
+tez/sim/araclar/f0_kabul.sh && tez/sim/araclar/f1_kabul.sh && tez/sim/araclar/m06_kabul.sh   # kabul testleri, ~11 dk
 P=~/Desktop/Projects/Auto-Follow/.venv-tez/bin/python
 $P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz          # tek koşu (~3 dk)
 $P tez/sim/araclar/toplu.py --senaryo takip_yuruyen --tekrar 3            # aynı senaryo 3 kez, dağılım
@@ -104,7 +107,8 @@ $P tez/sim/araclar/senaryo.py --senaryo takip_yuruyen --ekransiz --los hakem   #
 ```
 
 Önemli bayraklar: `--takip yok|tez_los|follow_me`, `--mod-adi`, `--model`, `--imgsz`, `--conf`, `--modelsiz`,
-`--videosuz`, `--kareleri-sakla`, `--qgc`, `--cikti`. Gecikme ve hedef kaybı denemeleri için (m06 görev grubu 12):
+`--videosuz`, `--kareleri-sakla`, `--qgc`, `--cikti`. Kendi modunla kabul testi (m06 Görev grubu 13): `tez/sim/araclar/m06_kabul.sh --mod-adi
+"<ad>" --px4-baslat "<modül> start"` (isteğe bağlı 3. koşu, aynı yedi koşul). Gecikme ve hedef kaybı denemeleri için (m06 görev grubu 12):
 `--gecikme-ms 200` (PX4'e giden her şey 200 **sim** ms geç; titreşim ve `TEZ_LOS` saat ofseti/kayması senaryonun
 `gecikme` bloğunda), `--yeniden-kilit-bekleme-s 1.5` (kilit düşünce operatör 1.5 s sonra yeniden seçer); koşuları yan
 yana koymak: `$P tez/sim/araclar/karsilastir.py <klasör A> <klasör B> [--html dosya.html]`.

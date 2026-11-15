@@ -108,6 +108,12 @@
     3. grup `algilama.py`'deki parçaları ve deneme aracı `araclar/model_dene.py`'yi verdi.
   - v0.2 bilgileri "Belgeler > Model dosyası" bölümündedir.
   - Kıyas için stok COCO `yolov8s.pt` aynı klasöre elle konur ve `--model` ile seçilir. Onun sha256 özeti uygulamada yazılır.
+    Uygulamada (13. grup): adres, sabit ultralytics 8.4.174'ün kendisinin kullanacağı adrestir
+    (`ultralytics/utils/downloads.py`: `attempt_download_asset(release="v8.4.0")`, `yolov8s.pt` `GITHUB_ASSETS_NAMES`'te):
+    `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt`; `modeller.yaml` → `kaynak` / `alma`
+    (`mkdir -p ~/auto-follow-modeller && curl -fL -o ~/auto-follow-modeller/yolov8s.pt <adres>`). Dosya bu grupta
+    **indirilmedi** (ajan ağdan indirmez); sha256 ve boyut `null` kalır, dosya elle indirilince `kur.sh` ikisini yazar,
+    `modeller.yaml`'a ve buraya işlenir (`tasks.md` 13.4 açık).
 - Model ayrı bir süreçte çalışır (`multiprocessing`, "spawn" başlatma).
   - Amaç: GIL çekişmesinden ve gz-transport'un fork sonrası sorunlarından kaçınmak.
   - Sonuçlar ana sürece FIFO kuyrukla gelir.
@@ -399,6 +405,13 @@
   Mod yalnız adıyla seçilir. Mod numarası (`nav_state` EXTERNALn, `custom_mode`) koda gömülmez.
 - SITL'de `COM_MODE_ARM_CHK=1`'dir (stok `px4-rc.simulator`). Bu yüzden modül havadayken başlatılsa da kaydolabilir.
 - `kur.sh` çalışmasının sonunda model klasörünü ve sha256 özetlerini kontrol eder ve sonucu yazar; model dosyası indirmez. Python betikleri yorumlayıcıyı `TEZ_PYTHON` ortam değişkeninden alır. Varsayılan, `VERSIONS.md`'deki ekip venv'idir.
+  Uygulamada (13. grup): `kur.sh`'ın son adımı `araclar/algilama.py` (`check_folder`, `folder_lines`; `TEZ_PYTHON` ya
+  da ekip venv'i): `modeller.yaml`'daki her dosya için `TAMAM` (sha256 ve boyut kayıtla aynı), `FARKLI` (o adla başka
+  bir dosya), `ÖZETSİZ` (dosya var, kayıtta sha256 yok: yazılacak sha256 ve boyut basılır), `EKSİK` (kaynak ve "Almak
+  için" satırıyla); klasördeki kayıtsız `.pt` dosyaları `KAYITSIZ` (kayıtlı bir dosyanın kopyasıysa söylenir). Eksik ya
+  da farklı model **uyarıdır** (çıkış 0, kurulum tamam; spec bir hata koşulu tanımlamıyor), yalnız bozuk
+  `modeller.yaml` `kur.sh`'ı hatayla bitirir. Venv yoksa denetim atlanır ve uyarı yazılır. `kur.sh`'ın eski adımları
+  (`animasyon.py`, `dunya.py`) değişmedi, sistemin `python3`'üyle çalışmaya devam ediyor ("Açık Konular").
 - README'ye eklenecekler:
   - Ön koşullar.
   - AMD hibrit GPU için `DRI_PRIME=1` notu.
@@ -569,7 +582,8 @@
 - Yayın `--qgc` ile açılır. Ayrı bir süreçtir ve kuyruğu sızdırandır; model ve kayıt hattını yavaşlatmaz.
 - apt paketleri ve sürümleri:
   - Gerekenler: `python3-gi`, `gir1.2-gstreamer-1.0`, `gir1.2-gst-plugins-base-1.0`, `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-ugly` (x264enc), `gstreamer1.0-libav` (yalnız `gst-launch` ile izlemek için), `ffmpeg`.
-  - Sürümler uygulamada `dpkg-query` ile okunup `VERSIONS.md`'ye yazılır (şimdilik TBD).
+  - Sürümler uygulamada `dpkg-query` ile okunup `VERSIONS.md`'ye yazılır (11. grupta yazıldı; aşağıda "Uygulamada";
+    13. grupta `dpkg-query -W` ile yeniden doğrulandı, aynı).
   - `gstreamer1.0-plugins-bad` (`netsim`) Faz B'de gerekir.
 - Wi-Fi gecikme/kayıp benzetimi Faz A'da yoktur (Faz B).
 - Uygulamada (11. grup, `implementation/gorev-grubu-11.md`):
@@ -805,8 +819,8 @@ flowchart LR
 | `tez/sim/calistir.sh` | değişir | `PX4_SYS_AUTOSTART=4001`, `PX4_GZ_MODEL_NAME`, `PX4_PARAM_*`; `--param`, `--px4-baslat`. 10. grupta: komutun derlemede olduğu sim açılmadan denetlenir, `px4-logger status` beklenir, komutlar arka planda sırayla, sonuç satırları sim log'una |
 | `araclar/parametreler.py` | yeni | `.params` ayrıştırma, yükleme sırası, `PX4_PARAM_*` satırları; F0 için geri okunan değerin karşılaştırılması |
 | `tez/sim/derle.sh` | değişir | `--harici`, değişince yeniden yapılandırma; `tez/px4` yoksa stok derleme. 10. grupta: klasör denetimi (`src/CMakeLists.txt`, `PARENT_SCOPE` uyarısı), mutlak yol, derlemeden çıkan modüllerin `bin/px4-*` bağlantılarının silinmesi |
-| `tez/sim/kur.sh` | değişir | Sonda model klasörü ve sha256 kontrolü (indirmez) |
-| `tez/sim/modeller.yaml` | yeni | Bilinen model dosyaları: ad, sha256, boyut, kaynak |
+| `tez/sim/kur.sh` | değişir | Sonda model klasörü ve sha256 kontrolü (indirmez). 13. grupta: son adım `araclar/algilama.py` (`check_folder`, `folder_lines`, `main`; tek başına `algilama.py [--klasor]`) |
+| `tez/sim/modeller.yaml` | yeni | Bilinen model dosyaları: ad, sha256, boyut, kaynak. 13. grupta: `yolov8s.pt`'nin `kaynak` / `alma`'sı (ultralytics 8.4.174'ün adresi; sha256 ve boyut indirilince) |
 | `araclar/goruntu.py`, `kusurlar.py`, `algilama.py` | yeni | Kare okuyucu, kusur aşaması (Faz A kapalı), algılayıcı arayüzü + YOLO + model süreci |
 | `araclar/model_dene.py` | yeni (3. grup) | Modeli bir resimde ya da bir senaryonun Gazebo karelerinde (PX4'süz) dener; model ve hakem kutularını çizer, `model_ms` yazar |
 | `araclar/takip.py`, `konumlama.py`, `gecikme.py` | yeni | Hedef seçimi, LOS (i)/(ii), gönderim döngüsü; düz zemin konum hesabı; gecikme hattı + saat modeli. 5. grupta: `takip.py`, `gecikme.py` 1. kısım (sıra koruyan hat), `kayit.py`'ye canlı hakem akışı, `tez_los.csv`. 6. grupta: `konumlama.py` (konum, poz geçmişi, PX4 ve Gazebo enlem/boylam dönüşümleri), `takip.py`'ye konum + FOLLOW_TARGET, `follow_target.csv`; `px4_baglanti.py`'ye `FrameStream`, `FollowTargetSender`, `pose_hook`; `simulasyon.py`'ye `restart_logger` |
@@ -814,7 +828,7 @@ flowchart LR
 | `araclar/olcum.py`, `karsilastir.py` | yeni | Model/LOS/zaman/takip ölçütleri; koşuları yan yana koyma. 12. grupta: `karsilastir.py` (koşu ve `toplu.py` klasörleri, terminal + `--html`). 7. grupta: `olcum.py` (bütün ölçütler, ULog özeti). 9.8 ön işinde: `olcum.follow_start_metrics` (takip başında konum titreşimi ve PX4'ün sahte hızı). 9. grupta: köşeler (`legs`, `corner_metrics`; 9.8'in repo dışı betiğinden taşındı), 6 m altı geçişler ve sebepleri (`near_passes`, `decompose`), PX4'ün Follow Target iç durumu dünyada (`Px4Follow`: kestirim, görevin süzülmüş hedefi, ayar noktası) |
 | `araclar/tarama.py` | yeni (Görev Grubu 17 öne alındı, 14.11) | Kamera eğimi × yükseklik × mesafe taraması: ızgara ve her bileşimin senaryosu (kaydırılmış yol), `toplu.py` ile koşma ve kaldığı yerden sürme (`durum.json`), kapılar, grup puanları, aşama 2 adayları, geometrik paylar ve ölçülen yaklaşma; `hedef.py`'ye `kamera.egim_deg` ve modelin eğimli kopyası, `kamera.py`'ye `NOMINAL_TILT_DEG` ve `tilt_of_mount`, `takip.py` / `konumlama.py` / `olcum.py` / `rapor.py` / `video.py` / `senaryo.py`'ye eğim |
 | `araclar/toplu.py` | yeni (7. grup) | Aynı senaryonun N koşusu ve dağılımı (karar 4, 12.11): `toplu.json`, `toplu.csv`, `toplu.html`. 9. grupta: köşelerin koşu koşu tablosu, her koşunun 6 m altı geçişleri ve sebepleri |
-| `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi |
+| `araclar/m06_testi.py`, `m06_kabul.sh` | yeni | m06 SITL kabul testi. 13. grupta: her koşu ayrı bir `senaryo.py` süreci (`toplu.command`), yedi koşul `ozet.json`, ULog başlığı (`SYS_AUTOSTART`), `ffprobe` ve `verify_pin.sh` ile; `simulasyon.LEFT_RUNNING`, `rapor.MODE_KEPT`, `toplu.wait_until_closed` ortak kullanılır |
 | `araclar/px4_baglanti.py`, `simulasyon.py` | değişir | 6. ve "Yararlanılacak Mevcut Kod" maddelerindeki değişiklikler. 10. grupta `simulasyon.py`: `px4_start`, `external_mode`, başlatma komutlarını bekleyen `wait_ready`, `start_results`, `unresponsive`; `senaryo.py`: `simulation()`, harici modun adını bekleme, "unresponsive" → TAMAMLANMADI, `ozet.json` → `harici_mod`; `olcum.with_mode_name` |
 | `araclar/senaryo.py`, `hedef.py`, `rapor.py`, `onizleme.py` | değişir | Yeni alanlar, bayraklar, süreçler, ölçütler, MP4. 3. grupta: `onizleme.capture()` / `people_of()` ayrıldı, `hedef.read_detection()` herkese açık oldu (`model_dene.py` kullanır) |
 | `araclar/f0_testi.py`, `f1_testi.py` | değişir | Stok modlar + parametre doğrulaması; `--modelsiz` |
@@ -822,9 +836,9 @@ flowchart LR
 | `testler/test_*.py` | yeni | "Test Planı"ndaki birim testleri |
 | `tez/sim/ruff.toml` | değişir | `known-first-party`'ye yeni modüller |
 | `tez/sim/server.config`, `parametreler/sim.params`, `worlds/*.sdf`, `testler/test_manyetometre.py` | değişir / yeni (7. grup, iş A) | Gazebo manyetometre sistemi kapalı, PX4 `sensor_mag_sim` (`SENS_EN_MAGSIM 1`); dünyaların `<magnetic_field>`'ı PX4 WMM değeri; neden ve değerler testli |
-| `tez/sim/README.md` | değişir | (b) yolu, kurulum, kılavuz, AMD, QGC; `TEZ_` ön eki ve "kilit listesinde izinli iki dosya" ifadeleri düzeltilir |
+| `tez/sim/README.md` | değişir | (b) yolu, kurulum, kılavuz, AMD, QGC; `TEZ_` ön eki ve "kilit listesinde izinli iki dosya" ifadeleri düzeltilir. 13. grupta yeniden düzenlendi: A. Kurulum (ön koşullar, A1–A7), B. Çalıştırma (B1–B6, kabul testleri), C, Ayrıntılar, Sorun giderme, Dosyalar (iki eski ifade önceki gruplarda kalkmıştı; `ruff.toml`'daki `../Vision/.venv` yorumu 13. grupta ekip venv'ine döndü) |
 | `tez/env/model-requirements.txt` | yeni | `ultralytics` 8.4.174, `torch` 2.14.1+cpu, `torchvision` 0.29.2+cpu ve bütün bağımlılıklar sabit sürümle (3. grup) |
-| `tez/env/VERSIONS.md` | değişir | Model paketleri, video apt paketleri, `libfuse2t64`, AGPL notu, `DRI_PRIME` |
+| `tez/env/VERSIONS.md` | değişir | Model paketleri, video apt paketleri, `libfuse2t64`, AGPL notu, `DRI_PRIME`. 13. grupta: AMD hibrit (`DRI_PRIME=1`) bölümü, QGC kurulumunda `libfuse2t64`, AGPL tablo 1'de, model dosyaları (v0.2, `yolov8s.pt` adresi), sürüm kontrolüne `pip check` / model klasörü / `dpkg-query` / `glxinfo`; sürüm değişmedi |
 
 Sürüm sabitliği (kural 4) için:
 - `ultralytics`, `torch` ve `torchvision` sürümleri uydurulmaz. Uygulamada Python 3.12 / x86_64 için kurulabilir olan CPU sürümü denenir ve temiz bir venv'den `pip freeze` ile alınır. `ultralytics`'in çektiği `opencv-python`, `analiz-requirements.txt`'teki 5.0.0.93 ile uyumlu olmalıdır.
@@ -880,7 +894,7 @@ gelene kadar o ayar varsayılan dışında verilirse koşu simülasyon açılmad
 4. Ölçütler, rapor ve MP4.
 5. `derle.sh --harici`, `--px4-baslat`, README kılavuzu.
 6. QGC yayını, yapay gecikme ve saat ayarları, `karsilastir.py`.
-7. `m06_kabul.sh`, `VERSIONS.md` / `model-requirements.txt`, son README.
+7. `m06_kabul.sh`, `VERSIONS.md` / `model-requirements.txt`, son README. (13. grupta yapıldı; `implementation/gorev-grubu-13.md`.)
 
 **En az demo (15.11):**
 - `takip_yuruyen` senaryosu v0.2 modeliyle (CPU) ve stok Follow Me ile kapalı döngüde uçar.
@@ -1157,6 +1171,8 @@ bileşim 3'er koşu (+ mükemmel algılayıcı ve kıvrımlı yol). Kapı: her k
 | Dosyadaki üst veri | Ultralytics `DetectionModel`; taban `yolov8s.pt`; görev `detect`; tek sınıf `{0: 'Person'}`; eğitim `imgsz` 640, 100 epoch, batch 32, doğrulama `iou` 0.7; kaydeden sürüm 8.4.174; tarih 2026-10-09; veri `/content/person-1/data.yaml`; lisans AGPL-3.0 |
 | Ultralytics ile yükleyince (11.11, 3. grup) | Üst satırın hepsi doğrulandı (ultralytics 8.4.174 + torch 2.14.1+cpu). Ek olarak: adım (stride) 32 px; 11.1 M parametre; optimizer SGD, `lr0` 0.002, `seed` 42, önceden eğitilmiş ağırlıkla; `conf` eğitimde verilmemiş (önerilen değer yok, varsayılan 0.25 kalır); son (sadeleştirilmiş) checkpoint. Dosyadaki eğitim doğrulama ölçütleri (Ortatepe'nin veri setinde, bizim ölçümümüz değil): precision 0.949, recall 0.878, mAP50 0.933, mAP50-95 0.582 |
 | Okunma şekli | İlk satır bayt taramasıyla okundu; 11.11'de dosya ultralytics ile yüklenerek doğrulandı. Ortatepe'nin teyidi (önerdiği `conf`/`iou`, eğitimdeki torch sürümü, veri setinde eğik/üstten görüntü olup olmadığı) bekleniyor |
+| Ortatepe'nin teyidi (13. grup, 15.11) | **Gelmedi.** Tablo dosyadan okunan ve ultralytics ile doğrulanan değerlerle kalır; `conf` 0.25 ve `imgsz` 640 varsayılanları değişmedi. Teyit gelince bu tablo güncellenir |
+| Kıyas modeli `yolov8s.pt` (13. grup) | Stok COCO YOLOv8s (v0.2'nin eğitimine başlanan ağırlık). Adres `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt` (ultralytics 8.4.174'ün kendi adresi); sha256 ve boyut dosya elle indirilince yazılacak (`modeller.yaml`, `tasks.md` 13.4) |
 | Laptop CPU'sunda hız (11.11, Ryzen 7 5800H, Gazebo kapalıyken) | `imgsz` 640, 4 çekirdek: kare başına `model_ms` ≈ 56–66 ms (kare ortalaması; ilk çağrı ≈ 1.0–1.1 s, kurucuda ısınma olarak); 8 çekirdek ≈ 46 ms; `imgsz` 1280, 4 çekirdek ≈ 230–475 ms |
 | Sim koşusu sırasında (11.11, 4. grup, `kalabalik_park`, PX4 + Gazebo açık, kayıt penceresi) | 4 çekirdek: `model_ms` ort. 85 ms (p95 92), işlenen 13.7 kare/sim-s, atlanan %55, RTF 0.84; 2 çekirdek: `model_ms` 135 ms, 7.8 kare/sim-s, atlanan %74, RTF 0.93. Kare model sürecine ≈ 31 ms'de ulaşır, modeli ≈ 18 ms bekler; sonuç kareden ≈ 120–140 sim-ms sonra hazırdır. Geçici IoU kontrolü: hedefin göründüğü 325 işlenmiş karenin 237'sinde bir model kutusu hedefle IoU ≥ 0.5 (en iyi 0.94) |
 
@@ -1369,6 +1385,7 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
 | `test_video.py` | Tek karelik birleşim (2000×720, çift boyutlar, kutuların yeri); taklit `subprocess` ile ffmpeg komutunda `libx264`, `yuv420p`, `+faststart`. 8. grupta ayrıca: PX4'ün o anda elindeki model sonucu, kameranın yerdeki izdüşümü, kuşbakışı ölçek ve kuzey, durum satırı, küçük bir koşu klasöründen bütün video, kare–ızgara eşlemesi, `onizleme.py`'nin MP4'ü. 14.11'de: durum satırında "YANLIŞ KİŞİ" (aynı kıyafetli kişi dahil) ve bir koşu klasöründe anların ölçütün kuralıyla bulunması (`test_olcum.py`: kuralın kendisi) |
 | `test_goruntu_yayini.py` (8. grup) | Kare seçimi (sim zamanında 15 fps ızgarası, pencere, kaybolan kare), 1280×720 JPEG, dolu kuyrukta kare düşürme ve sayma. 11. grupta: UDP 5610 kutu mesajının gidiş-dönüşü, iki taraflı reddi (sonlu olmayan, aralık dışı, bilinmeyen / eksik alan, çok kutu, büyük mesaj) ve gerçek soketle alınması; `Tracker`'ın mesajı (kutular, seçilen, o karenin hakem kutusu, "hedef yok"; modelsiz hakem kaynağı); GStreamer hattının spec'teki öğe ve ayarları, `yayin.sdp`; gerçek hatla uçtan uca: itilen karelerin H.264 RTP alıcısından seçili kutu kırmızı, hakem kutusu mavi doğru yerde çıkması; tek başına modun yalnız kendi model kutuları, hakemsiz, seçimsiz ve MAVLink'siz olması (`--qgc`'siz çıkış kodu 2); tek işçinin her kareyi bir kez okuyup hem yayına hem kayda vermesi, bekleyen daha yeni karede yayının eskiyi atlaması; kareleri model sürecinden paylaşılan bellekle alması ("spawn" süreçten bayt bayt aynı ızgara kareleri, geride kalınca üzerine yazılan yuvanın atılması, okunduktan sonra üzerine yazılan karenin kullanılmaması, sığmayan kare ve sürecin sonu). `test_video.py`: etiketin kendi kutusunda çizilmesinin bütün karede çizimle piksel piksel aynı olması (kesirli ve negatif konum, kenar) |
 | `test_hedef.py` (eklenir) | Yeni senaryo alanları; hatanın alan adıyla verilmesi; `tez_los`'ta `mod_adi` zorunluluğu |
+| `test_m06_testi.py` (13. grup) | m06 kabul testinin `ozet.json` anahtar denetimi (spec tablosunun bütün anahtarları, `null` sayılır, eksik anahtar adıyla, `olcutler` yoksa hepsi eksik, `rapor.html` yoksa kalır) ve `TEZ_LOS` sayısının gönderilenin ±%5'i olması (sınırda %5 geçer, %6 kalır, hiç gönderilmeyen ya da ULog'da hiç olmayan kalır). `test_algilama.py`'de ayrıca: `kur.sh`'ın model klasörü denetimi (`TAMAM` / `FARKLI` / `ÖZETSİZ` / `EKSİK` / `KAYITSIZ`, "Almak için" satırı, klasör yoksa `mkdir -p`, eksik modelde çıkış 0) ve `yolov8s.pt` kaydının adresi |
 | `test_harici_mod.py` (10. grup) | `takip.px4_baslat` + `--px4-baslat`'ın `calistir.sh`'a sırayla (parametrelerden sonra) gitmesi, bağlı olması ve harici adın sim açılmadan reddedilmemesi; "unresponsive"ın yalnız başlatma komutlu koşuda aranması (stok koşuda aynı satır sorun sayılmaz); `wait_ready`'nin rcS + komutların bitişini (her iki sırada) beklemesi, başarısız komutta ve gelmeyen logger'da `False` dönmesi, `calistir.sh`'ın aynı satırları yazması; `calistir.sh`'ın derlemede olmayan / boş / değersiz komutu sim açılmadan çıkış kodu 2 ile reddetmesi (derleme yoksa atlanır). Ayrıca `test_olcum.py`: harici yuvanın ("External 1") koşunun seçtiği adla yazılması |
 
 **SITL kabul testleri** (pencere yok)
@@ -1378,7 +1395,7 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
   - "Hold" ve "Follow Target" AVAILABLE_MODES listesinde.
   - 10 m'ye kalkış; Hold'da 15 s konum tutma (sapma < 0.5 m); iniş ve disarm; temiz kapanış.
 - `f1_kabul.sh` (`--modelsiz`, `takip.kaynak: yok`): iki koşunun hedef farkı ≤ 0.15 m olmaya devam eder.
-- `m06_kabul.sh` (yeni, ~8–10 dk): koşu 1 `takip_yuruyen` (`follow_me`, model); koşu 2 `kalabalik_park` (`yok`, model). İsteğe bağlı koşu 3: `--mod-adi "<ad>" --px4-baslat "<komut>"`, takılmış bir modül varsa. Geçme koşulları işlevseldir, başarım eşiği değildir:
+- `m06_kabul.sh` (yeni, ~8–10 dk; 13. grupta ölçülen 4 dk 55 s, koşu 3 ile 7 dk 15 s): koşu 1 `takip_yuruyen` (`follow_me`, model); koşu 2 `kalabalik_park` (`yok`, model). İsteğe bağlı koşu 3: `--mod-adi "<ad>" --px4-baslat "<komut>"`, takılmış bir modül varsa. Geçme koşulları işlevseldir, başarım eşiği değildir:
   1. `verify_pin.sh --worktree` geçer; parametreler F0'daki gibi doğrulanır.
   2. Model yüklenir ve sha256 yazılır. En az bir işlenmiş karede hedefle IoU ≥ 0.5 kutu bulunur; model gerçekten görüntüde çalışıyordur.
   3. ULog'da `TEZ_LOS` adlı `debug_vect` vardır; sayısı gönderilen mesaj sayısının ±%5'i içindedir.
@@ -1390,6 +1407,19 @@ her 100–200 ms'de RS 0.1'de %83 ağırlıkla alır) duran kişideki sahte hız
      ile yapılır, 9. madde.)
   6. `ozet.json`'da "Ölçüt Tanımları"ndaki bütün anahtarlar bulunur (değer NaN olabilir); `rapor.html` yazılır.
   7. Temiz kapanış; harici modlu koşuda "unresponsive" görülmez.
+
+  Uygulamada (13. grup, `araclar/m06_testi.py` + `m06_kabul.sh`, `f0_testi.py`'nin OK / HATA ve "SONUÇ: GEÇTİ / KALDI"
+  düzeni): her koşu ayrı bir `senaryo.py` süreci (`--ekransiz`, `toplu.command`; açıkça `--takip follow_me|yok --los
+  model`), çıktı `tez/sim/sonuclar/<tarih>_m06_kabul/kosu<i>_<senaryo>/` + günlüğü (`--cikti` ile başka yer; dolu
+  klasör reddedilir). 1: `verify_pin.sh` bir kez; her koşuda `ayarlar.px4_parametreleri`'nin her satırı PX4'ten geri
+  okunan değerde, iki `.params` dosyasının her adı yüklü, `SYS_AUTOSTART` ULog başlığından (pyulog, 4001). 2:
+  `ayarlar.algilama.model_bilgisi` dolu, sha256 64 onaltılık, `iou05_kare_sayisi` ≥ 1. 3: `tez_los_px4_sayisi` /
+  `tez_los_gonderilen`, sınır `senaryo.TEZ_LOS_ULOG_TOLERANCE`. 4: bütün koşulara uygulanır (koşunun modu adıyla
+  seçildi ve `mod_korunma_orani` ≥ `rapor.MODE_KEPT` 0.999), `follow_me`'de ayrıca `follow_target_px4_sayisi` > 0. 5:
+  `ffprobe` (codec, pix_fmt, boyut, süre) − `olcutler.kayit_suresi_s`. 6: `olcum.KEYS`. 7: koşudan sonra çalışan
+  PX4 / Gazebo yok ve olaylarda `simulasyon.LEFT_RUNNING` yok; `--px4-baslat`'lı koşuda `harici_mod.unresponsive` boş.
+  Ayrıca koşu `TAMAMLANMADI` olmamalı (`KALDI` yalnız senaryonun `basari` eşiklerinden gelir, m06 koşulu değildir).
+  İsteğe bağlı koşu 3: `takip_yuruyen --takip tez_los --mod-adi <ad> --los model [--px4-baslat ...]`.
 
 **Görsel kontrol** (Ahmet, VLC'de `kosu.mp4`):
 - Model kutusu hedefin üstünde ve gecikmesi gözle görülebiliyor.
@@ -1437,6 +1467,13 @@ Düzeltme, sorunun gösterildiği sahnede yeniden koşularak doğrulanır.
 7. Karşılaştır: aynı senaryoyu `--takip follow_me` ile de koş, sonra `karsilastir.py sonuclar/A sonuclar/B`.
 8. Gerçek kart: `make px4_fmu-v6c_default EXTERNAL_MODULES_LOCATION=$PWD/tez/px4`. Flash ~%98 dolu; taşarsa repo sorumlusuna haber ver. Kartta başlatma (`etc/extras.txt`) m15/m16'nın işidir.
 
+Uygulamada (13. grup): README "A. Kurulum (bir kez)" (ön koşullar; A1 PX4 + submodule + kilit, A2 apt paketleri ve
+QGC için `libfuse2t64`, A3 `requirements-lock.txt` + venv + model paketleri, A4 model dosyası ve isteğe bağlı
+`yolov8s.pt`, A5 `derle.sh` + `kur.sh` (beklenen model satırları), A6 AMD `DRI_PRIME=1` / NVIDIA, A7 F0 / F1 / m06) ve
+"B. Çalıştırma" (B1 senaryo, B2 sonuçlar, B3 `toplu.py` / `karsilastir.py`, B4 QGC canlı video, B5 elle uçuş, B6 kabul
+testleri) olarak yazıldı; taslaktan farkı: A3'e `requirements-lock.txt` (`~/.local`; model paketlerinin numpy /
+matplotlib'i oradan gelir) eklendi, A7'ye F1 eklendi; README'nin sonuna "Sorun giderme" tablosu eklendi.
+
 Uygulamada (10. grup): C bölümü `tez/sim/README.md`'ye "C. Kendi PX4 modülünü takmak" olarak girdi (A ve B adımları
 README'nin "Kurulum", "Çalıştırma", "Senaryolar" bölümlerinde; 13. grup tamamlar). Taslaktan farklar: C2'ye
 commander'ın "unresponsive" kuralı (300 ms'de bir istek, 50 ms cevap süresi, art arda 3 / kayıttan sonra 10 cevapsız)
@@ -1478,8 +1515,10 @@ mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Ya
   - Çatıdaki `tech-stack.md` / `docs/02` güncellemesi.
   - Gazebo standardındaki "NVIDIA'da çalışmalı" ifadesinin AMD (`DRI_PRIME=1`) için genişletilmesi. Bu, `agent-os-profilleri/` üzerinden yapılır.
   - Geri bildirim mesajının (`Huseyine_geri_bildirim.txt`) gönderilip gönderilmediği bilinmiyor.
-- **Yusuf Ortatepe'den:** "Model dosyası" bölümündeki üst verinin teyidi; önerdiği `conf`/`iou`; eğitimde kullandığı `ultralytics`/`torch` sürümleri; veri setinde eğik açıdan (dron) görüntü olup olmadığı; v0.2'nin doğru seçim olup olmadığı. Soru listesi repo dışında (`~/Desktop/Follow/Yusuf_Ortatepe_model_sorulari.txt`).
-- **Yusuf Kurt / Yusuf Algan'dan:** modülün yeri (harici `tez/px4` mi, ağaç içi + kilit listesi mi) ve başlatma komutu, `TEZ_LOS` biçiminin uygunluğu, `time_usec` ihtiyacı (PX4 bu alanı düşürüyor). Ekipten gelen bilgi (09.11, Yusuf Algan; kesinleşmiş değil, m15/m16 spec'inde yazılınca o geçerli): mod adı **"AUTO FOLLOW"** (QGC'de böyle görünecek), parametre öneki **`AF_`** (`AF_XXX`); m15/m16 spec'inde kesinleşince "Varsayımlar" 8 güncellenir.
+  - Durum (15.11, 13. grup): bu maddelerin hiçbirine cevap gelmedi; m06 varsayılanlarla ilerledi (model yeri
+    `~/auto-follow-modeller/` + `--model`, `modeller.yaml`'daki `kaynak` geçici).
+- **Yusuf Ortatepe'den:** "Model dosyası" bölümündeki üst verinin teyidi; önerdiği `conf`/`iou`; eğitimde kullandığı `ultralytics`/`torch` sürümleri; veri setinde eğik açıdan (dron) görüntü olup olmadığı; v0.2'nin doğru seçim olup olmadığı. Soru listesi repo dışında (`~/Desktop/Follow/Yusuf_Ortatepe_model_sorulari.txt`). Durum (15.11, 13. grup): **teyit gelmedi**; "Model dosyası" tablosu dosyadan okunan ve doğrulanan değerlerle kaldı.
+- **Yusuf Kurt / Yusuf Algan'dan:** modülün yeri (harici `tez/px4` mi, ağaç içi + kilit listesi mi) ve başlatma komutu, `TEZ_LOS` biçiminin uygunluğu, `time_usec` ihtiyacı (PX4 bu alanı düşürüyor). Modül gelince kabul testi hazır: `m06_kabul.sh --mod-adi "<ad>" --px4-baslat "<komut>"` (isteğe bağlı 3. koşu, 13. grupta iskelet modülle denendi: `implementation/gorev-grubu-13.md` 5). Ekipten gelen bilgi (09.11, Yusuf Algan; kesinleşmiş değil, m15/m16 spec'inde yazılınca o geçerli): mod adı **"AUTO FOLLOW"** (QGC'de böyle görünecek), parametre öneki **`AF_`** (`AF_XXX`); m15/m16 spec'inde kesinleşince "Varsayımlar" 8 güncellenir.
 - **Ortak spec'ler** (m03/m04/m05) yazılınca "Varsayımlar" ve ilgili kod güncellenir: `TEZ_LOS` biçimi, frame, zaman damgası, "hedef yok".
 - **Gerçek araçta `follow_target*` konularının kaydı (6. grupta bulundu, karar Hüseyin / Kurt ile, m17/m22/m25; 12.11
   kullanıcı: şimdi çözülmez, açık konu olarak kalır):**
@@ -1541,7 +1580,25 @@ mesafe taraması, `implementation/gorev-grubu-17-on-kamera-acisi.md`; sonuç "Ya
   listeler. Ayrıca bu durumda rapor yazılmadan çıkan bir hata vardı (ULog'da `debug_vect` yokken); düzeltildi, testli.
 - **Model bu açıdan kişiyi sık kaçırıyor (6. grupta ölçüldü, m08 / Ortatepe):** `takip_yuruyen`'de (8 m / 45°) hedef
   açıkça görünürken işlenen karelerin %26–34'ünde hiç kutu yok (dört koşu).
-- **Uygulamada sabitlenecek sürümler (TBD):** COCO `yolov8s.pt`'nin sha256 özeti. (`ultralytics`, `torch`/`torchvision` ve bağımlılıkları 3. grupta, `ffmpeg` 7:6.1.1-3ubuntu5 (libx264-164 2:0.164.3108+git31e19f9-1) 8. grupta, GStreamer 1.24.2 apt paketleri, `python3-gi` 3.48.2-1 ve `libfuse2t64` 2.9.9-8.1build1 11. grupta sabitlendi.)
+- **Uygulamada sabitlenecek sürümler:** kalan tek boşluk COCO `yolov8s.pt`'nin sha256 özeti ve boyutu (bir paket
+  sürümü değil, kıyas modelinin dosyası). 13. grupta adresi yazıldı (ultralytics 8.4.174'ün kendi adresi, "Model
+  dosyası"); dosya ajan tarafından indirilmedi, elle indirilince `kur.sh` ikisini yazar ve `modeller.yaml` ile buraya
+  işlenir (`tasks.md` 13.4 açık). Geri kalan her şey sabit ve 15.11'de yeniden doğrulandı: `ultralytics`,
+  `torch`/`torchvision` ve bağımlılıkları 3. grupta (ekip venv'inde `model-requirements.txt` 29/29, `pip check` temiz),
+  `ffmpeg` 7:6.1.1-3ubuntu5 (libx264-164 2:0.164.3108+git31e19f9-1) 8. grupta, GStreamer 1.24.2 apt paketleri,
+  `python3-gi` 3.48.2-1 ve `libfuse2t64` 2.9.9-8.1build1 11. grupta (`dpkg-query -W` ile aynı).
+- **`kur.sh`'ın eski adımları sistemin `python3`'üyle (13. grupta bulundu, karar kullanıcı / Hüseyin):** 7. özel
+  gereksinim "Python betikleri yorumlayıcıyı `TEZ_PYTHON`'dan alır, varsayılan ekip venv'i" der; `kur.sh`'ın yeni model
+  denetimi buna uyar, ama eski `animasyon.py` ve `dunya.py` çağrıları hâlâ `python3` ile (sistem numpy / PIL / PyYAML).
+  Ekip venv'ine geçirmek dünyaların sabit sürümlerle üretilmesini sağlar; bu makinede dünya yeniden üretilmez (girdi
+  özeti değişmez) ama yeni bir makinede çıktı venv'in numpy / pillow'uyla üretilir. Önerildi, uygulanmadı.
+- **Bu makinede `~/.local` sürüm kayması (13. grupta bulundu, rapor edildi):** `requirements-lock.txt` `coverage==7.16.1`
+  ve `fonttools==4.66.0` der; `~/.local`'da 7.16.2 ve 4.66.1 kurulu (kural 4). m06'nın sonuçlarını etkilemesi
+  beklenmez (pytest kapsamı ve matplotlib'in yazı tipi aracı); düzeltmek kullanıcının kararı:
+  `pip install --user --break-system-packages -r tez/env/requirements-lock.txt`.
+- **ULog birikmesi (13. grupta bulundu):** PX4 her açılışın ULog'unu `build/px4_sitl_tez/rootfs/log/` altında tutar
+  (koşular kopyasını kendi klasörüne alır); bu makinede 14 GB birikmiş. README "Sorun giderme"de yazılı; kendiliğinden
+  temizleme eklenmedi (karar kullanıcının).
 - **Yeniden kilidin zamanı (5. grupta, karar m11 / kullanıcı ile):** kilit düşünce hakem bir sonraki işlenen karede
   yeniden kilitler; operatörün tepki süresi 0'dır (iyimser). `kalabalik_park`'ın ilk denemelerinde kısmi örtülmede kilit
   kaybından 70–200 ms sonra yeniden kilit görüldü. Gerçekte operatör ~1–2 s sonra tıklar ya da m11'in otomatik yeniden bulma yöntemi devreye girer.

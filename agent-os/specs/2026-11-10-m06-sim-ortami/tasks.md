@@ -544,16 +544,24 @@ gecikme sim saatinde (`ek_gecikme_ms` artık sim ms), titreşim netem kuralı ve
 #### Görev Grubu 13: `m06_kabul.sh`, `kur.sh` model kontrolü, sürümlerin ve README'nin tamamlanması
 **Bağımlılık:** Görev Grupları 10–12 · **Emek:** ~0.75 gün
 
-- [ ] 13.0 Takım arkadaşının klonlayıp birkaç betikle simi ayağa kaldırabilmesi; PR'ın hazır olması
-  - [ ] 13.1 Testleri yaz (2–3 test): `m06_testi.py`'nin `ozet.json` anahtar denetimi ve `TEZ_LOS` sayısı ±%5 karşılaştırması (elle hazırlanmış örneklerle)
-  - [ ] 13.2 `araclar/m06_testi.py` + `m06_kabul.sh` (`f0_testi.py` "GEÇTİ/KALDI" düzeni): koşu 1 `takip_yuruyen` (`follow_me`, model), koşu 2 `kalabalik_park` (`yok`, model), isteğe bağlı koşu 3 (`--mod-adi`, `--px4-baslat`); spec "Test Planı"ndaki 7 geçme koşulu
-  - [ ] 13.3 `kur.sh`: sonda model klasörünü ve sha256 özetlerini `modeller.yaml`'a göre kontrol edip yazar; indirmez
+- [ ] 13.0 Takım arkadaşının klonlayıp birkaç betikle simi ayağa kaldırabilmesi; PR'ın hazır olması (15.11: 13.4 dışında tamam; 13.4 `yolov8s.pt`'nin elle indirilmesini bekliyor)
+  - [x] 13.1 Testleri yaz (2–3 test): `m06_testi.py`'nin `ozet.json` anahtar denetimi ve `TEZ_LOS` sayısı ±%5 karşılaştırması (elle hazırlanmış örneklerle)
+    (Uygulamada: `test_m06_testi.py` 2 test (bütün `olcum.KEYS`, `null` sayılır, eksik anahtar adıyla, `olcutler` yok, `rapor.html` yok; ±%5 sınırı: %5 geçer, %6 kalır, hiç gönderilmeyen / ULog'da olmayan kalır) + `test_algilama.py` 1 test (`kur.sh`'ın model klasörü denetimi), `yolov8s.pt` kaydının adresi mevcut teste eklendi. Üçü de kod yokken kırmızıydı. 309 → 312.)
+  - [x] 13.2 `araclar/m06_testi.py` + `m06_kabul.sh` (`f0_testi.py` "GEÇTİ/KALDI" düzeni): koşu 1 `takip_yuruyen` (`follow_me`, model), koşu 2 `kalabalik_park` (`yok`, model), isteğe bağlı koşu 3 (`--mod-adi`, `--px4-baslat`); spec "Test Planı"ndaki 7 geçme koşulu
+    (Uygulamada: her koşu ayrı bir `senaryo.py` süreci (`toplu.command`), çıktı `tez/sim/sonuclar/<tarih>_m06_kabul/kosu<i>_<senaryo>/` (`--cikti`; dolu klasör reddedilir); koşul 1'de `verify_pin.sh` bir kez + her koşuda geri okunan parametreler ve ULog başlığından `SYS_AUTOSTART`; koşul 4 her koşuya (mod adıyla seçildi ve korundu), `follow_target` yalnız `follow_me`'de; ayrıca "koşu tamamlandı" (`TAMAMLANMADI` kalır). Ortak sabitler: `simulasyon.LEFT_RUNNING`, `rapor.MODE_KEPT`, `toplu.wait_until_closed`. Ayrıntı: `implementation/gorev-grubu-13.md` 2.)
+  - [x] 13.3 `kur.sh`: sonda model klasörünü ve sha256 özetlerini `modeller.yaml`'a göre kontrol edip yazar; indirmez
+    (Uygulamada: son adım `araclar/algilama.py` (`check_folder`, `folder_lines`, `main`; `TEZ_PYTHON` ya da ekip venv'i): `TAMAM` / `FARKLI` / `ÖZETSİZ` / `EKSİK` (+ kaynak ve "Almak için") / `KAYITSIZ`; eksik model uyarıdır, `kur.sh` 0 ile biter; yalnız bozuk `modeller.yaml` hatadır. Bu makinede: v0.2 `TAMAM`, `yolov8s.pt` `EKSİK`.)
   - [ ] 13.4 COCO `yolov8s.pt`: elle indirilip `~/auto-follow-modeller/`'a konur; kaynak adresi, boyutu ve sha256 `modeller.yaml`'a ve spec'e yazılır; `--model` ile bir kıyas koşusu `karsilastir.py`'ye girer
-  - [ ] 13.5 `VERSIONS.md`'yi tamamla: `libfuse2t64`, `DRI_PRIME=1` notu, AGPL notu; `model-requirements.txt` ile tutarlılık
-  - [ ] 13.6 `tez/sim/README.md`'yi (b) yoluna göre yeniden yaz: ön koşullar, kılavuz A/B/C, AMD `DRI_PRIME=1`, QGC `libfuse2t64`; `TEZ_` ön eki ve "kilit listesinde izinli iki dosya" ifadeleri düzeltilir; ruff komutu `../Vision/.venv` yerine ekip venv'ini (`$P -m ruff`) kullanır
-  - [ ] 13.7 Spec'i güncelle: "Açık Konular"daki durumlar; "Uygulamada sabitlenecek sürümler (TBD)" doldurulur; Ortatepe teyidi geldiyse "Model dosyası" tablosu; `implementation/` notları tamamlanır
-  - [ ] 13.8 (İsteğe bağlı, zaman kalırsa) Scratchpad'e temiz bir klon alınır ve README A adımları (`derle.sh`, `kur.sh`, `f0_kabul.sh`) takım arkadaşı gibi izlenir; eksik adım README'ye eklenir
-  - [ ] 13.9 Doğrulama
+    (15.11: **açık.** Adres yazıldı: ultralytics 8.4.174'ün kendi adresi `https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt` (`modeller.yaml` `kaynak` / `alma`, spec "Model dosyası"). Dosya indirilmedi (ajan ağdan indirmez); sha256 ve boyut `null`. İndirme ve kıyas koşusunun komutları: `implementation/gorev-grubu-13.md` 7.)
+  - [x] 13.5 `VERSIONS.md`'yi tamamla: `libfuse2t64`, `DRI_PRIME=1` notu, AGPL notu; `model-requirements.txt` ile tutarlılık
+    (Uygulamada: AMD hibrit `DRI_PRIME=1` bölümü (`glxinfo -B` denetimi), QGC kurulumunda `libfuse2t64`, AGPL tablo 1'de, model dosyaları (v0.2, `yolov8s.pt` adresi), sürüm kontrolüne `pip check` / model klasörü / `dpkg-query` / `glxinfo`. Sürüm değişmedi. Ekip venv'inde üç requirements dosyasının her sabit sürümü kurulu olanla karşılaştırıldı: `model-requirements.txt` 29/29 ve `analiz-requirements.txt` 24/24 aynı, `pip check` temiz; `requirements-lock.txt`'te `~/.local`'daki `coverage` 7.16.2 ve `fonttools` 4.66.1 kilit dosyasından (7.16.1 / 4.66.0) farklı: makinedeki kayma, dosya değişmedi (gorev-grubu-13.md 9). apt sürümleri `dpkg-query -W` ile aynı.)
+  - [x] 13.6 `tez/sim/README.md`'yi (b) yoluna göre yeniden yaz: ön koşullar, kılavuz A/B/C, AMD `DRI_PRIME=1`, QGC `libfuse2t64`; `TEZ_` ön eki ve "kilit listesinde izinli iki dosya" ifadeleri düzeltilir; ruff komutu `../Vision/.venv` yerine ekip venv'ini (`$P -m ruff`) kullanır
+    (Uygulamada: A. Kurulum (ön koşullar, A1–A7), B. Çalıştırma (B1 senaryo, B2 sonuçlar, B3 `toplu.py` / `karsilastir.py`, B4 QGC canlı video, B5 elle uçuş, B6 kabul testleri), C, Ayrıntılar, Sorun giderme, Dosyalar; 11. ve 12. grubun satırları korundu. İki eski ifade önceki gruplarda kalkmıştı; `../Vision/.venv` yalnız `ruff.toml`'un yorumunda kalmıştı, düzeltildi. README'deki her araç bayrağı aracın `--help`'iyle karşılaştırıldı. `TEZ_README.md`'ye AMD satırı ve sim kılavuzu atfı.)
+  - [x] 13.7 Spec'i güncelle: "Açık Konular"daki durumlar; "Uygulamada sabitlenecek sürümler (TBD)" doldurulur; Ortatepe teyidi geldiyse "Model dosyası" tablosu; `implementation/` notları tamamlanır
+    (Uygulamada: "Açık Konular" durumları (Hüseyin ve Ortatepe'den cevap yok, Kurt / Algan için hazır kabul komutu), sürümler: kalan tek boşluk `yolov8s.pt`'nin sha256 / boyutu (13.4), geri kalan sürümler yeniden doğrulandı; "Model dosyası" tablosuna "teyit gelmedi" ve kıyas modeli satırları; yeni açık konular: `kur.sh`'ın eski adımları sistem `python3`'üyle, `~/.local` sürüm kayması, ULog birikmesi. Dosya planı, Test Planı (m06 uygulaması, `test_m06_testi.py`), kılavuz, 572. satırdaki "TBD", teslim sırası 7; `EKIP_ICIN_OZET.md` 7. bölüm; `implementation/gorev-grubu-13.md`, `kabul-kosulari.md`.)
+  - [x] 13.8 (İsteğe bağlı, zaman kalırsa) Scratchpad'e temiz bir klon alınır ve README A adımları (`derle.sh`, `kur.sh`, `f0_kabul.sh`) takım arkadaşı gibi izlenir; eksik adım README'ye eklenir
+    (Uygulamada: yerel repodan `git clone` + çalışma ağacı değişiklikleri; submodule indirme, `ubuntu.sh`, apt / pip kurulumları, `derle.sh` ve klonda kabul testleri **denenmedi** (ağ / süre; kabul testleri asıl ağaçta koşuldu). Denenenler: README'deki her dosya ve araç bayrağı var; betiklerin hepsi çalıştırılabilir ve `bash -n` temiz; submodule'süz `verify_pin.sh --worktree` "KILIT BOZULMUS" (A1'in sırası doğru), `--worktree`'siz "KILIT SAGLAM"; `kur.sh` ağ kapalıyken varlıksız ilk indirmede durdu (beklenen), varlıklar konunca çıkış 0; ekip yapısı dışındaki klonda venv bulunamadı → uyarı + atlama, `TEZ_PYTHON` ile model denetimi çalıştı; bozuk `modeller.yaml` → çıkış 1; araçlar açıldı; pytest 311 geçti + 1 atlandı (derleme yok). README'ye A3'te `requirements-lock.txt` ve sorun giderme satırları eklendi. Klon silindi. `gorev-grubu-13.md` 6.)
+  - [x] 13.9 Doğrulama
 
     ```bash
     $P -m pytest tez/sim/testler -q
@@ -564,12 +572,19 @@ gecikme sim saatinde (`ek_gecikme_ms` artık sim ms), titreşim netem kuralı ve
     vlc tez/sim/sonuclar/<m06 koşu 1>/kosu.mp4
     ```
 
+    (Uygulamada 15.11: 312 test geçti; ruff temiz; KILIT SAGLAM; `kur.sh` çıkış 0 (v0.2 `TAMAM`, `yolov8s.pt` `EKSİK`). Sırayla F0 GEÇTİ (1 dk 10 s), F1 GEÇTİ (4 dk 25 s), `m06_kabul.sh --cikti tez/sim/sonuclar/gorev13_m06` **GEÇTİ** (4 dk 55 s; iki koşunun yedi koşulu da OK: `TEZ_LOS` ULog 356 = 356 ve 404 = 404, Follow Target / Hold %100, `follow_target` 56, IoU ≥ 0.5 212 / 346 ve 237 / 390 kare, 135/135 anahtar, temiz kapanış). Koşu 1 videosu `ffprobe`: h264 (High), yuv420p, 2000×720, 15 kare/s, 929 kare, 61.93 s (kayıt 61.97 s). İsteğe bağlı koşu 3 iskelet modülle (`--harici`) GEÇTİ ("Tez Auto Follow" %100, "unresponsive" 0); bayraksız `derle.sh` stoka döndü, F0 yine GEÇTİ. Günlükler `tez/sim/sonuclar/gorev13_*.log`; `gorev-grubu-13.md` 4–5. Görsel kontrol (Ahmet): `kosu1_takip_yuruyen/kosu.mp4`, "Kendin dene" 1.)
+
     PR öncesi: `git log --oneline main..HEAD` her grubun commit'ini gösterir; PR başlığı `[M06] Simülasyon ortamı`; push ve PR yalnız kullanıcı isteyince.
 
 **Kabul Ölçütleri:**
 - `f0_kabul.sh`, `f1_kabul.sh`, `m06_kabul.sh` geçer; bütün birim testleri geçer
 - `VERSIONS.md`, `model-requirements.txt`, `modeller.yaml` ve README eksiksizdir; spec'te TBD kalan sürüm yoktur
 - Spec ve `implementation/` notları kodla aynı durumu anlatır
+
+**Durum (15.11):** 13.4 dışında uygulandı, test edildi, koşuldu. 312 test, ruff temiz, KILIT SAGLAM; F0, F1 ve yeni
+`m06_kabul.sh` GEÇTİ (iki koşu × yedi koşul); isteğe bağlı 3. koşu iskelet modülle GEÇTİ. Açık: 13.4 (`yolov8s.pt`
+elle indirilince sha256 / boyut ve kıyas koşusu; komutlar `implementation/gorev-grubu-13.md` 7) ve kabul ölçütündeki
+"spec'te TBD kalan sürüm yoktur" (kalan tek boşluk bu dosyanın sha256'sı). Ayrıntı: `implementation/gorev-grubu-13.md`.
 
 ### Çatı Repo (ayrı repo, bu dalda yapılmaz)
 
