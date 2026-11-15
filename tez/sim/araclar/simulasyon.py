@@ -33,6 +33,8 @@ FAILED_LINES = ("Startup script returned with return value", "Unknown model", "g
 START_DONE_LINE = "PX4 başlatma komutları tamam"
 START_FAILED_LINES = ("PX4 başlatma komutu başarısız", "PX4 başlatma komutları çalıştırılamadı")
 START_RESULT = re.compile(r"PX4 başlatma komutu (?:bitti|başarısız) \(çıkış kodu (-?\d+)\): (.*)$")
+# the event of a run that left PX4 or Gazebo behind (problems(); m06_testi.py looks for it)
+LEFT_RUNNING = "kapanıştan sonra çalışan PX4/Gazebo süreci kaldı"
 UNRESPONSIVE = "unresponsive"  # commander: "No response from <id>, flagging unresponsive" (externalChecks.cpp)
 # logger start arguments of the SITL start (init.d-posix/rcS + init.d/rc.logging with the parameter defaults this sim
 # keeps: LOGGER_BUF 1000, EKF2_EN 1 -> poll ekf2_timestamps, SDLOG_MODE 1 -> -e, SDLOG_BACKEND 3 -> -m all)
@@ -176,7 +178,7 @@ class Simulation:
                 break
             time.sleep(1)
         else:
-            found.append("kapanıştan sonra çalışan PX4/Gazebo süreci kaldı")
+            found.append(LEFT_RUNNING)
         lines = self.unresponsive()
         if lines:
             found.append(

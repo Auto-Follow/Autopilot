@@ -44,6 +44,7 @@ TREE_COLOR = "#5f8f4e"
 WARNING_COLOR = "#c62828"
 PX4_COLOR = "#7b3fa0"  # what PX4's Follow Target task assumes (course, orbit angle setpoint)
 RTF_WARNING = 0.9  # below this mean real time factor the model may take the CPU from Gazebo (senaryo.py)
+MODE_KEPT = 0.999  # share of the recording in the scenario's mode below which the report warns (m06_testi.py: fails)
 # Success key -> (metric, the metric must be at least (True) or at most (False) the threshold)
 SUCCESS_RULES = {
     "kadrajda_kalma_min": ("kadrajda_kalma", True),
@@ -772,7 +773,7 @@ def checks(m: Mapping, sections: Mapping, model_ran: bool) -> list[dict]:
             }
         )
     kept = _value(m, "mod_korunma_orani")
-    if not math.isnan(kept) and kept < 0.999:
+    if not math.isnan(kept) and kept < MODE_KEPT:
         out.append(
             {
                 "ad": "mod",

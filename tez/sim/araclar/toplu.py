@@ -204,8 +204,9 @@ def read_runs(folders: Sequence[Path]) -> list[dict]:
     return runs
 
 
-def _wait_until_closed() -> bool:
-    t_end = time.monotonic() + WAIT_FOR_EXIT_S
+def wait_until_closed(timeout_s: float = WAIT_FOR_EXIT_S) -> bool:
+    """True once no PX4 or Gazebo runs (the previous run shut down), False if one is still there after timeout_s."""
+    t_end = time.monotonic() + timeout_s
     while running():
         if time.monotonic() > t_end:
             return False
@@ -219,7 +220,7 @@ def run_all(scenario: str, repeat: int, retries: int, out: Path, extra: Sequence
     runs, attempts = [], []
     for i in range(1, repeat + 1):
         for attempt in range(1, retries + 2):
-            if not _wait_until_closed():
+            if not wait_until_closed():
                 raise RuntimeError(f"{WAIT_FOR_EXIT_S:.0f} s sonra hâlâ çalışan bir PX4 ya da Gazebo var")
             folder = out / f"kosu_{i}"
             if folder.exists():  # an earlier attempt of this run: keep it, listed under its new name
