@@ -47,6 +47,7 @@ make px4_sitl && make px4_fmu-v6c_default
 5) `tez/env/VERSIONS.md`'deki adımlar: Gazebo paketlerini dondurma, QGroundControl 5.1.4, geliştirme araçları, VS Code eklentileri, (hibrit GPU'lu laptopta) NVIDIA ayarı, analiz Python ortamı.
 6) Agent OS: 1. adımdaki `kurulum.sh` ile kuruldu (çatı repo).
 7) Vision reposu: `../Vision/README.md`
+8) Tez simülasyonu (Gazebo, insan hedefi, model, kabul testleri): `tez/sim/README.md` → "A. Kurulum".
 
 ## Sorun giderme
 | Belirti | Çözüm |
@@ -57,6 +58,7 @@ make px4_sitl && make px4_fmu-v6c_default
 | `git status`'ta `Tools/setup/xtensa-esp-elf-*.tar.xz` | Repo dışına taşıyın; commit'lemeyin (GitHub 100 MB sınırı) |
 | `git status` → `modified: platforms/nuttx/NuttX/nuttx (untracked content)` | Pixhawk derlemesinin ürettiği `tools/jlink-nuttx`; zararsız, commit'e girmez, kilidi etkilemez |
 | Gazebo çok yavaş / Intel GPU kullanıyor | `tez/env/VERSIONS.md` → NVIDIA PRIME offload bölümü |
+| Gazebo çok yavaş, AMD hibrit laptop (iGPU + ayrık AMD) | `export DRI_PRIME=1`; `tez/env/VERSIONS.md` → "Hibrit ekran kartlı laptop (AMD + AMD)" |
 
 ## Sık kullanılan komutlar
 | Amaç | Komut |
