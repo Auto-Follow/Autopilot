@@ -571,3 +571,12 @@ Ayrıntı `implementation/grup-6-kapali-cevrim-analiz.md` Bölüm 10.
 - Seçenekler: (i) disarm iken yalnızca Hold isteği gitmesin (HOLD_ISTENDI kalır, hedef gelse de takibe dönmez) · (ii) disarm iken HOLD_ISTENDI'ye hiç geçilmesin (KAYIP_BEKLE'de bekler, hedef gelince TAKIP). Öneri (ii).
 - Kullanıcı: **"2 olsun, hedef gelince falan algılasın, ama bak sadece disarm durumunda; arm'lıyken konuştuğumuz hiçbir şey değişmiyor."** → **Karar (ii).** Önceki karar Grup 5 soru 2-a / U4.20 bu kadarıyla değişti. Güvenlik: bu modda arm yasak (C1), disarm drone kalkamaz.
 - **Kullanıcının gözlemi (2026-11-12):** "Disarm'ken AUTO FOLLOW'da kaldı, ancak arm ettiğimde Mission'a geçti ve kalkışa geçti; güvenlik amaçlı bu modda arm'a izin olmasın." → Log (`20_08_26.ulg`) incelendi: AUTO FOLLOW'da arm **PX4 tarafından zaten engelleniyor** (C1). Arm'dan 0,3 s önce **QGC kendisi** modu Mission'a çevirdi (`MAV_CMD_DO_SET_MODE` 4/4, kaynak 255/190 = QGC), arm komutu Mission'da geldi ve Mission kalkışı başlattı. Yani arm AUTO FOLLOW'da değil Mission'da oldu. Kullanıcı doğruladı: **"Start Mission" yaptığım için Mission olmuş, sıkıntı yok, yanlış alarm."** → Değişiklik yok; kalkış Position'da (B4).
+
+### Dalın GitHub'a gönderilmesi (2026-11-20)
+
+- Kullanıcı: "Yazdığımız kodu push edelim; diğer arkadaşlarım da kullanmak isterlerse kullansın, ancak main'e sakın dokunma, bu branch'e girip kullansınlar."
+- **Yapılan:** yalnızca `ozellik/m15-takip-kodu` dalı, zorlamadan (force yok) gönderildi: `origin/ozellik/m15-takip-kodu` = `6caec029b0` (main'in üstünde 51 commit). Uzakta bu adla dal yoktu. **PR açılmadı; `origin/main` (`e1990d0d04`) değişmedi.**
+- **Push öncesi kontroller:** main'de dalın gerisinde kaldığı yeni commit yok; video, log, model ya da 1 MB'tan büyük dosya yok (kural 9); `tez/pin/verify_pin.sh --worktree` beklenen şekilde kırmızı: 15 dosya, Hüseyin'in onayını bekleyen 7 yolun içinde, başka değişen PX4 dosyası yok. Bu yüzden dalda CI çalışırsa `verify-pin` onay gelene kadar kırmızı görünür.
+- **Ekip için kullanım:** `git fetch origin` → `git switch ozellik/m15-takip-kodu` → `git submodule update --init --recursive` → `make px4_sitl gz_x500`. Değişiklik eklemek isteyen bu daldan kendi dalını açar. Repo dışındaki SITL ve video kayıt araçları (`~/m15-sitl-araclari/`) dalda yok.
+- Kullanıcı bu kaydın yazılmasını istedi, ama **push edilmemesini** söyledi ("yaz ancak push etme, sonra bana hatırlat"). Bu kayıt commit'i yalnızca yerelde.
+

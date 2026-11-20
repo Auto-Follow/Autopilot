@@ -5,8 +5,8 @@
 | **İş** | Issue #6 [M15] "Body frame hedef vektöründen PWM'e: PX4 takip kodu" |
 | **Repo / dal** | `Auto-Follow/Autopilot` · `ozellik/m15-takip-kodu` |
 | **Hazırlayan** | Yusuf Kurt (kararlar) · Claude Code (yazım, kaynak araştırması) |
-| **Sürüm / tarih** | 13 · 15 Kasım 2026 |
-| **Durum** | **Kod, testler ve son doğrulama bitti.** Push + PR bekliyor; PR'da kilitli PX4 dosyaları için repo sorumlusunun onayı gerekiyor |
+| **Sürüm / tarih** | 18 · 20 Kasım 2026 |
+| **Durum** | **Kod, testler ve son doğrulama bitti.** Dal 2026-11-20'de GitHub'a gönderildi (`6caec029b0`'a kadar), ekip arkadaşları bu daldan kullanabilir; **PR açılmadı, main'e dokunulmadı.** PR'da kilitli PX4 dosyaları için repo sorumlusunun onayı gerekiyor |
 
 **Bu rapor ne için?** M15'te ne yapıldığını, neden böyle yapıldığını ve ortaya çıkan sistemin nasıl çalıştığını tek yerde anlatır. Kod okumadan anlaşılacak şekilde yazıldı. Bir sorun çıktığında "bu neden böyle?" sorusunun cevabı burada bulunur. Teknik terimler sondaki **Terimler sözlüğü**nde (Bölüm 13) açıklanıyor; sürümlerin hikâyesi en sondaki **Belge geçmişi**nde.
 
@@ -138,7 +138,7 @@
 21. Claude ajanın bulgularını PX4 kaynağında kontrol etti; belgelerdeki hatalar (A), yeni bulgular (B) ve öneriler (C) kullanıcıya sunuldu.
 22. Kullanıcının cevaplarıyla `spec.md`, `requirements.md`, karar günlüğü ve bu rapor güncellendi; bütün adların sözlüğü `log-sozlugu.md` yazıldı.
 
-### 3.3 Commit'ler (dal `ozellik/m15-takip-kodu`, push yok)
+### 3.3 Commit'ler (dal `ozellik/m15-takip-kodu`; 2026-11-20'de `6caec029b0`'a kadar push edildi)
 
 | Commit | Ne |
 |---|---|
@@ -933,7 +933,7 @@ Bekleyen dış bağımlılıklar:
    3. kısa birim testi — **bitti (2026-11-10)**, not: `implementation/grup-3-birim-testi.md`
    4. SITL ön kontroller + S1–S5 (S4'ün yalnız yerinde-bekleme kısmı) — **bitti (2026-11-11)**, not: `implementation/grup-4-sitl-acik-cevrim.md`
    5. Hold geçişi, S4'ün tamamı — **bitti (2026-11-11)**, not: `implementation/grup-5-hold-gecisi.md`
-   6. S6–S7, analiz script'i ve sözlüğün son eşitlemesi (log mesajı Grup 2'ye taşındı ve yazıldı) — **bitti (2026-11-12)**, not: `implementation/grup-6-kapali-cevrim-analiz.md`; PR açıklaması taslağı `implementation/pr-aciklamasi-taslak.md` (push ve PR kullanıcı isteyince)
+   6. S6–S7, analiz script'i ve sözlüğün son eşitlemesi (log mesajı Grup 2'ye taşındı ve yazıldı) — **bitti (2026-11-12)**, not: `implementation/grup-6-kapali-cevrim-analiz.md`; PR açıklaması taslağı `implementation/pr-aciklamasi-taslak.md` (dal 2026-11-20'de push edildi; PR kullanıcı isteyince)
 
    Her görev grubundan sonra ne yapıldığı, neden yapıldığı ve nasıl test edildiği bu rapora ve spec klasörüne sade dille yazılır.
 4. Yetişmeyenler "m16'ya kalanlar" listesine; PR açıklamasına `Closes Auto-Follow/Auto-Follow#6`.
@@ -996,3 +996,4 @@ Bekleyen dış bağımlılıklar:
 | 15 | 2026-11-12 | Son doğrulamanın bulduğu metin düzeltmeleri (sözlük belge geçmişi ve `latency` tablosu, `BENIOKU.md` `AF_BETA`, §11 çelişkili cümleler, tasks/spec/şema eski ifadeleri, V3 tutum anı); Hüseyin notu (kullanıcı konuştu, push'ta onaylayacak); **`AF_ENABLE` varsayılanı 1** (G6.19) |
 | 16 | 2026-11-12 | Disarm iken hedef kaybında Hold istenmez, KAYIP_BEKLE'de beklenir (G6.20; arm'lıyken davranış aynı); birim testi 13/13 |
 | 17 | 2026-11-15 | Kapak kısmı sadeleştirildi (uzun "Durum" paragrafı yerine tablo; hikâye §3.2 ve belge geçmişinde) ve §1 Özet son hâline getirildi (geçmiş zaman, sonuç tablosu, güncel kararlar); kullanıcı raporu baştan sona okuyup not alacak |
+| 18 | 2026-11-20 | Dal GitHub'a gönderildi (`origin/ozellik/m15-takip-kodu` = `6caec029b0`, 51 commit; zorlamasız, yalnızca bu dal). Kullanıcı: ekip arkadaşları bu daldan kullansın, main'e dokunulmasın; PR açılmadı. `origin/main` (`e1990d0d04`) değişmedi. Push öncesi kilit kontrolü beklenen şekilde kırmızı (15 dosya, onay bekleyen 7 yolun içinde). Kapak sürümü belge geçmişiyle eşitlendi (13 → 18). Bu kayıt commit'i henüz push edilmedi |
